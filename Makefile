@@ -78,6 +78,11 @@ run:
 run-testnet:
 	$(PYTHON) -m src.akiba_crypto_bot --testnet
 
+# Run FreqAI demo
+.PHONY: freqai-demo
+freqai-demo:
+	$(PYTHON) examples/freqai_demo.py
+
 # Generate documentation
 .PHONY: docs
 docs:

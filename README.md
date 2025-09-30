@@ -12,6 +12,7 @@ An automated cryptocurrency trading bot with support for multiple strategies, ri
 - Telegram notifications
 - Backtesting capabilities
 - Comprehensive test suite
+- FreqAI machine learning integration
 
 ## Prerequisites
 
@@ -148,7 +149,9 @@ make check-cov
 akibaCryptobot/
 ├── config/              # Configuration files
 ├── docs/                # Documentation
+├── examples/            # Example scripts
 ├── logs/                # Log files
+├── models/              # Trained ML models
 ├── src/                 # Source code
 │   ├── connectors/      # Exchange connectors
 │   ├── indicators/      # Technical indicators
@@ -156,6 +159,7 @@ akibaCryptobot/
 │   ├── portfolio/       # Portfolio management
 │   ├── risk_management/ # Risk management
 │   ├── strategies/      # Trading strategies
+│   │   └── freqai/      # FreqAI strategies
 │   └── akiba_crypto_bot.py # Main bot module
 ├── tests/               # Test files
 ├── .env.example         # Example environment variables
@@ -166,6 +170,41 @@ akibaCryptobot/
 ├── requirements-dev.txt # Development dependencies
 └── README.md            # This file
 ```
+
+## FreqAI Machine Learning Integration
+
+akibaCryptobot includes integration with FreqAI, Freqtrade's machine learning framework. This allows you to use advanced ML models for generating trading signals.
+
+### Features
+
+- Support for multiple ML models (LightGBM, XGBoost, CatBoost, scikit-learn)
+- Custom feature engineering capabilities
+- Model training and persistence
+- Integration with existing strategy framework
+
+### Quick Start
+
+1. Install FreqAI dependencies:
+   ```bash
+   pip install freqtrade[freqai]
+   ```
+
+2. Enable FreqAI in your configuration:
+   ```json
+   {
+     "freqai": {
+       "enabled": true,
+       "model": "LightGBMClassifier"
+     }
+   }
+   ```
+
+3. Use a FreqAI strategy:
+   ```bash
+   python -m src.akiba_crypto_bot --strategy freqai_example_freqai
+   ```
+
+For detailed information, see [FreqAI Integration Guide](docs/freqai_integration.md).
 
 ## Contributing
 

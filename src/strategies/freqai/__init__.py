@@ -1,0 +1,3 @@
+"""
+FreqAI Strategies Package
+"""

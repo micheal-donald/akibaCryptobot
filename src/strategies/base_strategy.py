@@ -4,6 +4,7 @@ import pandas as pd
 import logging
 from datetime import datetime
 from enum import Enum
+import importlib
 
 logger = logging.getLogger(__name__)
 
@@ -283,7 +284,35 @@ class StrategyManager:
         if not self.active_strategy:
             self.active_strategy = strategy_name
             logger.info(f"Set {strategy_name} as active strategy")
-
+            
+    def add_strategy_by_name(self, strategy_name: str, config: Dict):
+        """Dynamically load and add a strategy by name"""
+        try:
+            # Handle FreqAI strategies
+            if strategy_name.startswith('freqai_'):
+                module_name = f"strategies.freqai.{strategy_name.replace('freqai_', '')}"
+            else:
+                module_name = f"strategies.{strategy_name.lower()}_strategy"
+                
+            # Import the module
+            module = importlib.import_module(module_name)
+            
+            # Get the strategy class (assuming it matches the module name)
+            class_name = ''.join(word.capitalize() for word in strategy_name.split('_'))
+            if strategy_name.startswith('freqai_'):
+                class_name = 'FreqAI' + class_name.replace('Freqai', '')
+            else:
+                class_name = class_name + 'Strategy'
+                
+            strategy_class = getattr(module, class_name)
+            
+            # Create and add the strategy
+            strategy_instance = strategy_class(config)
+            self.add_strategy(strategy_instance, strategy_name)
+            
+        except Exception as e:
+            logger.error(f"Failed to load strategy {strategy_name}: {e}")
+            
     def set_active_strategy(self, strategy_name: str):
         """Set the active strategy"""
         if strategy_name in self.strategies:

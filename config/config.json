@@ -45,6 +45,26 @@
     "adx_threshold": 25,
     "min_volume_ratio": 1.2
   },
+  "freqai": {
+    "enabled": true,
+    "model": "LightGBMClassifier",
+    "identifier": "akiba_freqai_model",
+    "train_period": 200,
+    "include_timeframes": ["1h", "4h"],
+    "include_corr_pairs": [],
+    "data_split_parameters": {
+      "test_size": 0.2,
+      "random_state": 42
+    },
+    "feature_parameters": {
+      "include_timeframes": ["1h", "4h"],
+      "include_corr_pairs": []
+    },
+    "ml_params": {
+      "lookahead_period": 5,
+      "training_data_period": 1000
+    }
+  },
   "notifications": {
     "telegram_enabled": true,
     "trade_notifications": true,
