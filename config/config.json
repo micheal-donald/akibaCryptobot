@@ -1,0 +1,61 @@
+{
+  "exchange": {
+    "name": "binance",
+    "sandbox": true,
+    "ccxt_config": {
+      "enableRateLimit": true,
+      "rateLimit": 1200
+    }
+  },
+  "trading": {
+    "pairs": [
+      "BTC/USDT",
+      "ETH/USDT",
+      "BNB/USDT",
+      "ADA/USDT"
+    ],
+    "timeframes": {
+      "primary": "1h",
+      "secondary": "15m"
+    },
+    "strategy": "momentum_strategy",
+    "max_open_trades": 3,
+    "stake_amount": 0.05,
+    "stake_currency": "USDT"
+  },
+  "risk_management": {
+    "max_position_size": 0.05,
+    "max_daily_loss": 0.02,
+    "stop_loss_percent": 0.02,
+    "take_profit_percent": 0.04,
+    "trailing_stop": true,
+    "trailing_stop_positive": 0.01
+  },
+  "backtesting": {
+    "timerange": "20230101-20231231",
+    "initial_balance": 10000,
+    "fee": 0.001
+  },
+  "strategy_config": {
+    "min_signal_strength": 0.6,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "stoch_oversold": 20,
+    "stoch_overbought": 80,
+    "adx_threshold": 25,
+    "min_volume_ratio": 1.2
+  },
+  "notifications": {
+    "telegram_enabled": true,
+    "trade_notifications": true,
+    "error_notifications": true,
+    "daily_reports": true
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file": "logs/akiba_crypto_bot.log",
+    "max_bytes": 10485760,
+    "backup_count": 5
+  }
+}
