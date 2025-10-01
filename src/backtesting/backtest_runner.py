@@ -15,7 +15,9 @@ import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from backtesting.engine import BacktestEngine
+from backtesting.walkforward import WalkForwardAnalyzer
 from strategies.momentum_strategy import MomentumStrategy
+from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
 from exchange.binance_client import BinanceClient
 from bot_logging.logger import setup_logging
 
@@ -137,41 +139,62 @@ async def main():
         print(f"Error loading historical data: {e}")
         return
     
-    # Initialize backtesting engine
-    backtest_config = config.get('backtesting', {
-        'initial_balance': 10000,
-        'fee': 0.001,
-        'timerange': '20230101-20231231'
-    })
+    # Check if we're running walk-forward analysis
+    walkforward_enabled = config.get('backtesting', {}).get('walkforward', {}).get('enabled', False)
     
-    engine = BacktestEngine(backtest_config)
-    
-    # Initialize strategy
-    strategy_config = config.get('strategy_config', {})
-    strategy = MomentumStrategy(strategy_config)
-    
-    # Run backtest
-    print("Running backtest...")
-    try:
-        result = await engine.run_backtest(strategy, data, symbols)
+    if walkforward_enabled:
+        # Initialize walk-forward analyzer
+        print("Running walk-forward analysis...")
+        walkforward_config = config.get('backtesting', {})
+        analyzer = WalkForwardAnalyzer(walkforward_config)
         
-        # Print results
-        engine.print_results(result)
+        # Initialize strategy
+        strategy_config = config.get('strategy_config', {})
+        strategy = MLFreqAIStrategy(strategy_config)  # Use ML strategy for walk-forward
         
-        # Additional analysis
-        if result.trades:
-            print(f"\nFirst 5 trades:")
-            for i, trade in enumerate(result.trades[:5]):
-                print(f"  {i+1}. {trade.symbol} {trade.side.upper()} "
-                      f"{trade.quantity:.6f} @ {trade.entry_price:.2f} -> "
-                      f"{trade.exit_price:.2f} ({trade.pnl_percentage:.2f}%)")
+        try:
+            result = await analyzer.run_walkforward_analysis(strategy, data, symbols)
+            analyzer.print_results(result)
+            save_walkforward_results_to_file(result, "walkforward_results.txt")
+        except Exception as e:
+            print(f"Error during walk-forward analysis: {e}")
+            logger.error(f"Walk-forward analysis error: {e}", exc_info=True)
+    else:
+        # Initialize backtesting engine
+        backtest_config = config.get('backtesting', {
+            'initial_balance': 10000,
+            'fee': 0.001,
+            'timerange': '20230101-20231231'
+        })
         
-        # Save results to file
-        save_results_to_file(result, "backtest_results.txt")
+        engine = BacktestEngine(backtest_config)
         
-    except Exception as e:
-        print(f"Error during backtesting: {e}")
-        logger.error(f"Backtesting error: {e}", exc_info=True)
+        # Initialize strategy
+        strategy_config = config.get('strategy_config', {})
+        strategy = MomentumStrategy(strategy_config)
+        
+        # Run backtest
+        print("Running backtest...")
+        try:
+            result = await engine.run_backtest(strategy, data, symbols)
+            
+            # Print results
+            engine.print_results(result)
+            
+            # Additional analysis
+            if result.trades:
+                print(f"\nFirst 5 trades:")
+                for i, trade in enumerate(result.trades[:5]):
+                    print(f"  {i+1}. {trade.symbol} {trade.side.upper()} "
+                          f"{trade.quantity:.6f} @ {trade.entry_price:.2f} -> "
+                          f"{trade.exit_price:.2f} ({trade.pnl_percentage:.2f}%)")
+            
+            # Save results to file
+            save_results_to_file(result, "backtest_results.txt")
+            
+        except Exception as e:
+            print(f"Error during backtesting: {e}")
+            logger.error(f"Backtesting error: {e}", exc_info=True)
 
 
 def save_results_to_file(result, filename: str):
@@ -196,6 +219,36 @@ def save_results_to_file(result, filename: str):
         print(f"Results saved to {filename}")
     except Exception as e:
         print(f"Error saving results to file: {e}")
+
+
+def save_walkforward_results_to_file(result, filename: str):
+    """Save walk-forward analysis results to a file"""
+    try:
+        with open(filename, 'w') as f:
+            f.write("WALK-FORWARD ANALYSIS RESULTS\n")
+            f.write("="*50 + "\n")
+            f.write(f"Total Trades: {result.total_trades}\n")
+            f.write(f"Winning Trades: {result.winning_trades}\n")
+            f.write(f"Win Rate: {result.win_rate:.2f}%\n")
+            f.write(f"Total PnL: ${result.total_pnl:.6f}\n")
+            f.write(f"Profit Factor: {result.profit_factor:.2f}\n")
+            f.write(f"Max Drawdown: {result.max_drawdown:.2f}%\n")
+            f.write(f"Sharpe Ratio: {result.sharpe_ratio:.2f}\n")
+            f.write(f"Avg Win: ${result.avg_win:.6f}\n")
+            f.write(f"Avg Loss: ${result.avg_loss:.6f}\n")
+            f.write(f"Overfitting Score: {result.overfitting_score:.2f} (0=none, 1=severe)\n")
+            
+            # Write fold-by-fold results
+            f.write("\nFold-by-fold results:\n")
+            for i, (in_sample, out_of_sample) in enumerate(zip(result.in_sample_results, result.out_of_sample_results)):
+                f.write(f"\nFold {i+1}:\n")
+                f.write(f"  In-sample Win Rate: {in_sample.win_rate:.2f}%\n")
+                f.write(f"  Out-of-sample Win Rate: {out_of_sample.win_rate:.2f}%\n")
+                f.write(f"  Performance Degradation: {in_sample.win_rate - out_of_sample.win_rate:.2f}%\n")
+        
+        print(f"Walk-forward results saved to {filename}")
+    except Exception as e:
+        print(f"Error saving walk-forward results to file: {e}")
 
 
 if __name__ == "__main__":

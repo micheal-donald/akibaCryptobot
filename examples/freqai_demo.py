@@ -57,7 +57,16 @@ async def demonstrate_example_strategy():
         'rsi_period': 14,
         'macd_fast': 12,
         'macd_slow': 26,
-        'macd_signal': 9
+        'macd_signal': 9,
+        'backtesting': {
+            'walkforward': {
+                'enabled': True,
+                'n_splits': 5,
+                'train_period': 180,
+                'test_period': 60,
+                'retrain_period': 30
+            }
+        }
     }
     
     # Create strategy
@@ -103,7 +112,16 @@ async def demonstrate_ml_strategy():
         },
         'min_signal_strength': 0.6,
         'stop_loss_percent': 0.02,
-        'take_profit_percent': 0.04
+        'take_profit_percent': 0.04,
+        'backtesting': {
+            'walkforward': {
+                'enabled': True,
+                'n_splits': 5,
+                'train_period': 180,
+                'test_period': 60,
+                'retrain_period': 30
+            }
+        }
     }
     
     # Create strategy

@@ -17,7 +17,6 @@ from risk_management import RiskManager
 from notifications.telegram_bot import TelegramNotifier
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.base_strategy import StrategyManager
-from performance.metrics_tracker import PerformanceMetricsTracker
 
 
 class AkibaCryptoBot:
@@ -26,21 +25,12 @@ class AkibaCryptoBot:
         self.logger = setup_logging(self.config.get('logging', {}))
         
         self.exchange = BinanceClient(
-            api_key=os.getenv('BINANCE_API_KEY'),
-            secret_key=os.getenv('BINANCE_SECRET_KEY'),
             sandbox=self.config['exchange'].get('sandbox', True)
         )
         
         self.risk_manager = RiskManager(self.config.get('risk_management', {}))
         self.telegram = TelegramNotifier() if self.config.get('notifications', {}).get('telegram_enabled') else None
-
-        # Initialize performance tracker
-        initial_balance = self.config.get('backtesting', {}).get('initial_balance', 10000.0)
-        self.performance_tracker = PerformanceMetricsTracker(
-            initial_balance=initial_balance,
-            risk_free_rate=self.config.get('performance', {}).get('risk_free_rate', 0.02)
-        )
-
+        
         # Setup Telegram bot commands if enabled
         if self.telegram and self.telegram.enabled:
             self.telegram.setup_bot_commands(self)
@@ -134,15 +124,6 @@ class AkibaCryptoBot:
             except Exception as e:
                 self.logger.error(f"Error updating market data for {pair}: {e}")
 
-        # Periodically sync balance with performance tracker
-        try:
-            balance = await self.exchange.get_balance()
-            usdt_balance = balance.get('USDT', {}).get('free', 0) + balance.get('USDT', {}).get('used', 0)
-            if usdt_balance > 0:
-                self.performance_tracker.update_balance(usdt_balance)
-        except Exception as e:
-            self.logger.debug(f"Could not update performance tracker balance: {e}")
-
     async def manage_positions(self):
         """Manage existing positions and orders"""
         try:
@@ -212,42 +193,25 @@ class AkibaCryptoBot:
         try:
             if symbol in self.active_trades:
                 trade = self.active_trades[symbol]
-
-                # Get current price for exit
-                ticker = await self.exchange.get_ticker(symbol)
-                exit_price = ticker['last']
-
+                
                 # Close the position
                 side = 'sell' if trade['side'] == 'buy' else 'buy'
                 order = await self.exchange.place_market_order(
                     symbol, side, trade['amount']
                 )
-
-                # Calculate fees (estimate 0.1% per trade)
-                fees = trade['amount'] * exit_price * 0.001
-
-                # Record in performance tracker
-                completed_trade = self.performance_tracker.record_trade_exit(
-                    symbol=symbol,
-                    exit_price=exit_price,
-                    exit_reason=reason,
-                    fees=fees
-                )
-
+                
                 self.logger.info(f"Closed position {symbol} due to {reason}")
-
-                if self.telegram and completed_trade:
-                    pnl_emoji = "📈" if completed_trade.pnl > 0 else "📉"
+                
+                if self.telegram:
                     await self.telegram.send_message(
-                        f"{pnl_emoji} Closed {symbol} position\n"
+                        f"📊 Closed {symbol} position\n"
                         f"Reason: {reason}\n"
-                        f"P&L: ${completed_trade.pnl:.2f} ({completed_trade.pnl_percent:.2f}%)\n"
                         f"Order ID: {order['id']}"
                     )
-
+                
                 # Remove from active trades
                 del self.active_trades[symbol]
-
+                
         except Exception as e:
             self.logger.error(f"Error closing position {symbol}: {e}")
 
@@ -330,14 +294,11 @@ class AkibaCryptoBot:
             # Calculate stop-loss and take-profit
             stop_loss = self.risk_manager.calculate_stop_loss(entry_price, side)
             take_profit = self.risk_manager.calculate_take_profit(entry_price, side)
-
+            
             # Place the order
             order = await self.exchange.place_market_order(symbol, side, amount)
-
-            # Get active strategy name
-            strategy_name = self.strategy_manager.active_strategy or 'unknown'
-
-            # Track the trade in active_trades
+            
+            # Track the trade
             self.active_trades[symbol] = {
                 'side': side,
                 'amount': amount,
@@ -347,19 +308,9 @@ class AkibaCryptoBot:
                 'timestamp': datetime.now(),
                 'order_id': order['id']
             }
-
-            # Record in performance tracker
-            self.performance_tracker.record_trade_entry(
-                symbol=symbol,
-                side=side,
-                amount=amount,
-                entry_price=entry_price,
-                strategy=strategy_name,
-                metadata={'stop_loss': stop_loss, 'take_profit': take_profit}
-            )
-
+            
             self.logger.info(f"Placed {side} order for {amount} {symbol}")
-
+            
             if self.telegram:
                 await self.telegram.send_message(
                     f"📈 New {side.upper()} trade\n"
@@ -369,7 +320,7 @@ class AkibaCryptoBot:
                     f"Stop Loss: ${stop_loss:.4f}\n"
                     f"Take Profit: ${take_profit:.4f}"
                 )
-
+                
         except Exception as e:
             self.logger.error(f"Error placing trade: {e}")
 
