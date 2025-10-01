@@ -155,6 +155,9 @@ class TelegramNotifier:
         application.add_handler(CommandHandler("resume", self.cmd_resume))
         application.add_handler(CommandHandler("help", self.cmd_help))
         application.add_handler(CommandHandler("config", self.cmd_config))
+        application.add_handler(CommandHandler("performance", self.cmd_performance))
+        application.add_handler(CommandHandler("metrics", self.cmd_metrics))
+        application.add_handler(CommandHandler("report", self.cmd_report))
         
         self.application = application
         
@@ -168,6 +171,9 @@ class TelegramNotifier:
             "/status - Bot status\n"
             "/balance - Account balance\n"
             "/trades - Active trades\n"
+            "/performance - Performance summary\n"
+            "/metrics - Detailed metrics\n"
+            "/report - Full performance report\n"
             "/stop - Stop trading\n"
             "/resume - Resume trading\n"
             "/help - Show this help\n"
@@ -250,7 +256,10 @@ class TelegramNotifier:
             "📊 Information:\n"
             "/status - Bot status and performance\n"
             "/balance - Account balance\n"
-            "/trades - List active trades\n\n"
+            "/trades - List active trades\n"
+            "/performance - Quick performance summary\n"
+            "/metrics - Detailed performance metrics\n"
+            "/report - Full formatted report\n\n"
             "🎮 Control:\n"
             "/stop - Pause trading\n"
             "/resume - Resume trading\n\n"
@@ -298,6 +307,87 @@ class TelegramNotifier:
             logger.info(f"Telegram webhook started on port {port}")
         except Exception as e:
             logger.error(f"Error starting Telegram webhook: {e}")
+
+    async def cmd_performance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /performance command - quick summary"""
+        if hasattr(self, 'bot_instance') and hasattr(self.bot_instance, 'performance_tracker'):
+            try:
+                metrics = self.bot_instance.performance_tracker.get_metrics_summary()
+
+                pnl_emoji = "📈" if metrics['total_pnl'] > 0 else "📉" if metrics['total_pnl'] < 0 else "➖"
+
+                message = (
+                    f"📊 Performance Summary\n\n"
+                    f"💰 Balance: ${metrics['current_balance']:,.2f}\n"
+                    f"{pnl_emoji} Total P&L: ${metrics['total_pnl']:,.2f} ({metrics['total_return_percent']:.2f}%)\n\n"
+                    f"📈 Trades: {metrics['total_trades']}\n"
+                    f"✅ Win Rate: {metrics['win_rate']:.1f}%\n"
+                    f"⚡ Profit Factor: {metrics['profit_factor']:.2f}\n"
+                    f"📉 Max DD: {metrics['max_drawdown_percent']:.2f}%"
+                )
+            except Exception as e:
+                message = f"❌ Error fetching performance: {str(e)}"
+        else:
+            message = "❌ Performance tracker not available"
+
+        await update.message.reply_text(message)
+
+    async def cmd_metrics(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /metrics command - detailed metrics"""
+        if hasattr(self, 'bot_instance') and hasattr(self.bot_instance, 'performance_tracker'):
+            try:
+                metrics = self.bot_instance.performance_tracker.get_metrics_summary()
+
+                message = (
+                    f"📊 Detailed Performance Metrics\n\n"
+                    f"💰 BALANCE\n"
+                    f"Initial: ${metrics['initial_balance']:,.2f}\n"
+                    f"Current: ${metrics['current_balance']:,.2f}\n"
+                    f"P&L: ${metrics['total_pnl']:,.2f} ({metrics['total_return_percent']:.2f}%)\n\n"
+                    f"📈 TRADES\n"
+                    f"Total: {metrics['total_trades']}\n"
+                    f"Winners: {metrics['winning_trades']}\n"
+                    f"Losers: {metrics['losing_trades']}\n"
+                    f"Win Rate: {metrics['win_rate']:.2f}%\n"
+                    f"Avg Win: ${metrics['average_win']:.2f}\n"
+                    f"Avg Loss: ${metrics['average_loss']:.2f}\n"
+                    f"W/L Ratio: {metrics['win_loss_ratio']:.2f}\n\n"
+                    f"⚖️ RISK METRICS\n"
+                    f"Sharpe Ratio: {metrics['sharpe_ratio']:.3f}\n"
+                    f"Sortino Ratio: {metrics['sortino_ratio']:.3f}\n"
+                    f"Profit Factor: {metrics['profit_factor']:.3f}\n"
+                    f"Expectancy: ${metrics['expectancy']:.2f}\n\n"
+                    f"📉 DRAWDOWN\n"
+                    f"Max DD: {metrics['max_drawdown_percent']:.2f}%\n"
+                    f"Current DD: {metrics['current_drawdown_percent']:.2f}%\n\n"
+                    f"📂 Open Positions: {metrics['open_trades_count']}"
+                )
+            except Exception as e:
+                message = f"❌ Error fetching metrics: {str(e)}"
+        else:
+            message = "❌ Performance tracker not available"
+
+        await update.message.reply_text(message)
+
+    async def cmd_report(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /report command - full formatted report"""
+        if hasattr(self, 'bot_instance') and hasattr(self.bot_instance, 'performance_tracker'):
+            try:
+                report = self.bot_instance.performance_tracker.generate_performance_report()
+
+                # Telegram has 4096 character limit, so we might need to split
+                if len(report) > 4000:
+                    # Send in chunks
+                    chunks = [report[i:i+4000] for i in range(0, len(report), 4000)]
+                    for chunk in chunks:
+                        await update.message.reply_text(f"```\n{chunk}\n```", parse_mode='Markdown')
+                else:
+                    await update.message.reply_text(f"```\n{report}\n```", parse_mode='Markdown')
+            except Exception as e:
+                message = f"❌ Error generating report: {str(e)}"
+                await update.message.reply_text(message)
+        else:
+            await update.message.reply_text("❌ Performance tracker not available")
 
     async def close(self):
         """Close Telegram connections"""

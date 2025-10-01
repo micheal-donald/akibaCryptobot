@@ -1,74 +1,96 @@
-2025-08-05 17:33:27,430 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:33:27,444 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:33:35,648 - akiba_crypto_bot - ERROR - Critical error: binance requires "apiKey" credential
-2025-08-05 17:33:35,649 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 17:33:35,649 - akiba_crypto_bot - ERROR - Unexpected error: 'binance' object has no attribute 'close'
-2025-08-05 17:33:35,650 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:34:21,213 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:34:21,355 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:34:29,794 - akiba_crypto_bot - ERROR - Critical error: binance {"code":-1021,"msg":"Timestamp for this request was 1000ms ahead of the server's time."}
-2025-08-05 17:34:30,417 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 17:34:30,633 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:35:08,371 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:35:08,516 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:35:18,757 - akiba_crypto_bot - ERROR - Critical error: object dict can't be used in 'await' expression
-2025-08-05 17:35:19,482 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 17:35:19,683 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:36:23,014 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:36:23,143 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:36:32,344 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 17:36:35,888 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:37:22,500 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:37:22,657 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:37:31,508 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 17:37:34,886 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:38:37,887 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:39:41,405 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:39:55,003 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
-2025-08-05 17:39:55,004 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:40:42,060 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 17:40:42,818 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:42:05,519 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:42:05,674 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:42:15,299 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 17:42:18,965 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:43:21,958 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:44:25,527 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:44:45,706 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
-2025-08-05 17:44:45,707 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:45:26,191 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 17:45:26,802 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:48:11,929 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:48:12,104 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:48:20,826 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 17:48:25,491 - akiba_crypto_bot - ERROR - Error in trading cycle: binance fetchOpenOrders() WARNING: fetching open orders without specifying a symbol is rate-limited to one call per 1032 seconds. Do not call self method frequently to avoid ban. Set binance.options["warnOnFetchOpenOrdersWithoutSymbol"] = False to suppress self warning message.
-2025-08-05 17:50:56,622 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:50:56,765 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:51:05,315 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 17:54:04,967 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:54:05,106 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:54:14,737 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 17:57:11,716 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
-2025-08-05 17:57:11,718 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:57:38,409 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 17:57:39,086 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 17:58:08,031 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 17:58:08,177 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 17:58:17,107 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 18:04:55,824 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
-2025-08-05 18:04:55,826 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 18:05:09,009 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 18:05:09,776 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 18:05:14,201 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 18:05:14,442 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 18:05:24,258 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 18:05:25,088 - akiba_crypto_bot - ERROR - Critical error: Cannot close a running event loop
-2025-08-05 18:05:25,385 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-08-05 18:05:25,627 - akiba_crypto_bot - ERROR - Unexpected error: This Application is not running!
-2025-08-05 18:05:25,628 - akiba_crypto_bot - INFO - Stopping bot...
-2025-08-05 18:09:00,439 - akiba_crypto_bot - INFO - Logging system initialized
-2025-08-05 18:09:00,683 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-08-05 18:09:10,079 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-08-05 18:10:07,994 - akiba_crypto_bot - ERROR - Error getting balance: 'free'
-2025-09-30 11:24:53,319 - akiba_crypto_bot - INFO - Logging system initialized
-2025-09-30 11:39:59,247 - akiba_crypto_bot - INFO - Logging system initialized
+2025-10-01 14:45:18,320 - akiba_crypto_bot - INFO - Logging system initialized
+2025-10-01 14:45:18,532 - akiba_crypto_bot - INFO - Active strategy: momentum
+2025-10-01 14:45:18,533 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
+2025-10-01 14:45:19,374 - akiba_crypto_bot - ERROR - Critical error: binance {"code":-1021,"msg":"Timestamp for this request was 1000ms ahead of the server's time."}
+2025-10-01 14:45:20,067 - akiba_crypto_bot - INFO - Cleaning up resources...
+2025-10-01 14:48:36,488 - akiba_crypto_bot - INFO - Logging system initialized
+2025-10-01 14:48:36,691 - akiba_crypto_bot - INFO - Active strategy: momentum
+2025-10-01 14:48:36,691 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
+2025-10-01 14:48:44,668 - akiba_crypto_bot - ERROR - Critical error: binance {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action."}
+2025-10-01 14:48:45,375 - akiba_crypto_bot - INFO - Cleaning up resources...
+2025-10-01 14:50:13,372 - akiba_crypto_bot - INFO - Logging system initialized
+2025-10-01 14:50:13,582 - akiba_crypto_bot - INFO - Active strategy: momentum
+2025-10-01 14:50:13,583 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
+2025-10-01 14:50:21,473 - akiba_crypto_bot - ERROR - Critical error: binance {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action."}
+2025-10-01 14:50:22,152 - akiba_crypto_bot - INFO - Cleaning up resources...
+2025-10-01 14:58:15,997 - akiba_crypto_bot - INFO - Logging system initialized
+2025-10-01 14:58:16,191 - akiba_crypto_bot - INFO - Active strategy: momentum
+2025-10-01 14:58:16,191 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
+2025-10-01 14:58:24,177 - akiba_crypto_bot - INFO - Successfully connected to exchange
+2025-10-01 14:58:28,206 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 14:58:28,532 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 14:58:29,016 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 14:58:29,504 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 14:59:31,779 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 14:59:32,247 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 14:59:32,728 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 14:59:33,209 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:00:35,476 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:00:36,374 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:00:36,708 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:00:37,189 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:01:39,894 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:01:40,217 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:01:41,132 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:01:41,461 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:02:43,737 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:02:44,205 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:02:45,113 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:02:45,443 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:03:47,708 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:03:48,184 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:03:48,666 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:03:49,153 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:04:51,424 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:04:51,891 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:04:52,374 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:04:52,858 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:05:55,122 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:05:55,600 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:05:56,080 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:05:56,560 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:06:46,123 - akiba_crypto_bot - ERROR - Error getting balance: 'free'
+2025-10-01 15:06:59,095 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:06:59,570 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:07:00,051 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:07:00,532 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:08:02,799 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:08:03,265 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:08:04,172 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:08:04,505 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:09:06,794 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:09:07,674 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:09:08,018 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:09:08,498 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:10:10,768 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:10:11,242 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:10:11,724 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:10:12,202 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:11:14,468 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:11:15,383 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:11:15,719 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:11:16,194 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:12:18,739 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:12:19,213 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:12:19,693 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:12:20,182 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:13:22,459 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:13:22,964 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:13:23,416 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:13:24,352 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:14:26,610 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:14:27,091 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:14:27,580 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:14:28,067 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:15:30,606 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:15:31,083 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:15:31,996 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:15:32,357 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:16:34,628 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:16:35,105 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:16:36,011 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:16:36,344 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-01 15:17:38,595 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-01 15:17:39,083 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-01 15:17:39,566 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-01 15:17:40,049 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT

@@ -20,6 +20,13 @@ help:
 	@echo "  format       Format code with black"
 	@echo "  type-check   Run type checking with mypy"
 	@echo "  clean        Clean Python cache files"
+	@echo "  run          Run the bot"
+	@echo "  run-testnet  Run the bot in testnet mode"
+	@echo "  run-strategy Run with specific strategy"
+	@echo "  run-freqai-ml Run with FreqAI ML strategy"
+	@echo "  run-freqai-example Run with FreqAI example strategy"
+	@echo "  freqai-demo  Run FreqAI demo"
+	@echo "  docs         Generate documentation"
 	@echo "  help         Show this help message"
 
 # Install dependencies
@@ -71,17 +78,32 @@ clean:
 # Run the bot
 .PHONY: run
 run:
-	$(PYTHON) -m src.akiba_crypto_bot
+	$(PYTHON) start_bot.py
 
 # Run the bot in testnet mode
 .PHONY: run-testnet
 run-testnet:
-	$(PYTHON) -m src.akiba_crypto_bot --testnet
+	$(PYTHON) start_bot.py --testnet
 
 # Run FreqAI demo
 .PHONY: freqai-demo
 freqai-demo:
 	$(PYTHON) examples/freqai_demo.py
+
+# Run with specific strategy
+.PHONY: run-strategy
+run-strategy:
+	$(PYTHON) start_bot.py --strategy $(STRATEGY)
+
+# Run with FreqAI ML strategy
+.PHONY: run-freqai-ml
+run-freqai-ml:
+	$(PYTHON) start_bot.py --strategy freqai_ml_freqai
+
+# Run with FreqAI example strategy
+.PHONY: run-freqai-example
+run-freqai-example:
+	$(PYTHON) start_bot.py --strategy freqai_example_freqai
 
 # Generate documentation
 .PHONY: docs

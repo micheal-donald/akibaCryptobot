@@ -66,7 +66,29 @@ An automated cryptocurrency trading bot with support for multiple strategies, ri
 ```bash
 make run
 # or
-python -m src.akiba_crypto_bot
+python start_bot.py
+```
+
+### Running with specific strategies
+
+```bash
+# Run with Momentum strategy (default)
+make run
+
+# Run with FreqAI ML strategy
+make run-freqai-ml
+# or
+python start_bot.py --strategy freqai_ml_freqai
+
+# Run with FreqAI example strategy
+make run-freqai-example
+# or
+python start_bot.py --strategy freqai_example_freqai
+
+# Run with any strategy
+make run-strategy STRATEGY=freqai_example_freqai
+# or
+python start_bot.py --strategy freqai_example_freqai
 ```
 
 ### Running in testnet mode (if supported by exchange)
@@ -74,7 +96,13 @@ python -m src.akiba_crypto_bot
 ```bash
 make run-testnet
 # or
-python -m src.akiba_crypto_bot --testnet
+python start_bot.py --testnet
+```
+
+### Running with debug logging
+
+```bash
+python start_bot.py --debug
 ```
 
 ## Testing
@@ -201,7 +229,7 @@ akibaCryptobot includes integration with FreqAI, Freqtrade's machine learning fr
 
 3. Use a FreqAI strategy:
    ```bash
-   python -m src.akiba_crypto_bot --strategy freqai_example_freqai
+   python start_bot.py --strategy freqai_example_freqai
    ```
 
 For detailed information, see [FreqAI Integration Guide](docs/freqai_integration.md).

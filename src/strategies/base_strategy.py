@@ -290,28 +290,31 @@ class StrategyManager:
         try:
             # Handle FreqAI strategies
             if strategy_name.startswith('freqai_'):
-                module_name = f"strategies.freqai.{strategy_name.replace('freqai_', '')}"
+                # Try direct import
+                if strategy_name == 'freqai_example_freqai':
+                    from strategies.freqai.example_freqai_strategy import ExampleFreqAIStrategy
+                    strategy_class = ExampleFreqAIStrategy
+                elif strategy_name == 'freqai_ml_freqai':
+                    from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
+                    strategy_class = MLFreqAIStrategy
+                else:
+                    raise ValueError(f"Unknown FreqAI strategy: {strategy_name}")
             else:
-                module_name = f"strategies.{strategy_name.lower()}_strategy"
+                # Handle regular strategies
+                if strategy_name == 'momentum':
+                    from strategies.momentum_strategy import MomentumStrategy
+                    strategy_class = MomentumStrategy
+                else:
+                    raise ValueError(f"Unknown strategy: {strategy_name}")
                 
-            # Import the module
-            module = importlib.import_module(module_name)
-            
-            # Get the strategy class (assuming it matches the module name)
-            class_name = ''.join(word.capitalize() for word in strategy_name.split('_'))
-            if strategy_name.startswith('freqai_'):
-                class_name = 'FreqAI' + class_name.replace('Freqai', '')
-            else:
-                class_name = class_name + 'Strategy'
-                
-            strategy_class = getattr(module, class_name)
-            
             # Create and add the strategy
             strategy_instance = strategy_class(config)
             self.add_strategy(strategy_instance, strategy_name)
             
         except Exception as e:
             logger.error(f"Failed to load strategy {strategy_name}: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             
     def set_active_strategy(self, strategy_name: str):
         """Set the active strategy"""

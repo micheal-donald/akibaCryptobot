@@ -7,7 +7,9 @@ import sys
 import os
 
 # Add parent directory to path for imports
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if parent_dir not in sys.path:
+    sys.path.append(parent_dir)
 
 from strategies.base_strategy import BaseStrategy, TradingSignal, SignalType
 from indicators.technical_indicators import TechnicalIndicators

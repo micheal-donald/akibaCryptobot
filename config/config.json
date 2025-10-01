@@ -18,7 +18,7 @@
       "primary": "1h",
       "secondary": "15m"
     },
-    "strategy": "momentum_strategy",
+    "strategy": "momentum",
     "max_open_trades": 3,
     "stake_amount": 0.05,
     "stake_currency": "USDT"
