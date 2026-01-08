@@ -3,6 +3,10 @@ from typing import Dict, Optional, Tuple
 from decimal import Decimal, ROUND_DOWN
 import logging
 from datetime import datetime, timedelta
+import pandas as pd
+
+# Import the new advanced risk management features
+from advanced_risk_management import AdvancedRiskManager, PositionSizingResult
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +20,9 @@ class RiskManager:
         self.trailing_stop = config.get('trailing_stop', True)
         self.trailing_stop_positive = config.get('trailing_stop_positive', 0.01)  # 1%
         
+        # Initialize advanced risk management
+        self.advanced_risk = AdvancedRiskManager(config.get('advanced_risk', {}))
+        
         # Risk tracking
         self.daily_pnl = 0.0
         self.daily_reset_time = None
@@ -26,6 +33,9 @@ class RiskManager:
         self.positions = {}
         self.daily_trades = 0
         self.max_daily_trades = config.get('max_daily_trades', 10)
+        
+        # Portfolio tracking
+        self.portfolio_history = []
         
         logger.info("Risk Manager initialized with parameters:")
         logger.info(f"- Max position size: {self.max_position_size*100}%")
@@ -115,6 +125,27 @@ class RiskManager:
         except Exception as e:
             logger.error(f"Error calculating position size with signal strength: {e}")
             return 0.0
+
+    def calculate_advanced_position_size(self, balance: float, entry_price: float,
+                                       symbol_data: pd.DataFrame, symbol: str,
+                                       win_rate: float = 0.5, win_loss_ratio: float = 2.0) -> PositionSizingResult:
+        """
+        Calculate advanced position size using ATR and Kelly Criterion
+        
+        Args:
+            balance: Current account balance
+            entry_price: Current entry price
+            symbol_data: Historical OHLCV data for the symbol
+            symbol: Trading symbol
+            win_rate: Strategy's historical win rate
+            win_loss_ratio: Strategy's historical win/loss ratio
+            
+        Returns:
+            PositionSizingResult with all calculations
+        """
+        return self.advanced_risk.calculate_position_sizing(
+            balance, entry_price, symbol_data, symbol, win_rate, win_loss_ratio
+        )
 
     def calculate_stop_loss(self, entry_price: float, side: str) -> float:
         """Calculate stop loss price"""
@@ -271,6 +302,53 @@ class RiskManager:
             'daily_trades': self.daily_trades,
             'daily_pnl_percent': self.daily_pnl / balance if balance > 0 else 0
         }
+
+    def check_correlation_diversification(self, symbol: str, 
+                                        price_data: Dict[str, pd.DataFrame]) -> bool:
+        """
+        Check if adding a new position would violate correlation diversification rules
+        
+        Args:
+            symbol: Symbol to check
+            price_data: Dictionary mapping symbols to OHLCV data
+            
+        Returns:
+            True if position can be added, False otherwise
+        """
+        return self.advanced_risk.check_correlation_diversification(symbol, self.positions)
+
+    def check_circuit_breakers(self, price_data: Dict[str, pd.DataFrame]) -> Tuple[bool, str]:
+        """
+        Check circuit breakers for extreme market conditions
+        
+        Args:
+            price_data: Dictionary mapping symbols to OHLCV data
+            
+        Returns:
+            Tuple of (should_stop_trading, reason)
+        """
+        return self.advanced_risk.check_circuit_breakers(price_data, self.portfolio_history)
+
+    def update_portfolio_value(self, portfolio_value: float):
+        """
+        Update portfolio value history for drawdown calculations
+        
+        Args:
+            portfolio_value: Current portfolio value
+        """
+        self.portfolio_history.append(portfolio_value)
+        # Keep only the last 1000 values to prevent memory issues
+        if len(self.portfolio_history) > 1000:
+            self.portfolio_history = self.portfolio_history[-1000:]
+
+    def generate_risk_report(self) -> Dict:
+        """
+        Generate a comprehensive risk report
+        
+        Returns:
+            Dictionary with risk metrics
+        """
+        return self.advanced_risk.get_risk_report()
 
     def emergency_close_all_positions(self) -> bool:
         """Emergency function to mark all positions for closure"""

@@ -62,8 +62,73 @@ class TechnicalIndicators:
     
     @staticmethod
     def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
-        """Average True Range"""
-        return ta.volatility.AverageTrueRange(high=high, low=low, close=close, window=period).average_true_range()
+        """
+        Calculate Average True Range (ATR) - a measure of market volatility.
+        
+        ATR is calculated by taking the average of true range values over a specified period.
+        The true range is the greatest of the following:
+        1. Current high minus current low
+        2. Absolute value of current high minus previous close
+        3. Absolute value of current low minus previous close
+        
+        Args:
+            high: High prices as pandas Series
+            low: Low prices as pandas Series
+            close: Close prices as pandas Series
+            period: Number of periods for moving average (default: 14)
+            
+        Returns:
+            pandas Series with ATR values
+            
+        Raises:
+            ValueError: If input data is invalid or insufficient
+        """
+        # Input validation
+        if not all(isinstance(data, pd.Series) for data in [high, low, close]):
+            raise ValueError("High, low, and close must be pandas Series")
+            
+        if len(high) != len(low) or len(high) != len(close):
+            raise ValueError("High, low, and close series must have same length")
+            
+        if len(high) < period + 1:
+            logger.warning(f"Insufficient data for ATR calculation. Required: {period + 1}, Available: {len(high)}")
+            return pd.Series([np.nan] * len(high), index=high.index, dtype=float)
+            
+        try:
+            # Validate price data
+            if high.isna().any() or low.isna().any() or close.isna().any():
+                logger.warning("Input data contains NaN values. Filling with forward fill.")
+                high = high.fillna(method='ffill')
+                low = low.fillna(method='ffill') 
+                close = close.fillna(method='ffill')
+                
+            # Validate that high >= low for all periods
+            if (high < low).any():
+                logger.warning("Invalid price data: high price less than low price detected")
+                # Fix by swapping values where high < low
+                mask = high < low
+                high[mask], low[mask] = low[mask], high[mask]
+            
+            # Calculate True Range components
+            tr1 = high - low
+            tr2 = abs(high - close.shift(1))
+            tr3 = abs(low - close.shift(1))
+            
+            # Get maximum of the three true range components
+            true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            
+            # Calculate ATR using simple moving average
+            atr = true_range.rolling(window=period).mean()
+            
+            # Ensure the result has the same index as input
+            atr_result = pd.Series(atr, index=high.index, dtype=float)
+            
+            logger.debug(f"Successfully calculated ATR with period {period}")
+            return atr_result
+            
+        except Exception as e:
+            logger.error(f"Error calculating ATR: {e}")
+            return pd.Series([np.nan] * len(high), index=high.index, dtype=float)
     
     @staticmethod
     def adx(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> Dict[str, pd.Series]:

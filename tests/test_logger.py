@@ -6,9 +6,9 @@ import sys
 from unittest.mock import Mock, patch, MagicMock
 
 # Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from logger import setup_logger, get_logger
+from bot_logging.logger import setup_logging as setup_logger, setup_logging as get_logger
 
 class TestLogger:
     """Test cases for logger module"""

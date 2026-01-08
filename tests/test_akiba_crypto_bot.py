@@ -7,9 +7,9 @@ import sys
 import os
 
 # Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from akiba_crypto_bot import AkibaCryptoBot
+from bot import AkibaCryptoBot
 
 @pytest.fixture
 def sample_config():

@@ -1,148 +1,126 @@
-2025-10-01 14:45:18,320 - akiba_crypto_bot - INFO - Logging system initialized
-2025-10-01 14:45:18,532 - akiba_crypto_bot - INFO - Active strategy: momentum
-2025-10-01 14:45:18,533 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-10-01 14:45:19,374 - akiba_crypto_bot - ERROR - Critical error: binance {"code":-1021,"msg":"Timestamp for this request was 1000ms ahead of the server's time."}
-2025-10-01 14:45:20,067 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-10-01 14:48:36,488 - akiba_crypto_bot - INFO - Logging system initialized
-2025-10-01 14:48:36,691 - akiba_crypto_bot - INFO - Active strategy: momentum
-2025-10-01 14:48:36,691 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-10-01 14:48:44,668 - akiba_crypto_bot - ERROR - Critical error: binance {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action."}
-2025-10-01 14:48:45,375 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-10-01 14:50:13,372 - akiba_crypto_bot - INFO - Logging system initialized
-2025-10-01 14:50:13,582 - akiba_crypto_bot - INFO - Active strategy: momentum
-2025-10-01 14:50:13,583 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-10-01 14:50:21,473 - akiba_crypto_bot - ERROR - Critical error: binance {"code":-2015,"msg":"Invalid API-key, IP, or permissions for action."}
-2025-10-01 14:50:22,152 - akiba_crypto_bot - INFO - Cleaning up resources...
-2025-10-01 14:58:15,997 - akiba_crypto_bot - INFO - Logging system initialized
-2025-10-01 14:58:16,191 - akiba_crypto_bot - INFO - Active strategy: momentum
-2025-10-01 14:58:16,191 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
-2025-10-01 14:58:24,177 - akiba_crypto_bot - INFO - Successfully connected to exchange
-2025-10-01 14:58:28,206 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 14:58:28,532 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 14:58:29,016 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 14:58:29,504 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 14:59:31,779 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 14:59:32,247 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 14:59:32,728 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 14:59:33,209 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:00:35,476 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:00:36,374 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:00:36,708 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:00:37,189 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:01:39,894 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:01:40,217 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:01:41,132 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:01:41,461 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:02:43,737 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:02:44,205 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:02:45,113 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:02:45,443 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:03:47,708 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:03:48,184 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:03:48,666 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:03:49,153 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:04:51,424 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:04:51,891 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:04:52,374 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:04:52,858 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:05:55,122 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:05:55,600 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:05:56,080 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:05:56,560 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:06:46,123 - akiba_crypto_bot - ERROR - Error getting balance: 'free'
-2025-10-01 15:06:59,095 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:06:59,570 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:07:00,051 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:07:00,532 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:08:02,799 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:08:03,265 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:08:04,172 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:08:04,505 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:09:06,794 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:09:07,674 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:09:08,018 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:09:08,498 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:10:10,768 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:10:11,242 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:10:11,724 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:10:12,202 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:11:14,468 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:11:15,383 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:11:15,719 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:11:16,194 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:12:18,739 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:12:19,213 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:12:19,693 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:12:20,182 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:13:22,459 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:13:22,964 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:13:23,416 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:13:24,352 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:14:26,610 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:14:27,091 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:14:27,580 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:14:28,067 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:15:30,606 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:15:31,083 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:15:31,996 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:15:32,357 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:16:34,628 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:16:35,105 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:16:36,011 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:16:36,344 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:17:38,595 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:17:39,083 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:17:39,566 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:17:40,049 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:18:42,317 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:18:42,794 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:18:43,701 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:18:44,030 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:19:46,585 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:19:47,060 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:19:47,533 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:19:48,024 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:20:50,936 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:20:51,412 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:20:51,932 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:20:52,394 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:21:54,941 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:21:55,420 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:21:55,908 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:21:56,388 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:22:58,650 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:22:59,132 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:22:59,606 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:23:00,089 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:24:02,351 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:24:02,852 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:24:03,331 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:24:03,801 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:25:06,090 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:25:06,560 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:25:07,031 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:25:07,508 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:26:10,476 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:26:11,228 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:26:11,555 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:26:12,037 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:27:14,314 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:27:14,783 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:27:15,269 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:27:15,746 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:28:18,016 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:28:18,498 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:28:18,981 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:28:19,454 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:29:21,728 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:29:22,636 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:29:22,967 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:29:23,448 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:30:25,735 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:30:26,198 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:30:26,674 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:30:27,152 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
-2025-10-01 15:31:29,432 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
-2025-10-01 15:31:29,891 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
-2025-10-01 15:31:30,371 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
-2025-10-01 15:31:30,850 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:42:56,690 - akiba_crypto_bot - INFO - Logging system initialized
+2025-10-02 09:42:56,964 - akiba_crypto_bot - INFO - Active strategy: momentum
+2025-10-02 09:42:56,965 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
+2025-10-02 09:43:06,864 - akiba_crypto_bot - INFO - Successfully connected to exchange
+2025-10-02 09:43:17,306 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:43:17,920 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:43:18,266 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:43:19,201 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:44:28,186 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:44:28,670 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:44:29,160 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:44:29,669 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:45:38,740 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:45:39,252 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:45:39,705 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:45:40,193 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:46:49,425 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:46:49,793 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:46:50,300 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:46:50,866 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:48:00,744 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:48:01,213 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:48:01,673 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:48:02,160 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:49:11,509 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:49:11,982 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:49:12,481 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:49:12,941 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:50:22,041 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:50:22,506 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:50:22,995 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:50:23,907 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:51:32,916 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:51:33,421 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:51:33,885 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:51:34,788 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:52:43,788 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:52:44,278 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:52:44,757 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:52:45,660 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:53:55,574 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:53:55,933 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:53:56,421 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:53:56,897 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:55:05,958 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:55:06,429 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:55:06,913 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:55:07,404 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:56:16,536 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:56:17,008 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:56:17,490 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:56:17,968 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:57:26,977 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:57:27,474 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:57:27,965 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:57:28,433 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:58:37,446 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:58:37,934 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:58:38,423 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:58:38,885 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 09:59:48,004 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 09:59:48,495 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 09:59:48,962 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 09:59:49,451 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:00:58,495 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:00:58,945 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:00:59,871 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:01:00,268 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:02:09,619 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:02:10,116 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:02:10,585 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:02:11,134 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:03:20,221 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:03:20,701 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:03:21,185 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:03:22,117 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:04:31,262 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:04:31,812 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:04:32,185 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:04:32,670 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:05:42,031 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:05:42,521 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:05:42,996 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:05:43,486 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:06:52,569 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:06:53,049 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:06:53,726 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:06:54,079 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:08:03,121 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:08:03,648 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:08:04,094 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:08:04,563 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:09:13,845 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:09:14,335 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:09:14,802 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:09:15,312 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:10:24,621 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2025-10-02 10:10:25,103 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2025-10-02 10:10:25,595 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2025-10-02 10:10:26,086 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2025-10-02 10:10:31,339 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2025-10-02 10:10:31,341 - akiba_crypto_bot - INFO - Stopping bot...
+2025-10-02 10:10:54,402 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2025-10-02 10:10:54,402 - akiba_crypto_bot - INFO - Stopping bot...
+2025-10-02 10:10:55,014 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2025-10-02 10:10:55,017 - akiba_crypto_bot - INFO - Stopping bot...
+2025-10-02 10:10:55,535 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2025-10-02 10:10:55,537 - akiba_crypto_bot - INFO - Stopping bot...
+2025-10-02 10:10:55,751 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2025-10-02 10:10:55,752 - akiba_crypto_bot - INFO - Stopping bot...
+2025-10-02 10:10:56,386 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2025-10-02 10:10:56,386 - akiba_crypto_bot - INFO - Stopping bot...
+2025-10-02 10:10:56,728 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2025-10-02 10:10:56,729 - akiba_crypto_bot - INFO - Stopping bot...
+2026-01-08 15:33:02,048 - akiba_crypto_bot - INFO - Logging system initialized
+2026-01-08 15:33:02,386 - akiba_crypto_bot - INFO - Active strategy: momentum
+2026-01-08 15:33:02,386 - akiba_crypto_bot - INFO - Starting AkibaCryptoBot...
+2026-01-08 15:33:18,072 - akiba_crypto_bot - INFO - Successfully connected to exchange
+2026-01-08 15:33:28,496 - akiba_crypto_bot - WARNING - Insufficient data for BTC/USDT
+2026-01-08 15:33:28,750 - akiba_crypto_bot - WARNING - Insufficient data for ETH/USDT
+2026-01-08 15:33:29,217 - akiba_crypto_bot - WARNING - Insufficient data for BNB/USDT
+2026-01-08 15:33:30,039 - akiba_crypto_bot - WARNING - Insufficient data for ADA/USDT
+2026-01-08 15:34:26,695 - akiba_crypto_bot - INFO - Received signal 2, shutting down gracefully...
+2026-01-08 15:34:26,696 - akiba_crypto_bot - INFO - Stopping bot...
+2026-01-08 15:34:35,903 - akiba_crypto_bot - INFO - Cleaning up resources...
+2026-01-08 15:34:36,461 - akiba_crypto_bot - ERROR - Error stopping Telegram bot: This Updater is still running!

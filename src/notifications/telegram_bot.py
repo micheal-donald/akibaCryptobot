@@ -158,7 +158,10 @@ class TelegramNotifier:
         application.add_handler(CommandHandler("performance", self.cmd_performance))
         application.add_handler(CommandHandler("metrics", self.cmd_metrics))
         application.add_handler(CommandHandler("report", self.cmd_report))
-        
+        application.add_handler(CommandHandler("risk", self.cmd_risk))
+        application.add_handler(CommandHandler("correlations", self.cmd_correlations))
+        application.add_handler(CommandHandler("heatmap", self.cmd_heatmap))
+
         self.application = application
         
         return application
@@ -174,6 +177,9 @@ class TelegramNotifier:
             "/performance - Performance summary\n"
             "/metrics - Detailed metrics\n"
             "/report - Full performance report\n"
+            "/risk - Risk management report\n"
+            "/correlations - Asset correlations\n"
+            "/heatmap - Portfolio risk heatmap\n"
             "/stop - Stop trading\n"
             "/resume - Resume trading\n"
             "/help - Show this help\n"
@@ -388,6 +394,121 @@ class TelegramNotifier:
                 await update.message.reply_text(message)
         else:
             await update.message.reply_text("❌ Performance tracker not available")
+
+    async def cmd_risk(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /risk command - show comprehensive risk report"""
+        if hasattr(self, 'bot_instance') and hasattr(self.bot_instance, 'advanced_risk'):
+            try:
+                risk_report = self.bot_instance.advanced_risk.get_risk_report()
+
+                # Circuit breaker status
+                cb_status = "🟢 ACTIVE" if self.bot_instance.circuit_breaker_active else "⚪ Inactive"
+                cb_reason = f"\nReason: {self.bot_instance.circuit_breaker_reason}" if self.bot_instance.circuit_breaker_active else ""
+
+                message = (
+                    f"🛡️ Risk Management Report\n\n"
+                    f"📊 Circuit Breaker: {cb_status}{cb_reason}\n\n"
+                    f"⚙️ Position Sizing:\n"
+                    f"  • ATR Period: {risk_report['position_sizing_parameters']['atr_period']}\n"
+                    f"  • ATR Multiplier: {risk_report['position_sizing_parameters']['atr_multiplier']}\n"
+                    f"  • Kelly Enabled: {risk_report['position_sizing_parameters']['kelly_enabled']}\n"
+                    f"  • Kelly Cap: {risk_report['position_sizing_parameters']['kelly_cap']:.2f}\n\n"
+                    f"🔗 Correlation Limits:\n"
+                    f"  • Threshold: {risk_report['correlation_parameters']['threshold']:.2f}\n"
+                    f"  • Max Correlated: {risk_report['correlation_parameters']['max_correlated_positions']}\n\n"
+                    f"🚨 Circuit Breakers:\n"
+                    f"  • Volatility Threshold: {risk_report['circuit_breaker_parameters']['volatility_threshold']:.1%}\n"
+                    f"  • Drawdown Threshold: {risk_report['circuit_breaker_parameters']['drawdown_threshold']:.1%}\n\n"
+                    f"📈 Portfolio Risk: {risk_report['portfolio_heatmap']['total_risk']:.2f}%"
+                )
+
+                await update.message.reply_text(message)
+            except Exception as e:
+                await update.message.reply_text(f"❌ Error generating risk report: {str(e)}")
+        else:
+            await update.message.reply_text("❌ Advanced risk manager not available")
+
+    async def cmd_correlations(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /correlations command - show asset correlations"""
+        if hasattr(self, 'bot_instance') and hasattr(self.bot_instance, 'advanced_risk'):
+            try:
+                correlations = self.bot_instance.advanced_risk.asset_correlations
+
+                if not correlations:
+                    await update.message.reply_text("📊 No correlation data available yet.\nNeed at least 2 trading pairs with sufficient history.")
+                    return
+
+                message = "🔗 Asset Correlations\n\n"
+
+                # Sort by absolute correlation value
+                sorted_corr = sorted(correlations.items(), key=lambda x: abs(x[1]), reverse=True)
+
+                for (symbol1, symbol2), corr in sorted_corr[:15]:  # Show top 15
+                    # Emoji based on correlation strength
+                    if abs(corr) > 0.7:
+                        emoji = "🔴"  # High correlation
+                    elif abs(corr) > 0.4:
+                        emoji = "🟡"  # Moderate correlation
+                    else:
+                        emoji = "🟢"  # Low correlation
+
+                    message += f"{emoji} {symbol1} ↔ {symbol2}: {corr:+.3f}\n"
+
+                if len(sorted_corr) > 15:
+                    message += f"\n... and {len(sorted_corr) - 15} more pairs"
+
+                await update.message.reply_text(message)
+            except Exception as e:
+                await update.message.reply_text(f"❌ Error getting correlations: {str(e)}")
+        else:
+            await update.message.reply_text("❌ Advanced risk manager not available")
+
+    async def cmd_heatmap(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /heatmap command - show portfolio risk heatmap"""
+        if hasattr(self, 'bot_instance') and hasattr(self.bot_instance, 'advanced_risk'):
+            try:
+                # Generate heatmap
+                balance = await self.bot_instance.exchange.get_balance()
+                usdt_balance = balance.get('USDT', {}).get('free', 0) + balance.get('USDT', {}).get('used', 0)
+
+                heatmap = self.bot_instance.advanced_risk.generate_portfolio_heatmap(
+                    positions=self.bot_instance.active_trades,
+                    price_data=self.bot_instance.price_data_cache,
+                    balance=usdt_balance
+                )
+
+                if not heatmap.asset_exposures:
+                    await update.message.reply_text("📊 No active positions - portfolio heatmap is empty")
+                    return
+
+                message = f"🔥 Portfolio Risk Heatmap\n\n"
+                message += f"⚡ Total Portfolio Risk: {heatmap.total_portfolio_risk:.2f}%\n\n"
+                message += "📊 Asset Exposures:\n"
+
+                # Sort by exposure
+                sorted_exposures = sorted(heatmap.asset_exposures.items(), key=lambda x: x[1], reverse=True)
+
+                for symbol, exposure in sorted_exposures:
+                    # Visual bar
+                    bar_length = int(exposure / 5)  # 1 char per 5%
+                    bar = "█" * min(bar_length, 20)
+
+                    message += f"  {symbol}: {exposure:.1f}% {bar}\n"
+
+                # Check if any positions are highly correlated
+                high_corr_warning = ""
+                for (s1, s2), corr in heatmap.correlations.items():
+                    if abs(corr) > 0.7 and s1 in heatmap.asset_exposures and s2 in heatmap.asset_exposures:
+                        high_corr_warning += f"⚠️ {s1} & {s2}: {corr:+.2f}\n"
+
+                if high_corr_warning:
+                    message += f"\n⚠️ High Correlations:\n{high_corr_warning}"
+
+                await update.message.reply_text(message)
+            except Exception as e:
+                await update.message.reply_text(f"❌ Error generating heatmap: {str(e)}")
+        else:
+            await update.message.reply_text("❌ Advanced risk manager not available")
 
     async def close(self):
         """Close Telegram connections"""

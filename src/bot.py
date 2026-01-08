@@ -14,6 +14,7 @@ load_dotenv()
 from exchange.binance_client import BinanceClient
 from bot_logging.logger import setup_logging
 from risk_management import RiskManager
+from advanced_risk_management import AdvancedRiskManager
 from notifications.telegram_bot import TelegramNotifier
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.base_strategy import StrategyManager
@@ -29,6 +30,7 @@ class AkibaCryptoBot:
         )
         
         self.risk_manager = RiskManager(self.config.get('risk_management', {}))
+        self.advanced_risk = AdvancedRiskManager(self.config.get('advanced_risk', {}))
         self.telegram = TelegramNotifier() if self.config.get('notifications', {}).get('telegram_enabled') else None
         
         # Setup Telegram bot commands if enabled
@@ -44,6 +46,12 @@ class AkibaCryptoBot:
         self.active_trades = {}
         self.is_running = False
         self.last_update = datetime.now()
+
+        # Portfolio tracking for circuit breakers
+        self.portfolio_value_history = []
+        self.price_data_cache = {}  # Cache for correlation analysis
+        self.circuit_breaker_active = False
+        self.circuit_breaker_reason = ""
         
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -102,16 +110,51 @@ class AkibaCryptoBot:
 
     async def trading_cycle(self):
         self.logger.debug("Starting trading cycle...")
-        
+
         # Update market data
         await self.update_market_data()
-        
+
+        # Update portfolio value for circuit breaker tracking
+        await self.update_portfolio_value()
+
+        # Check circuit breakers for extreme market conditions
+        should_halt, reason = self.advanced_risk.check_circuit_breakers(
+            self.price_data_cache,
+            self.portfolio_value_history
+        )
+
+        if should_halt:
+            if not self.circuit_breaker_active:
+                self.circuit_breaker_active = True
+                self.circuit_breaker_reason = reason
+                self.logger.warning(f"🚨 CIRCUIT BREAKER ACTIVATED: {reason}")
+                if self.telegram:
+                    await self.telegram.send_message(
+                        f"🚨 CIRCUIT BREAKER ACTIVATED\n\n{reason}\n\n"
+                        f"New positions are blocked until conditions normalize."
+                    )
+        else:
+            if self.circuit_breaker_active:
+                self.circuit_breaker_active = False
+                self.logger.info("✅ Circuit breaker deactivated - conditions normalized")
+                if self.telegram:
+                    await self.telegram.send_message(
+                        "✅ Circuit breaker deactivated - trading resumed"
+                    )
+
         # Check existing positions
         await self.manage_positions()
-        
-        # Look for new trading opportunities
-        await self.scan_opportunities()
-        
+
+        # Update correlations for risk management (every cycle)
+        if len(self.price_data_cache) >= 2:
+            self.advanced_risk.calculate_correlations(self.price_data_cache)
+
+        # Look for new trading opportunities (only if circuit breaker is inactive)
+        if not self.circuit_breaker_active:
+            await self.scan_opportunities()
+        else:
+            self.logger.debug("Skipping opportunity scan - circuit breaker active")
+
         # Update last cycle time
         self.last_update = datetime.now()
 
@@ -119,10 +162,44 @@ class AkibaCryptoBot:
         for pair in self.config['trading']['pairs']:
             try:
                 ticker = await self.exchange.get_ticker(pair)
-                # Store or process ticker data as needed
                 self.logger.debug(f"Updated {pair}: {ticker['last']}")
+
+                # Cache OHLCV data for circuit breaker and correlation analysis
+                ohlcv_data = await self.exchange.get_ohlcv(
+                    pair,
+                    self.config['trading']['timeframes']['primary'],
+                    100  # Last 100 candles for analysis
+                )
+                if ohlcv_data is not None and not ohlcv_data.empty:
+                    self.price_data_cache[pair] = ohlcv_data
+
             except Exception as e:
                 self.logger.error(f"Error updating market data for {pair}: {e}")
+
+    async def update_portfolio_value(self):
+        """Update portfolio value history for circuit breaker tracking"""
+        try:
+            balance = await self.exchange.get_balance()
+            total_value = 0.0
+
+            # Add USDT balance
+            usdt_balance = balance.get('USDT', {}).get('free', 0) + balance.get('USDT', {}).get('used', 0)
+            total_value += usdt_balance
+
+            # Add value of open positions (approximation)
+            for symbol in self.active_trades:
+                trade = self.active_trades[symbol]
+                ticker = await self.exchange.get_ticker(symbol)
+                position_value = trade['amount'] * ticker['last']
+                total_value += position_value
+
+            # Store portfolio value (keep last 1000 values)
+            self.portfolio_value_history.append(total_value)
+            if len(self.portfolio_value_history) > 1000:
+                self.portfolio_value_history.pop(0)
+
+        except Exception as e:
+            self.logger.error(f"Error updating portfolio value: {e}")
 
     async def manage_positions(self):
         """Manage existing positions and orders"""
@@ -247,19 +324,37 @@ class AkibaCryptoBot:
                     signal = await self.strategy_manager.generate_signal(pair, ohlcv_data, current_price)
                     
                     if signal and self.validate_trading_conditions(pair, signal):
+                        # Check correlation diversification before entering position
+                        if not self.advanced_risk.check_correlation_diversification(pair, self.active_trades):
+                            self.logger.info(f"Skipping {pair} - correlation diversification check failed")
+                            continue
+
                         # Calculate position size
                         balance = await self.exchange.get_balance()
                         usdt_balance = balance.get('USDT', {}).get('free', 0)
-                        
+
                         if usdt_balance < 10:  # Minimum balance check
                             self.logger.warning(f"Insufficient balance: {usdt_balance} USDT")
                             continue
-                        
-                        # Calculate position size using risk management
-                        position_size = self.risk_manager.calculate_position_size_with_signal(
-                            usdt_balance, signal.strength, current_price, signal.stop_loss
-                        )
-                        
+
+                        # Use advanced ATR-based position sizing if enabled
+                        if self.config.get('advanced_risk', {}).get('use_atr_sizing', False) and pair in self.price_data_cache:
+                            sizing_result = self.advanced_risk.calculate_optimal_position_size(
+                                balance=usdt_balance,
+                                entry_price=current_price,
+                                symbol_data=self.price_data_cache[pair],
+                                symbol=pair,
+                                signal_strength=signal.strength
+                            )
+                            position_size = sizing_result.position_size
+                            self.logger.info(f"ATR-based position size for {pair}: {position_size:.6f} "
+                                           f"(ATR: {sizing_result.atr:.2f}, Kelly: {sizing_result.kelly_fraction:.2f})")
+                        else:
+                            # Fallback to standard position sizing
+                            position_size = self.risk_manager.calculate_position_size_with_signal(
+                                usdt_balance, signal.strength, current_price, signal.stop_loss
+                            )
+
                         if position_size > 0:
                             await self.place_trade(pair, signal.signal_type.value, position_size, current_price)
                         
