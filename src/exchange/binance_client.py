@@ -1,21 +1,40 @@
 import ccxt
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 from decimal import Decimal
 import pandas as pd
 from datetime import datetime
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
 
 class BinanceClient:
-    def __init__(self, api_key: str = None, secret_key: str = None, sandbox: bool = True):
+    """
+    Binance exchange client supporting both REST API and WebSocket streaming.
+    
+    Supports:
+    - Spot market trading
+    - Futures market trading (USDT-M)
+    - Real-time WebSocket data streaming
+    """
+    
+    def __init__(
+        self, 
+        api_key: str = None, 
+        secret_key: str = None, 
+        sandbox: bool = True,
+        market_type: str = 'spot'  # 'spot' or 'futures'
+    ):
         self.api_key = api_key or os.getenv('BINANCE_API_KEY')
         self.secret_key = secret_key or os.getenv('BINANCE_SECRET_KEY')
         self.sandbox = sandbox
+        self.market_type = market_type
         
-        self.exchange = ccxt.binance({
+        # Initialize ccxt exchange for REST API
+        exchange_class = ccxt.binance if market_type == 'spot' else ccxt.binanceusdm
+        self.exchange = exchange_class({
             'apiKey': self.api_key,
             'secret': self.secret_key,
             'sandbox': self.sandbox,
@@ -24,11 +43,20 @@ class BinanceClient:
             'options': {
                 'adjustForTimeDifference': True,
                 'warnOnFetchOpenOrdersWithoutSymbol': False,
+                'defaultType': market_type,
             }
         })
         
         if self.sandbox:
             self.exchange.set_sandbox_mode(True)
+        
+        # WebSocket manager (lazy initialized)
+        self._ws_manager = None
+        self._ws_callbacks: Dict[str, List[Callable]] = {}
+        
+        # Real-time data cache
+        self.realtime_prices: Dict[str, float] = {}
+        self.realtime_klines: Dict[str, Dict] = {}
             
     async def get_balance(self) -> Dict:
         try:
@@ -127,5 +155,136 @@ class BinanceClient:
             raise
 
     async def close(self):
+        """Close all connections"""
+        if self._ws_manager:
+            await self._ws_manager.disconnect()
         if hasattr(self.exchange, 'close'):
             await self.exchange.close()
+    
+    # ============== WebSocket Methods ==============
+    
+    async def init_websocket(self):
+        """Initialize WebSocket manager for real-time data"""
+        from exchange.websocket_manager import WebSocketManager
+        
+        if self._ws_manager is None:
+            self._ws_manager = WebSocketManager(
+                api_key=self.api_key,
+                api_secret=self.secret_key,
+                testnet=self.sandbox
+            )
+            await self._ws_manager.connect()
+            
+            # Register internal price update handler
+            self._ws_manager.register_callback('ticker', self._on_ticker_update)
+            self._ws_manager.register_callback('kline', self._on_kline_update)
+            
+        return self._ws_manager
+    
+    async def _on_ticker_update(self, data: Dict):
+        """Internal handler to cache real-time prices"""
+        symbol = data.get('symbol')
+        if symbol:
+            self.realtime_prices[symbol] = data.get('price', 0)
+    
+    async def _on_kline_update(self, data: Dict):
+        """Internal handler to cache real-time klines"""
+        symbol = data.get('symbol')
+        if symbol:
+            self.realtime_klines[symbol] = data
+    
+    async def subscribe_realtime(self, symbols: List[str], streams: List[str] = None):
+        """
+        Subscribe to real-time data streams for multiple symbols.
+        
+        Args:
+            symbols: List of trading pairs (e.g., ['BTCUSDT', 'ETHUSDT'])
+            streams: List of stream types ('kline', 'trade', 'ticker', 'depth')
+        """
+        if not self._ws_manager:
+            await self.init_websocket()
+        
+        streams = streams or ['ticker', 'kline']
+        
+        for symbol in symbols:
+            for stream in streams:
+                if stream == 'kline':
+                    if self.market_type == 'futures':
+                        await self._ws_manager.subscribe_futures_kline(symbol)
+                    else:
+                        await self._ws_manager.subscribe_kline(symbol)
+                elif stream == 'ticker':
+                    await self._ws_manager.subscribe_ticker(symbol)
+                elif stream == 'trade':
+                    await self._ws_manager.subscribe_trade(symbol)
+                elif stream == 'depth':
+                    await self._ws_manager.subscribe_depth(symbol)
+        
+        logger.info(f"Subscribed to {streams} for {len(symbols)} symbols")
+    
+    def get_realtime_price(self, symbol: str) -> Optional[float]:
+        """Get cached real-time price for a symbol"""
+        return self.realtime_prices.get(symbol)
+    
+    def on_price_update(self, callback: Callable):
+        """Register callback for real-time price updates"""
+        if self._ws_manager:
+            self._ws_manager.register_callback('ticker', callback)
+    
+    def on_kline_update(self, callback: Callable):
+        """Register callback for real-time kline updates"""
+        if self._ws_manager:
+            self._ws_manager.register_callback('kline', callback)
+    
+    # ============== Futures-Specific Methods ==============
+    
+    async def set_leverage(self, symbol: str, leverage: int) -> Dict:
+        """Set leverage for a futures symbol (Futures only)"""
+        if self.market_type != 'futures':
+            raise ValueError("set_leverage only available for futures markets")
+        
+        try:
+            result = self.exchange.set_leverage(leverage, symbol)
+            logger.info(f"Set leverage to {leverage}x for {symbol}")
+            return result
+        except Exception as e:
+            logger.error(f"Error setting leverage for {symbol}: {e}")
+            raise
+    
+    async def set_margin_mode(self, symbol: str, margin_type: str = 'isolated') -> Dict:
+        """Set margin mode for a futures symbol (Futures only)"""
+        if self.market_type != 'futures':
+            raise ValueError("set_margin_mode only available for futures markets")
+        
+        try:
+            result = self.exchange.set_margin_mode(margin_type, symbol)
+            logger.info(f"Set margin mode to {margin_type} for {symbol}")
+            return result
+        except Exception as e:
+            logger.error(f"Error setting margin mode for {symbol}: {e}")
+            raise
+    
+    async def get_futures_positions(self, symbol: str = None) -> List[Dict]:
+        """Get open futures positions (Futures only)"""
+        if self.market_type != 'futures':
+            raise ValueError("get_futures_positions only available for futures markets")
+        
+        try:
+            positions = self.exchange.fetch_positions(symbols=[symbol] if symbol else None)
+            # Filter for non-zero positions
+            return [p for p in positions if float(p.get('contracts', 0)) > 0]
+        except Exception as e:
+            logger.error(f"Error fetching futures positions: {e}")
+            raise
+    
+    async def get_funding_rate(self, symbol: str) -> Dict:
+        """Get current funding rate for a futures symbol"""
+        if self.market_type != 'futures':
+            raise ValueError("get_funding_rate only available for futures markets")
+        
+        try:
+            funding = self.exchange.fetch_funding_rate(symbol)
+            return funding
+        except Exception as e:
+            logger.error(f"Error fetching funding rate for {symbol}: {e}")
+            raise

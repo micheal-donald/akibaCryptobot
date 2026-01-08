@@ -1,0 +1,4 @@
+# Override these values for your deployment
+allowed_ssh_ip = "0.0.0.0/0"  # Replace with your IP: "YOUR.IP.ADDRESS/32"
+instance_type  = "t3.micro"   # Free tier eligible
+key_name       = "akibabot-key"
