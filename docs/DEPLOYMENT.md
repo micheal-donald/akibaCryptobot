@@ -31,7 +31,7 @@ Copy the entire content including `-----BEGIN` and `-----END` lines.
 ## Deployment Flow
 
 ```
-Push to main → CI runs tests → Build Docker image → Push to GHCR → 
+Push to master → CI runs tests → Build Docker image → Push to GHCR → 
 SSH to EC2 → Pull image → Restart container → Telegram notification
 ```
 
@@ -55,7 +55,7 @@ Note the `public_ip` from output.
 ssh -i ~/.ssh/akibabot-key.pem ubuntu@<public_ip>
 
 # Run setup script (or manually)
-curl -sSL https://raw.githubusercontent.com/YOUR_REPO/main/scripts/setup-ec2.sh | bash
+curl -sSL https://raw.githubusercontent.com/YOUR_REPO/master/scripts/setup-ec2.sh | bash
 ```
 
 ### 3. Add GitHub Secrets
@@ -67,7 +67,7 @@ Add all secrets listed above to GitHub repository settings.
 ```bash
 git add .
 git commit -m "Initial deployment"
-git push origin main
+git push origin master
 ```
 
 The CI/CD pipeline will automatically:

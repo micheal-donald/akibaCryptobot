@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-    branches: [main]
+    branches: [master]
 
 env:
   REGISTRY: ghcr.io
@@ -73,7 +73,7 @@ jobs:
             
             Status: ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }}
             Commit: `${{ steps.sha.outputs.short }}`
-            Branch: `main`
+            Branch: `master`
             
             ${{ job.status == 'success' && 'Bot is now running!' || 'Check GitHub Actions for details.' }}
       
