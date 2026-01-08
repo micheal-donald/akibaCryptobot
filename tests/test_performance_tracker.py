@@ -24,17 +24,17 @@ class TestPerformanceMetricsTracker:
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
         tracker.record_trade_entry(
-            symbol='BTC/USDT',
-            side='buy',
+            symbol="BTC/USDT",
+            side="buy",
             amount=0.1,
             entry_price=50000.0,
-            strategy='momentum'
+            strategy="momentum",
         )
 
-        assert 'BTC/USDT' in tracker.open_trades
-        assert tracker.open_trades['BTC/USDT']['side'] == 'buy'
-        assert tracker.open_trades['BTC/USDT']['amount'] == 0.1
-        assert tracker.open_trades['BTC/USDT']['entry_price'] == 50000.0
+        assert "BTC/USDT" in tracker.open_trades
+        assert tracker.open_trades["BTC/USDT"]["side"] == "buy"
+        assert tracker.open_trades["BTC/USDT"]["amount"] == 0.1
+        assert tracker.open_trades["BTC/USDT"]["entry_price"] == 50000.0
 
     def test_record_winning_trade(self):
         """Test recording a winning trade"""
@@ -42,19 +42,19 @@ class TestPerformanceMetricsTracker:
 
         # Entry
         tracker.record_trade_entry(
-            symbol='BTC/USDT',
-            side='buy',
+            symbol="BTC/USDT",
+            side="buy",
             amount=0.1,
             entry_price=50000.0,
-            strategy='momentum'
+            strategy="momentum",
         )
 
         # Exit at profit
         trade = tracker.record_trade_exit(
-            symbol='BTC/USDT',
+            symbol="BTC/USDT",
             exit_price=52000.0,  # 4% profit
-            exit_reason='take_profit',
-            fees=5.0
+            exit_reason="take_profit",
+            fees=5.0,
         )
 
         assert trade is not None
@@ -63,7 +63,7 @@ class TestPerformanceMetricsTracker:
         assert trade.pnl == (52000.0 - 50000.0) * 0.1 - 5.0  # 195.0
         assert tracker.current_balance > 10000.0
         assert len(tracker.trades) == 1
-        assert 'BTC/USDT' not in tracker.open_trades
+        assert "BTC/USDT" not in tracker.open_trades
 
     def test_record_losing_trade(self):
         """Test recording a losing trade"""
@@ -71,19 +71,19 @@ class TestPerformanceMetricsTracker:
 
         # Entry
         tracker.record_trade_entry(
-            symbol='ETH/USDT',
-            side='buy',
+            symbol="ETH/USDT",
+            side="buy",
             amount=1.0,
             entry_price=3000.0,
-            strategy='momentum'
+            strategy="momentum",
         )
 
         # Exit at loss
         trade = tracker.record_trade_exit(
-            symbol='ETH/USDT',
+            symbol="ETH/USDT",
             exit_price=2900.0,  # ~3.3% loss
-            exit_reason='stop_loss',
-            fees=2.9
+            exit_reason="stop_loss",
+            fees=2.9,
         )
 
         assert trade is not None
@@ -98,15 +98,15 @@ class TestPerformanceMetricsTracker:
 
         # Simulate 3 winning trades and 2 losing trades
         test_trades = [
-            ('BTC/USDT', 'buy', 0.1, 50000.0, 51000.0, 'take_profit'),  # Win
-            ('ETH/USDT', 'buy', 1.0, 3000.0, 3100.0, 'take_profit'),    # Win
-            ('BNB/USDT', 'buy', 10.0, 300.0, 290.0, 'stop_loss'),       # Loss
-            ('ADA/USDT', 'buy', 100.0, 1.0, 1.05, 'take_profit'),       # Win
-            ('SOL/USDT', 'buy', 5.0, 100.0, 95.0, 'stop_loss'),         # Loss
+            ("BTC/USDT", "buy", 0.1, 50000.0, 51000.0, "take_profit"),  # Win
+            ("ETH/USDT", "buy", 1.0, 3000.0, 3100.0, "take_profit"),  # Win
+            ("BNB/USDT", "buy", 10.0, 300.0, 290.0, "stop_loss"),  # Loss
+            ("ADA/USDT", "buy", 100.0, 1.0, 1.05, "take_profit"),  # Win
+            ("SOL/USDT", "buy", 5.0, 100.0, 95.0, "stop_loss"),  # Loss
         ]
 
         for symbol, side, amount, entry, exit_price, reason in test_trades:
-            tracker.record_trade_entry(symbol, side, amount, entry, 'test')
+            tracker.record_trade_entry(symbol, side, amount, entry, "test")
             tracker.record_trade_exit(symbol, exit_price, reason, 0.0)
 
         win_rate = tracker.calculate_win_rate()
@@ -117,12 +117,12 @@ class TestPerformanceMetricsTracker:
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
         # Win $200
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'test')
-        tracker.record_trade_exit('BTC/USDT', 52000.0, 'win', 0.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "test")
+        tracker.record_trade_exit("BTC/USDT", 52000.0, "win", 0.0)
 
         # Lose $100
-        tracker.record_trade_entry('ETH/USDT', 'buy', 1.0, 3000.0, 'test')
-        tracker.record_trade_exit('ETH/USDT', 2900.0, 'loss', 0.0)
+        tracker.record_trade_entry("ETH/USDT", "buy", 1.0, 3000.0, "test")
+        tracker.record_trade_exit("ETH/USDT", 2900.0, "loss", 0.0)
 
         profit_factor = tracker.calculate_profit_factor()
         assert profit_factor == 2.0  # 200 / 100
@@ -166,16 +166,16 @@ class TestPerformanceMetricsTracker:
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
         # Trade 1: +100
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'test')
-        tracker.record_trade_exit('BTC/USDT', 51000.0, 'win', 0.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "test")
+        tracker.record_trade_exit("BTC/USDT", 51000.0, "win", 0.0)
 
         # Trade 2: +50
-        tracker.record_trade_entry('ETH/USDT', 'buy', 1.0, 3000.0, 'test')
-        tracker.record_trade_exit('ETH/USDT', 3050.0, 'win', 0.0)
+        tracker.record_trade_entry("ETH/USDT", "buy", 1.0, 3000.0, "test")
+        tracker.record_trade_exit("ETH/USDT", 3050.0, "win", 0.0)
 
         # Trade 3: -30
-        tracker.record_trade_entry('BNB/USDT', 'buy', 10.0, 300.0, 'test')
-        tracker.record_trade_exit('BNB/USDT', 297.0, 'loss', 0.0)
+        tracker.record_trade_entry("BNB/USDT", "buy", 10.0, 300.0, "test")
+        tracker.record_trade_exit("BNB/USDT", 297.0, "loss", 0.0)
 
         expectancy = tracker.calculate_expectancy()
         assert expectancy == (100 + 50 - 30) / 3  # 40.0
@@ -185,16 +185,16 @@ class TestPerformanceMetricsTracker:
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
         # Win $200
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'test')
-        tracker.record_trade_exit('BTC/USDT', 52000.0, 'win', 0.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "test")
+        tracker.record_trade_exit("BTC/USDT", 52000.0, "win", 0.0)
 
         # Win $100
-        tracker.record_trade_entry('ETH/USDT', 'buy', 1.0, 3000.0, 'test')
-        tracker.record_trade_exit('ETH/USDT', 3100.0, 'win', 0.0)
+        tracker.record_trade_entry("ETH/USDT", "buy", 1.0, 3000.0, "test")
+        tracker.record_trade_exit("ETH/USDT", 3100.0, "win", 0.0)
 
         # Lose $50
-        tracker.record_trade_entry('BNB/USDT', 'buy', 10.0, 300.0, 'test')
-        tracker.record_trade_exit('BNB/USDT', 295.0, 'loss', 0.0)
+        tracker.record_trade_entry("BNB/USDT", "buy", 10.0, 300.0, "test")
+        tracker.record_trade_exit("BNB/USDT", 295.0, "loss", 0.0)
 
         avg_win, avg_loss, ratio = tracker.calculate_average_win_loss_ratio()
 
@@ -207,98 +207,98 @@ class TestPerformanceMetricsTracker:
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
         # Add some trades
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'momentum')
-        tracker.record_trade_exit('BTC/USDT', 51000.0, 'win', 5.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "momentum")
+        tracker.record_trade_exit("BTC/USDT", 51000.0, "win", 5.0)
 
-        tracker.record_trade_entry('ETH/USDT', 'buy', 1.0, 3000.0, 'momentum')
-        tracker.record_trade_exit('ETH/USDT', 2950.0, 'loss', 3.0)
+        tracker.record_trade_entry("ETH/USDT", "buy", 1.0, 3000.0, "momentum")
+        tracker.record_trade_exit("ETH/USDT", 2950.0, "loss", 3.0)
 
         summary = tracker.get_metrics_summary()
 
-        assert 'initial_balance' in summary
-        assert 'current_balance' in summary
-        assert 'total_pnl' in summary
-        assert 'total_trades' in summary
-        assert 'win_rate' in summary
-        assert 'sharpe_ratio' in summary
-        assert 'sortino_ratio' in summary
-        assert 'profit_factor' in summary
-        assert 'max_drawdown_percent' in summary
+        assert "initial_balance" in summary
+        assert "current_balance" in summary
+        assert "total_pnl" in summary
+        assert "total_trades" in summary
+        assert "win_rate" in summary
+        assert "sharpe_ratio" in summary
+        assert "sortino_ratio" in summary
+        assert "profit_factor" in summary
+        assert "max_drawdown_percent" in summary
 
-        assert summary['total_trades'] == 2
-        assert summary['winning_trades'] == 1
-        assert summary['losing_trades'] == 1
+        assert summary["total_trades"] == 2
+        assert summary["winning_trades"] == 1
+        assert summary["losing_trades"] == 1
 
     def test_strategy_performance_tracking(self):
         """Test per-strategy performance tracking"""
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
         # Trades for momentum strategy
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'momentum')
-        tracker.record_trade_exit('BTC/USDT', 51000.0, 'win', 0.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "momentum")
+        tracker.record_trade_exit("BTC/USDT", 51000.0, "win", 0.0)
 
         # Trades for mean_reversion strategy
-        tracker.record_trade_entry('ETH/USDT', 'buy', 1.0, 3000.0, 'mean_reversion')
-        tracker.record_trade_exit('ETH/USDT', 3100.0, 'win', 0.0)
+        tracker.record_trade_entry("ETH/USDT", "buy", 1.0, 3000.0, "mean_reversion")
+        tracker.record_trade_exit("ETH/USDT", 3100.0, "win", 0.0)
 
-        momentum_perf = tracker.get_strategy_performance('momentum')
-        mean_rev_perf = tracker.get_strategy_performance('mean_reversion')
+        momentum_perf = tracker.get_strategy_performance("momentum")
+        mean_rev_perf = tracker.get_strategy_performance("mean_reversion")
 
-        assert momentum_perf['total_trades'] == 1
-        assert mean_rev_perf['total_trades'] == 1
-        assert momentum_perf['total_pnl'] == 100.0
-        assert mean_rev_perf['total_pnl'] == 100.0
+        assert momentum_perf["total_trades"] == 1
+        assert mean_rev_perf["total_trades"] == 1
+        assert momentum_perf["total_pnl"] == 100.0
+        assert mean_rev_perf["total_pnl"] == 100.0
 
     def test_equity_curve_data(self):
         """Test equity curve data export"""
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'test')
-        tracker.record_trade_exit('BTC/USDT', 51000.0, 'win', 0.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "test")
+        tracker.record_trade_exit("BTC/USDT", 51000.0, "win", 0.0)
 
         df = tracker.get_equity_curve_data()
 
         assert len(df) > 0
-        assert 'timestamp' in df.columns
-        assert 'balance' in df.columns
+        assert "timestamp" in df.columns
+        assert "balance" in df.columns
 
     def test_trades_export_to_dataframe(self):
         """Test exporting trades to DataFrame"""
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'test')
-        tracker.record_trade_exit('BTC/USDT', 51000.0, 'win', 5.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "test")
+        tracker.record_trade_exit("BTC/USDT", 51000.0, "win", 5.0)
 
         df = tracker.export_trades_to_dataframe()
 
         assert len(df) == 1
-        assert 'symbol' in df.columns
-        assert 'pnl' in df.columns
-        assert 'exit_reason' in df.columns
-        assert df.iloc[0]['symbol'] == 'BTC/USDT'
+        assert "symbol" in df.columns
+        assert "pnl" in df.columns
+        assert "exit_reason" in df.columns
+        assert df.iloc[0]["symbol"] == "BTC/USDT"
 
     def test_performance_report_generation(self):
         """Test formatted performance report"""
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'momentum')
-        tracker.record_trade_exit('BTC/USDT', 51000.0, 'win', 0.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "momentum")
+        tracker.record_trade_exit("BTC/USDT", 51000.0, "win", 0.0)
 
         report = tracker.generate_performance_report()
 
         assert isinstance(report, str)
-        assert 'PERFORMANCE REPORT' in report
-        assert 'BALANCE & RETURNS' in report
-        assert 'TRADE STATISTICS' in report
-        assert 'RISK-ADJUSTED METRICS' in report
+        assert "PERFORMANCE REPORT" in report
+        assert "BALANCE & RETURNS" in report
+        assert "TRADE STATISTICS" in report
+        assert "RISK-ADJUSTED METRICS" in report
 
     def test_reset_functionality(self):
         """Test tracker reset"""
         tracker = PerformanceMetricsTracker(initial_balance=10000.0)
 
         # Add some data
-        tracker.record_trade_entry('BTC/USDT', 'buy', 0.1, 50000.0, 'test')
-        tracker.record_trade_exit('BTC/USDT', 51000.0, 'win', 0.0)
+        tracker.record_trade_entry("BTC/USDT", "buy", 0.1, 50000.0, "test")
+        tracker.record_trade_exit("BTC/USDT", 51000.0, "win", 0.0)
 
         # Reset
         tracker.reset()

@@ -1,3 +1,3 @@
 from .telegram_bot import TelegramNotifier
 
-__all__ = ['TelegramNotifier']
+__all__ = ["TelegramNotifier"]

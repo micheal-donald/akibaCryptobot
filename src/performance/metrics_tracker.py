@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Trade:
     """Represents a completed trade"""
+
     symbol: str
     side: str  # 'buy' or 'sell'
     entry_price: float
@@ -65,7 +66,9 @@ class PerformanceMetricsTracker:
         self.open_trades: Dict[str, Dict] = {}
 
         # Equity curve tracking
-        self.equity_curve: List[Tuple[datetime, float]] = [(datetime.now(), initial_balance)]
+        self.equity_curve: List[Tuple[datetime, float]] = [
+            (datetime.now(), initial_balance)
+        ]
         self.daily_returns: List[float] = []
         self.daily_balance: Dict[datetime.date, float] = {}
 
@@ -83,11 +86,19 @@ class PerformanceMetricsTracker:
         self.max_drawdown_duration = timedelta(0)
         self.current_drawdown_start: Optional[datetime] = None
 
-        logger.info(f"Performance tracker initialized with balance: ${initial_balance:.2f}")
+        logger.info(
+            f"Performance tracker initialized with balance: ${initial_balance:.2f}"
+        )
 
-    def record_trade_entry(self, symbol: str, side: str, amount: float,
-                          entry_price: float, strategy: str = "unknown",
-                          metadata: Optional[Dict] = None):
+    def record_trade_entry(
+        self,
+        symbol: str,
+        side: str,
+        amount: float,
+        entry_price: float,
+        strategy: str = "unknown",
+        metadata: Optional[Dict] = None,
+    ):
         """
         Record a new trade entry
 
@@ -100,19 +111,24 @@ class PerformanceMetricsTracker:
             metadata: Additional trade metadata
         """
         self.open_trades[symbol] = {
-            'symbol': symbol,
-            'side': side,
-            'amount': amount,
-            'entry_price': entry_price,
-            'entry_time': datetime.now(),
-            'strategy': strategy,
-            'metadata': metadata or {}
+            "symbol": symbol,
+            "side": side,
+            "amount": amount,
+            "entry_price": entry_price,
+            "entry_time": datetime.now(),
+            "strategy": strategy,
+            "metadata": metadata or {},
         }
 
         logger.info(f"Recorded trade entry: {symbol} {side} {amount} @ {entry_price}")
 
-    def record_trade_exit(self, symbol: str, exit_price: float,
-                         exit_reason: str = "unknown", fees: float = 0.0) -> Optional[Trade]:
+    def record_trade_exit(
+        self,
+        symbol: str,
+        exit_price: float,
+        exit_reason: str = "unknown",
+        fees: float = 0.0,
+    ) -> Optional[Trade]:
         """
         Record trade exit and calculate PnL
 
@@ -132,11 +148,11 @@ class PerformanceMetricsTracker:
         entry_trade = self.open_trades.pop(symbol)
 
         # Calculate PnL
-        side = entry_trade['side']
-        amount = entry_trade['amount']
-        entry_price = entry_trade['entry_price']
+        side = entry_trade["side"]
+        amount = entry_trade["amount"]
+        entry_price = entry_trade["entry_price"]
 
-        if side == 'buy':
+        if side == "buy":
             pnl = (exit_price - entry_price) * amount - fees
             pnl_percent = ((exit_price - entry_price) / entry_price) * 100
         else:  # sell
@@ -150,14 +166,14 @@ class PerformanceMetricsTracker:
             entry_price=entry_price,
             exit_price=exit_price,
             amount=amount,
-            entry_time=entry_trade['entry_time'],
+            entry_time=entry_trade["entry_time"],
             exit_time=datetime.now(),
             pnl=pnl,
             pnl_percent=pnl_percent,
             exit_reason=exit_reason,
-            strategy=entry_trade['strategy'],
+            strategy=entry_trade["strategy"],
             fees=fees,
-            metadata=entry_trade['metadata']
+            metadata=entry_trade["metadata"],
         )
 
         # Update balance
@@ -174,7 +190,9 @@ class PerformanceMetricsTracker:
         # Invalidate cache
         self._metrics_cache = None
 
-        logger.info(f"Recorded trade exit: {symbol} PnL: ${pnl:.2f} ({pnl_percent:.2f}%) - {exit_reason}")
+        logger.info(
+            f"Recorded trade exit: {symbol} PnL: ${pnl:.2f} ({pnl_percent:.2f}%) - {exit_reason}"
+        )
 
         return trade
 
@@ -205,7 +223,9 @@ class PerformanceMetricsTracker:
         yesterday = today - timedelta(days=1)
         if yesterday in self.daily_balance:
             yesterday_balance = self.daily_balance[yesterday]
-            daily_return = (self.current_balance - yesterday_balance) / yesterday_balance
+            daily_return = (
+                self.current_balance - yesterday_balance
+            ) / yesterday_balance
             self.daily_returns.append(daily_return)
 
     def _update_drawdown(self):
@@ -216,7 +236,9 @@ class PerformanceMetricsTracker:
             # End of drawdown period
             if self.current_drawdown_start:
                 drawdown_duration = datetime.now() - self.current_drawdown_start
-                self.max_drawdown_duration = max(self.max_drawdown_duration, drawdown_duration)
+                self.max_drawdown_duration = max(
+                    self.max_drawdown_duration, drawdown_duration
+                )
                 self.current_drawdown_start = None
         else:
             # In drawdown
@@ -227,7 +249,7 @@ class PerformanceMetricsTracker:
             drawdown = (self.peak_balance - self.current_balance) / self.peak_balance
             self.max_drawdown = max(self.max_drawdown, drawdown)
 
-    def calculate_sharpe_ratio(self, period: str = 'daily') -> float:
+    def calculate_sharpe_ratio(self, period: str = "daily") -> float:
         """
         Calculate Sharpe ratio
 
@@ -243,9 +265,9 @@ class PerformanceMetricsTracker:
         returns = np.array(self.daily_returns)
 
         # Adjust risk-free rate to period
-        if period == 'daily':
+        if period == "daily":
             rf_rate = self.risk_free_rate / 252  # Trading days per year
-        elif period == 'weekly':
+        elif period == "weekly":
             rf_rate = self.risk_free_rate / 52
         else:  # monthly
             rf_rate = self.risk_free_rate / 12
@@ -258,16 +280,16 @@ class PerformanceMetricsTracker:
         sharpe = np.mean(excess_returns) / np.std(returns)
 
         # Annualize
-        if period == 'daily':
+        if period == "daily":
             sharpe *= np.sqrt(252)
-        elif period == 'weekly':
+        elif period == "weekly":
             sharpe *= np.sqrt(52)
         else:
             sharpe *= np.sqrt(12)
 
         return float(sharpe)
 
-    def calculate_sortino_ratio(self, period: str = 'daily') -> float:
+    def calculate_sortino_ratio(self, period: str = "daily") -> float:
         """
         Calculate Sortino ratio (focuses on downside deviation)
 
@@ -283,9 +305,9 @@ class PerformanceMetricsTracker:
         returns = np.array(self.daily_returns)
 
         # Adjust risk-free rate to period
-        if period == 'daily':
+        if period == "daily":
             rf_rate = self.risk_free_rate / 252
-        elif period == 'weekly':
+        elif period == "weekly":
             rf_rate = self.risk_free_rate / 52
         else:
             rf_rate = self.risk_free_rate / 12
@@ -302,9 +324,9 @@ class PerformanceMetricsTracker:
         sortino = np.mean(excess_returns) / downside_deviation
 
         # Annualize
-        if period == 'daily':
+        if period == "daily":
             sortino *= np.sqrt(252)
-        elif period == 'weekly':
+        elif period == "weekly":
             sortino *= np.sqrt(52)
         else:
             sortino *= np.sqrt(12)
@@ -325,7 +347,7 @@ class PerformanceMetricsTracker:
         gross_losses = abs(sum(trade.pnl for trade in self.trades if trade.pnl < 0))
 
         if gross_losses == 0:
-            return float('inf') if gross_profits > 0 else 0.0
+            return float("inf") if gross_profits > 0 else 0.0
 
         return gross_profits / gross_losses
 
@@ -386,50 +408,54 @@ class PerformanceMetricsTracker:
         """
         # Check cache
         if use_cache and self._metrics_cache and self._cache_timestamp:
-            if datetime.now() - self._cache_timestamp < timedelta(seconds=self._cache_ttl):
+            if datetime.now() - self._cache_timestamp < timedelta(
+                seconds=self._cache_ttl
+            ):
                 return self._metrics_cache
 
         # Calculate metrics
-        total_return = ((self.current_balance - self.initial_balance) / self.initial_balance) * 100
+        total_return = (
+            (self.current_balance - self.initial_balance) / self.initial_balance
+        ) * 100
         total_pnl = self.current_balance - self.initial_balance
 
         avg_win, avg_loss, win_loss_ratio = self.calculate_average_win_loss_ratio()
 
         metrics = {
             # Balance metrics
-            'initial_balance': self.initial_balance,
-            'current_balance': self.current_balance,
-            'total_pnl': total_pnl,
-            'total_return_percent': total_return,
-
+            "initial_balance": self.initial_balance,
+            "current_balance": self.current_balance,
+            "total_pnl": total_pnl,
+            "total_return_percent": total_return,
             # Trade statistics
-            'total_trades': len(self.trades),
-            'winning_trades': sum(1 for t in self.trades if t.is_winner),
-            'losing_trades': sum(1 for t in self.trades if not t.is_winner),
-            'win_rate': self.calculate_win_rate(),
-
+            "total_trades": len(self.trades),
+            "winning_trades": sum(1 for t in self.trades if t.is_winner),
+            "losing_trades": sum(1 for t in self.trades if not t.is_winner),
+            "win_rate": self.calculate_win_rate(),
             # Risk-adjusted metrics
-            'sharpe_ratio': self.calculate_sharpe_ratio(),
-            'sortino_ratio': self.calculate_sortino_ratio(),
-            'profit_factor': self.calculate_profit_factor(),
-            'expectancy': self.calculate_expectancy(),
-
+            "sharpe_ratio": self.calculate_sharpe_ratio(),
+            "sortino_ratio": self.calculate_sortino_ratio(),
+            "profit_factor": self.calculate_profit_factor(),
+            "expectancy": self.calculate_expectancy(),
             # Win/Loss analysis
-            'average_win': avg_win,
-            'average_loss': avg_loss,
-            'win_loss_ratio': win_loss_ratio,
-
+            "average_win": avg_win,
+            "average_loss": avg_loss,
+            "win_loss_ratio": win_loss_ratio,
             # Drawdown metrics
-            'max_drawdown_percent': self.max_drawdown * 100,
-            'max_drawdown_amount': self.peak_balance * self.max_drawdown,
-            'max_drawdown_duration_hours': self.max_drawdown_duration.total_seconds() / 3600,
-            'current_drawdown_percent': ((self.peak_balance - self.current_balance) / self.peak_balance) * 100 if self.peak_balance > 0 else 0,
-
+            "max_drawdown_percent": self.max_drawdown * 100,
+            "max_drawdown_amount": self.peak_balance * self.max_drawdown,
+            "max_drawdown_duration_hours": self.max_drawdown_duration.total_seconds()
+            / 3600,
+            "current_drawdown_percent": (
+                (self.peak_balance - self.current_balance) / self.peak_balance
+            )
+            * 100
+            if self.peak_balance > 0
+            else 0,
             # Open positions
-            'open_trades_count': len(self.open_trades),
-
+            "open_trades_count": len(self.open_trades),
             # Timestamp
-            'calculated_at': datetime.now().isoformat()
+            "calculated_at": datetime.now().isoformat(),
         }
 
         # Cache results
@@ -451,19 +477,19 @@ class PerformanceMetricsTracker:
         strategy_trades = self.strategy_performance.get(strategy_name, [])
 
         if not strategy_trades:
-            return {'strategy': strategy_name, 'total_trades': 0}
+            return {"strategy": strategy_name, "total_trades": 0}
 
         total_pnl = sum(t.pnl for t in strategy_trades)
         winning_trades = sum(1 for t in strategy_trades if t.is_winner)
 
         return {
-            'strategy': strategy_name,
-            'total_trades': len(strategy_trades),
-            'winning_trades': winning_trades,
-            'losing_trades': len(strategy_trades) - winning_trades,
-            'win_rate': (winning_trades / len(strategy_trades)) * 100,
-            'total_pnl': total_pnl,
-            'average_pnl': total_pnl / len(strategy_trades)
+            "strategy": strategy_name,
+            "total_trades": len(strategy_trades),
+            "winning_trades": winning_trades,
+            "losing_trades": len(strategy_trades) - winning_trades,
+            "win_rate": (winning_trades / len(strategy_trades)) * 100,
+            "total_pnl": total_pnl,
+            "average_pnl": total_pnl / len(strategy_trades),
         }
 
     def get_all_strategies_performance(self) -> Dict[str, Dict]:
@@ -498,9 +524,9 @@ class PerformanceMetricsTracker:
             DataFrame with timestamp and balance columns
         """
         if not self.equity_curve:
-            return pd.DataFrame(columns=['timestamp', 'balance'])
+            return pd.DataFrame(columns=["timestamp", "balance"])
 
-        df = pd.DataFrame(self.equity_curve, columns=['timestamp', 'balance'])
+        df = pd.DataFrame(self.equity_curve, columns=["timestamp", "balance"])
         return df
 
     def export_trades_to_dataframe(self) -> pd.DataFrame:
@@ -515,20 +541,20 @@ class PerformanceMetricsTracker:
 
         trade_dicts = [
             {
-                'symbol': t.symbol,
-                'side': t.side,
-                'entry_price': t.entry_price,
-                'exit_price': t.exit_price,
-                'amount': t.amount,
-                'entry_time': t.entry_time,
-                'exit_time': t.exit_time,
-                'duration_hours': t.duration.total_seconds() / 3600,
-                'pnl': t.pnl,
-                'pnl_percent': t.pnl_percent,
-                'exit_reason': t.exit_reason,
-                'strategy': t.strategy,
-                'fees': t.fees,
-                'is_winner': t.is_winner
+                "symbol": t.symbol,
+                "side": t.side,
+                "entry_price": t.entry_price,
+                "exit_price": t.exit_price,
+                "amount": t.amount,
+                "entry_time": t.entry_time,
+                "exit_time": t.exit_time,
+                "duration_hours": t.duration.total_seconds() / 3600,
+                "pnl": t.pnl,
+                "pnl_percent": t.pnl_percent,
+                "exit_reason": t.exit_reason,
+                "strategy": t.strategy,
+                "fees": t.fees,
+                "is_winner": t.is_winner,
             }
             for t in self.trades
         ]

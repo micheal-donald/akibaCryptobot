@@ -8,7 +8,7 @@ import sys
 import os
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from backtesting.walkforward import WalkForwardAnalyzer, WalkForwardResult
 from backtesting.engine import BacktestEngine, BacktestResult, BacktestTrade
@@ -21,18 +21,20 @@ class MockStrategy(BaseStrategy):
 
     def __init__(self):
         # Pass a config dict, not a string
-        super().__init__({'timeframe': '1h', 'lookback_period': 100})
+        super().__init__({"timeframe": "1h", "lookback_period": 100})
         self.trained_symbols = []
         self.train_call_count = 0
 
-    async def generate_signal(self, symbol: str, ohlcv_data: pd.DataFrame, current_price: float) -> TradingSignal:
+    async def generate_signal(
+        self, symbol: str, ohlcv_data: pd.DataFrame, current_price: float
+    ) -> TradingSignal:
         """Generate a simple buy signal for testing"""
         return TradingSignal(
             signal_type=SignalType.BUY,
             strength=0.8,
             price=current_price,
             timestamp=datetime.now(),
-            metadata={'test': True}
+            metadata={"test": True},
         )
 
     def calculate_indicators(self, ohlcv_data: pd.DataFrame) -> pd.DataFrame:
@@ -51,24 +53,24 @@ class MockStrategy(BaseStrategy):
 def sample_config():
     """Sample configuration for walk-forward analyzer"""
     return {
-        'walkforward': {
-            'n_splits': 3,
-            'train_period': 60,  # 60 days
-            'test_period': 30,   # 30 days
-            'retrain_period': 2
+        "walkforward": {
+            "n_splits": 3,
+            "train_period": 60,  # 60 days
+            "test_period": 30,  # 30 days
+            "retrain_period": 2,
         },
-        'backtesting': {
-            'initial_balance': 10000.0,
-            'maker_fee': 0.001,
-            'taker_fee': 0.001
-        }
+        "backtesting": {
+            "initial_balance": 10000.0,
+            "maker_fee": 0.001,
+            "taker_fee": 0.001,
+        },
     }
 
 
 @pytest.fixture
 def sample_ohlcv_data():
     """Generate sample OHLCV data for testing"""
-    dates = pd.date_range(start='2024-01-01', end='2024-12-31', freq='1h')
+    dates = pd.date_range(start="2024-01-01", end="2024-12-31", freq="1h")
 
     # Generate realistic price data
     np.random.seed(42)
@@ -80,13 +82,16 @@ def sample_ohlcv_data():
         price = price * (1 + change)
         prices.append(price)
 
-    df = pd.DataFrame({
-        'open': prices,
-        'high': [p * (1 + abs(np.random.randn() * 0.01)) for p in prices],
-        'low': [p * (1 - abs(np.random.randn() * 0.01)) for p in prices],
-        'close': prices,
-        'volume': [1000000 * (1 + np.random.randn() * 0.1) for _ in prices]
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p * (1 + abs(np.random.randn() * 0.01)) for p in prices],
+            "low": [p * (1 - abs(np.random.randn() * 0.01)) for p in prices],
+            "close": prices,
+            "volume": [1000000 * (1 + np.random.randn() * 0.1) for _ in prices],
+        },
+        index=dates,
+    )
 
     return df
 
@@ -97,10 +102,7 @@ def sample_multi_symbol_data(sample_ohlcv_data):
     btc_data = sample_ohlcv_data.copy()
     eth_data = sample_ohlcv_data.copy() * 0.95  # Slightly different prices
 
-    return {
-        'BTC/USDT': btc_data,
-        'ETH/USDT': eth_data
-    }
+    return {"BTC/USDT": btc_data, "ETH/USDT": eth_data}
 
 
 # Test WalkForwardAnalyzer initialization
@@ -127,14 +129,14 @@ def test_walkforward_analyzer_default_config():
 def test_combine_data(sample_config, sample_multi_symbol_data):
     """Test combining data from multiple symbols"""
     analyzer = WalkForwardAnalyzer(sample_config)
-    symbols = ['BTC/USDT', 'ETH/USDT']
+    symbols = ["BTC/USDT", "ETH/USDT"]
 
     combined = analyzer._combine_data(sample_multi_symbol_data, symbols)
 
     assert not combined.empty
-    assert 'symbol' in combined.columns
+    assert "symbol" in combined.columns
     assert len(combined) > 0
-    assert set(combined['symbol'].unique()) == set(symbols)
+    assert set(combined["symbol"].unique()) == set(symbols)
 
 
 def test_combine_data_empty(sample_config):
@@ -149,20 +151,20 @@ def test_combine_data_empty(sample_config):
 def test_combine_data_missing_symbol(sample_config, sample_multi_symbol_data):
     """Test combining data when a symbol is missing"""
     analyzer = WalkForwardAnalyzer(sample_config)
-    symbols = ['BTC/USDT', 'XRP/USDT']  # XRP not in data
+    symbols = ["BTC/USDT", "XRP/USDT"]  # XRP not in data
 
     combined = analyzer._combine_data(sample_multi_symbol_data, symbols)
 
     assert not combined.empty
-    assert 'BTC/USDT' in combined['symbol'].values
-    assert 'XRP/USDT' not in combined['symbol'].values
+    assert "BTC/USDT" in combined["symbol"].values
+    assert "XRP/USDT" not in combined["symbol"].values
 
 
 # Test walk-forward period creation
 def test_create_walkforward_periods(sample_config, sample_multi_symbol_data):
     """Test creation of walk-forward periods"""
     analyzer = WalkForwardAnalyzer(sample_config)
-    symbols = ['BTC/USDT', 'ETH/USDT']
+    symbols = ["BTC/USDT", "ETH/USDT"]
     combined = analyzer._combine_data(sample_multi_symbol_data, symbols)
 
     periods = analyzer._create_walkforward_periods(combined)
@@ -197,10 +199,12 @@ def test_filter_data_by_time(sample_config, sample_multi_symbol_data):
     start_time = datetime(2024, 3, 1)
     end_time = datetime(2024, 6, 1)
 
-    filtered = analyzer._filter_data_by_time(sample_multi_symbol_data, start_time, end_time)
+    filtered = analyzer._filter_data_by_time(
+        sample_multi_symbol_data, start_time, end_time
+    )
 
-    assert 'BTC/USDT' in filtered
-    assert 'ETH/USDT' in filtered
+    assert "BTC/USDT" in filtered
+    assert "ETH/USDT" in filtered
 
     # Check that all data is within time range
     for symbol, df in filtered.items():
@@ -216,7 +220,9 @@ def test_filter_data_by_time_no_overlap(sample_config, sample_multi_symbol_data)
     start_time = datetime(2020, 1, 1)
     end_time = datetime(2020, 2, 1)
 
-    filtered = analyzer._filter_data_by_time(sample_multi_symbol_data, start_time, end_time)
+    filtered = analyzer._filter_data_by_time(
+        sample_multi_symbol_data, start_time, end_time
+    )
 
     assert len(filtered) == 0  # No data should match
 
@@ -230,13 +236,17 @@ def test_combine_train_test_data(sample_config, sample_multi_symbol_data):
     mid_time = datetime(2024, 6, 1)
     end_time = datetime(2024, 12, 31)
 
-    train_data = analyzer._filter_data_by_time(sample_multi_symbol_data, start_time, mid_time)
-    test_data = analyzer._filter_data_by_time(sample_multi_symbol_data, mid_time, end_time)
+    train_data = analyzer._filter_data_by_time(
+        sample_multi_symbol_data, start_time, mid_time
+    )
+    test_data = analyzer._filter_data_by_time(
+        sample_multi_symbol_data, mid_time, end_time
+    )
 
     combined = analyzer._combine_train_test_data(train_data, test_data)
 
-    assert 'BTC/USDT' in combined
-    assert 'ETH/USDT' in combined
+    assert "BTC/USDT" in combined
+    assert "ETH/USDT" in combined
 
     # Check that combined data includes both periods
     for symbol in combined:
@@ -331,14 +341,16 @@ def test_calculate_overfitting_score(sample_config):
     # Create mock results with performance degradation
     in_sample_results = [
         Mock(win_rate=80.0, total_trades=100),
-        Mock(win_rate=75.0, total_trades=100)
+        Mock(win_rate=75.0, total_trades=100),
     ]
     out_of_sample_results = [
         Mock(win_rate=55.0, total_trades=50),
-        Mock(win_rate=50.0, total_trades=50)
+        Mock(win_rate=50.0, total_trades=50),
     ]
 
-    overfitting_score = analyzer._calculate_overfitting_score(in_sample_results, out_of_sample_results)
+    overfitting_score = analyzer._calculate_overfitting_score(
+        in_sample_results, out_of_sample_results
+    )
 
     # Avg in-sample: 77.5%, avg out-of-sample: 52.5%
     # Degradation: 1 - (52.5 / 77.5) = 0.32
@@ -352,7 +364,9 @@ def test_calculate_overfitting_score_no_degradation(sample_config):
     in_sample_results = [Mock(win_rate=60.0, total_trades=100)]
     out_of_sample_results = [Mock(win_rate=60.0, total_trades=100)]
 
-    overfitting_score = analyzer._calculate_overfitting_score(in_sample_results, out_of_sample_results)
+    overfitting_score = analyzer._calculate_overfitting_score(
+        in_sample_results, out_of_sample_results
+    )
 
     assert overfitting_score == 0.0
 
@@ -364,7 +378,9 @@ def test_calculate_overfitting_score_improvement(sample_config):
     in_sample_results = [Mock(win_rate=50.0, total_trades=100)]
     out_of_sample_results = [Mock(win_rate=70.0, total_trades=100)]
 
-    overfitting_score = analyzer._calculate_overfitting_score(in_sample_results, out_of_sample_results)
+    overfitting_score = analyzer._calculate_overfitting_score(
+        in_sample_results, out_of_sample_results
+    )
 
     # Negative degradation should be clamped to 0
     assert overfitting_score == 0.0
@@ -390,12 +406,12 @@ async def test_run_walkforward_analysis(sample_config, sample_multi_symbol_data)
     """Test running full walk-forward analysis"""
     analyzer = WalkForwardAnalyzer(sample_config)
     strategy = MockStrategy()
-    symbols = ['BTC/USDT', 'ETH/USDT']
+    symbols = ["BTC/USDT", "ETH/USDT"]
 
     # Mock the BacktestEngine.run_backtest method
     mock_trade = BacktestTrade(
-        symbol='BTC/USDT',
-        side='buy',
+        symbol="BTC/USDT",
+        side="buy",
         entry_price=100.0,
         exit_price=105.0,
         quantity=1.0,
@@ -403,9 +419,9 @@ async def test_run_walkforward_analysis(sample_config, sample_multi_symbol_data)
         exit_time=datetime(2024, 1, 2),
         pnl=5.0,
         pnl_percentage=5.0,
-        exit_reason='take_profit',
+        exit_reason="take_profit",
         entry_signal_strength=0.8,
-        fees=0.1
+        fees=0.1,
     )
 
     mock_backtest_result = BacktestResult(
@@ -416,7 +432,7 @@ async def test_run_walkforward_analysis(sample_config, sample_multi_symbol_data)
         total_pnl=5.0,
         total_pnl_percentage=5.0,
         win_rate=100.0,
-        profit_factor=float('inf'),
+        profit_factor=float("inf"),
         max_drawdown=0.0,
         sharpe_ratio=0.0,
         avg_win=5.0,
@@ -424,11 +440,18 @@ async def test_run_walkforward_analysis(sample_config, sample_multi_symbol_data)
         max_consecutive_wins=1,
         max_consecutive_losses=0,
         equity_curve=[10000.0, 10005.0],
-        timestamps=[datetime(2024, 1, 1), datetime(2024, 1, 2)]
+        timestamps=[datetime(2024, 1, 1), datetime(2024, 1, 2)],
     )
 
-    with patch.object(BacktestEngine, 'run_backtest', new_callable=AsyncMock, return_value=mock_backtest_result):
-        result = await analyzer.run_walkforward_analysis(strategy, sample_multi_symbol_data, symbols)
+    with patch.object(
+        BacktestEngine,
+        "run_backtest",
+        new_callable=AsyncMock,
+        return_value=mock_backtest_result,
+    ):
+        result = await analyzer.run_walkforward_analysis(
+            strategy, sample_multi_symbol_data, symbols
+        )
 
     assert isinstance(result, WalkForwardResult)
     assert result.total_trades > 0
@@ -439,11 +462,13 @@ async def test_run_walkforward_analysis(sample_config, sample_multi_symbol_data)
 
 
 @pytest.mark.asyncio
-async def test_run_walkforward_analysis_with_ml_strategy(sample_config, sample_multi_symbol_data):
+async def test_run_walkforward_analysis_with_ml_strategy(
+    sample_config, sample_multi_symbol_data
+):
     """Test walk-forward with ML strategy that has train_model method"""
     analyzer = WalkForwardAnalyzer(sample_config)
     strategy = MockStrategy()
-    symbols = ['BTC/USDT']
+    symbols = ["BTC/USDT"]
 
     mock_backtest_result = BacktestResult(
         trades=[],
@@ -461,15 +486,22 @@ async def test_run_walkforward_analysis_with_ml_strategy(sample_config, sample_m
         max_consecutive_wins=0,
         max_consecutive_losses=0,
         equity_curve=[10000.0],
-        timestamps=[datetime(2024, 1, 1)]
+        timestamps=[datetime(2024, 1, 1)],
     )
 
-    with patch.object(BacktestEngine, 'run_backtest', new_callable=AsyncMock, return_value=mock_backtest_result):
-        result = await analyzer.run_walkforward_analysis(strategy, sample_multi_symbol_data, symbols)
+    with patch.object(
+        BacktestEngine,
+        "run_backtest",
+        new_callable=AsyncMock,
+        return_value=mock_backtest_result,
+    ):
+        result = await analyzer.run_walkforward_analysis(
+            strategy, sample_multi_symbol_data, symbols
+        )
 
     # Strategy should have been trained
     assert strategy.train_call_count > 0
-    assert 'BTC/USDT' in strategy.trained_symbols
+    assert "BTC/USDT" in strategy.trained_symbols
 
 
 @pytest.mark.asyncio
@@ -505,7 +537,7 @@ def test_print_results(sample_config, capsys):
         avg_loss=20.0,
         overfitting_score=0.2,
         equity_curve=[10000, 11500],
-        timestamps=[datetime(2024, 1, 1), datetime(2024, 12, 31)]
+        timestamps=[datetime(2024, 1, 1), datetime(2024, 12, 31)],
     )
 
     analyzer.print_results(result)
@@ -534,7 +566,7 @@ def test_walkforward_result_creation():
         avg_loss=15.0,
         overfitting_score=0.15,
         equity_curve=[10000, 10500],
-        timestamps=[datetime(2024, 1, 1), datetime(2024, 12, 31)]
+        timestamps=[datetime(2024, 1, 1), datetime(2024, 12, 31)],
     )
 
     assert result.total_trades == 50
@@ -543,5 +575,5 @@ def test_walkforward_result_creation():
     assert result.overfitting_score == 0.15
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

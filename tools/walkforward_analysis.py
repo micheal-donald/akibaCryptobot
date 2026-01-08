@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from backtesting.walkforward import WalkForwardAnalyzer
 from backtesting.engine import BacktestEngine
@@ -30,8 +30,7 @@ import pandas as pd
 import logging
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -39,7 +38,7 @@ logger = logging.getLogger(__name__)
 def load_config(config_path: str) -> dict:
     """Load configuration from file"""
     try:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
         logger.error(f"Config file not found: {config_path}")
@@ -49,9 +48,13 @@ def load_config(config_path: str) -> dict:
         sys.exit(1)
 
 
-async def fetch_historical_data(exchange: BinanceClient, symbols: list,
-                                start_date: datetime, end_date: datetime,
-                                timeframe: str = '1h') -> dict:
+async def fetch_historical_data(
+    exchange: BinanceClient,
+    symbols: list,
+    start_date: datetime,
+    end_date: datetime,
+    timeframe: str = "1h",
+) -> dict:
     """Fetch historical OHLCV data for symbols"""
     logger.info(f"Fetching historical data for {len(symbols)} symbols...")
     logger.info(f"Date range: {start_date} to {end_date}")
@@ -67,11 +70,11 @@ async def fetch_historical_data(exchange: BinanceClient, symbols: list,
             time_delta = end_date - start_date
             hours = int(time_delta.total_seconds() / 3600)
 
-            if timeframe == '1h':
+            if timeframe == "1h":
                 limit = min(hours, 1000)
-            elif timeframe == '4h':
+            elif timeframe == "4h":
                 limit = min(hours // 4, 1000)
-            elif timeframe == '1d':
+            elif timeframe == "1d":
                 limit = min(hours // 24, 1000)
             else:
                 limit = 1000
@@ -101,9 +104,9 @@ async def fetch_historical_data(exchange: BinanceClient, symbols: list,
 
 async def run_walkforward_analysis(args):
     """Run walk-forward analysis"""
-    print("="*70)
+    print("=" * 70)
     print("WALK-FORWARD ANALYSIS TOOL")
-    print("="*70)
+    print("=" * 70)
     print()
 
     # Load configuration
@@ -111,26 +114,29 @@ async def run_walkforward_analysis(args):
 
     # Parse dates
     if args.start:
-        start_date = datetime.strptime(args.start, '%Y-%m-%d')
+        start_date = datetime.strptime(args.start, "%Y-%m-%d")
     else:
         start_date = datetime.now() - timedelta(days=365)  # Default: 1 year ago
 
     if args.end:
-        end_date = datetime.strptime(args.end, '%Y-%m-%d')
+        end_date = datetime.strptime(args.end, "%Y-%m-%d")
     else:
         end_date = datetime.now()
 
     # Get symbols
-    symbols = args.symbols if args.symbols else config['trading']['pairs']
+    symbols = args.symbols if args.symbols else config["trading"]["pairs"]
 
     # Initialize exchange client
     logger.info("Initializing exchange client...")
-    exchange = BinanceClient(sandbox=config['exchange'].get('sandbox', True))
+    exchange = BinanceClient(sandbox=config["exchange"].get("sandbox", True))
 
     # Fetch historical data
     data = await fetch_historical_data(
-        exchange, symbols, start_date, end_date,
-        timeframe=config['trading']['timeframes']['primary']
+        exchange,
+        symbols,
+        start_date,
+        end_date,
+        timeframe=config["trading"]["timeframes"]["primary"],
     )
 
     if not data:
@@ -153,15 +159,15 @@ async def run_walkforward_analysis(args):
 
     # Configure walk-forward parameters
     wf_config = config.copy()
-    if 'walkforward' not in wf_config:
-        wf_config['walkforward'] = {}
+    if "walkforward" not in wf_config:
+        wf_config["walkforward"] = {}
 
     if args.n_splits:
-        wf_config['walkforward']['n_splits'] = args.n_splits
+        wf_config["walkforward"]["n_splits"] = args.n_splits
     if args.train_period:
-        wf_config['walkforward']['train_period'] = args.train_period
+        wf_config["walkforward"]["train_period"] = args.train_period
     if args.test_period:
-        wf_config['walkforward']['test_period'] = args.test_period
+        wf_config["walkforward"]["test_period"] = args.test_period
 
     # Initialize walk-forward analyzer
     logger.info("Initializing walk-forward analyzer...")
@@ -179,51 +185,51 @@ async def run_walkforward_analysis(args):
     # Save results if output path specified
     if args.output:
         output_data = {
-            'timestamp': datetime.now().isoformat(),
-            'strategy': args.strategy,
-            'symbols': symbols,
-            'date_range': {
-                'start': start_date.isoformat(),
-                'end': end_date.isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "strategy": args.strategy,
+            "symbols": symbols,
+            "date_range": {
+                "start": start_date.isoformat(),
+                "end": end_date.isoformat(),
             },
-            'results': {
-                'total_trades': result.total_trades,
-                'winning_trades': result.winning_trades,
-                'win_rate': result.win_rate,
-                'total_pnl': result.total_pnl,
-                'profit_factor': result.profit_factor,
-                'max_drawdown': result.max_drawdown,
-                'sharpe_ratio': result.sharpe_ratio,
-                'avg_win': result.avg_win,
-                'avg_loss': result.avg_loss,
-                'overfitting_score': result.overfitting_score
+            "results": {
+                "total_trades": result.total_trades,
+                "winning_trades": result.winning_trades,
+                "win_rate": result.win_rate,
+                "total_pnl": result.total_pnl,
+                "profit_factor": result.profit_factor,
+                "max_drawdown": result.max_drawdown,
+                "sharpe_ratio": result.sharpe_ratio,
+                "avg_win": result.avg_win,
+                "avg_loss": result.avg_loss,
+                "overfitting_score": result.overfitting_score,
             },
-            'fold_results': [
+            "fold_results": [
                 {
-                    'fold': i + 1,
-                    'in_sample_win_rate': in_sample.win_rate,
-                    'out_of_sample_win_rate': out_of_sample.win_rate,
-                    'degradation': in_sample.win_rate - out_of_sample.win_rate
+                    "fold": i + 1,
+                    "in_sample_win_rate": in_sample.win_rate,
+                    "out_of_sample_win_rate": out_of_sample.win_rate,
+                    "degradation": in_sample.win_rate - out_of_sample.win_rate,
                 }
                 for i, (in_sample, out_of_sample) in enumerate(
                     zip(result.in_sample_results, result.out_of_sample_results)
                 )
-            ]
+            ],
         }
 
         # Ensure output directory exists
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(output_data, f, indent=2)
 
         logger.info(f"Results saved to {output_path}")
 
     # Interpretation
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("INTERPRETATION")
-    print("="*70)
+    print("=" * 70)
 
     if result.overfitting_score < 0.2:
         print("✅ LOW OVERFITTING RISK")
@@ -256,12 +262,12 @@ async def run_walkforward_analysis(args):
     else:
         print(f"❌ HIGH DRAWDOWN ({result.max_drawdown:.2f}%)")
 
-    print("="*70)
+    print("=" * 70)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run walk-forward analysis on trading strategies',
+        description="Run walk-forward analysis on trading strategies",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -279,27 +285,46 @@ Examples:
   # Save results to file
   python tools/walkforward_analysis.py --strategy momentum \\
       --output results/momentum_wf.json
-        """
+        """,
     )
 
-    parser.add_argument('--strategy', type=str, required=True,
-                       help='Strategy name to analyze (e.g., momentum, freqai_ml_freqai)')
-    parser.add_argument('--symbols', nargs='+',
-                       help='Trading symbols to analyze (default: from config)')
-    parser.add_argument('--start', type=str,
-                       help='Start date (YYYY-MM-DD, default: 1 year ago)')
-    parser.add_argument('--end', type=str,
-                       help='End date (YYYY-MM-DD, default: today)')
-    parser.add_argument('--config', type=str, default='config/config.json',
-                       help='Path to configuration file (default: config/config.json)')
-    parser.add_argument('--n-splits', type=int,
-                       help='Number of walk-forward splits (default: from config)')
-    parser.add_argument('--train-period', type=int,
-                       help='Training period in days (default: from config)')
-    parser.add_argument('--test-period', type=int,
-                       help='Testing period in days (default: from config)')
-    parser.add_argument('--output', type=str,
-                       help='Output file path for results JSON (default: no output)')
+    parser.add_argument(
+        "--strategy",
+        type=str,
+        required=True,
+        help="Strategy name to analyze (e.g., momentum, freqai_ml_freqai)",
+    )
+    parser.add_argument(
+        "--symbols", nargs="+", help="Trading symbols to analyze (default: from config)"
+    )
+    parser.add_argument(
+        "--start", type=str, help="Start date (YYYY-MM-DD, default: 1 year ago)"
+    )
+    parser.add_argument("--end", type=str, help="End date (YYYY-MM-DD, default: today)")
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="config/config.json",
+        help="Path to configuration file (default: config/config.json)",
+    )
+    parser.add_argument(
+        "--n-splits",
+        type=int,
+        help="Number of walk-forward splits (default: from config)",
+    )
+    parser.add_argument(
+        "--train-period",
+        type=int,
+        help="Training period in days (default: from config)",
+    )
+    parser.add_argument(
+        "--test-period", type=int, help="Testing period in days (default: from config)"
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        help="Output file path for results JSON (default: no output)",
+    )
 
     args = parser.parse_args()
 
@@ -307,5 +332,5 @@ Examples:
     asyncio.run(run_walkforward_analysis(args))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

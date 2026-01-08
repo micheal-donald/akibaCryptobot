@@ -16,9 +16,13 @@ import sys
 import os
 
 # Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from advanced_risk_management import AdvancedRiskManager, PositionSizingResult, PortfolioHeatMap
+from advanced_risk_management import (
+    AdvancedRiskManager,
+    PositionSizingResult,
+    PortfolioHeatMap,
+)
 
 
 # Test fixtures
@@ -26,23 +30,23 @@ from advanced_risk_management import AdvancedRiskManager, PositionSizingResult, 
 def sample_config():
     """Sample configuration for advanced risk manager"""
     return {
-        'atr_period': 14,
-        'atr_multiplier': 2.0,
-        'max_position_size_percent': 0.1,
-        'kelly_enabled': True,
-        'kelly_fractions_cap': 0.5,
-        'min_trades_for_kelly': 20,
-        'correlation_threshold': 0.7,
-        'max_correlated_positions': 2,
-        'volatility_threshold': 1.0,
-        'drawdown_threshold': 0.15
+        "atr_period": 14,
+        "atr_multiplier": 2.0,
+        "max_position_size_percent": 0.1,
+        "kelly_enabled": True,
+        "kelly_fractions_cap": 0.5,
+        "min_trades_for_kelly": 20,
+        "correlation_threshold": 0.7,
+        "max_correlated_positions": 2,
+        "volatility_threshold": 1.0,
+        "drawdown_threshold": 0.15,
     }
 
 
 @pytest.fixture
 def sample_ohlcv_data():
     """Generate sample OHLCV data for testing"""
-    dates = pd.date_range(start='2024-01-01', periods=100, freq='1h')
+    dates = pd.date_range(start="2024-01-01", periods=100, freq="1h")
 
     # Generate realistic price data with some volatility
     np.random.seed(42)
@@ -53,13 +57,16 @@ def sample_ohlcv_data():
         price = price * (1 + change)
         prices.append(price)
 
-    df = pd.DataFrame({
-        'open': prices,
-        'high': [p * (1 + abs(np.random.randn() * 0.01)) for p in prices],
-        'low': [p * (1 - abs(np.random.randn() * 0.01)) for p in prices],
-        'close': prices,
-        'volume': [1000000 * (1 + np.random.randn() * 0.1) for _ in prices]
-    }, index=dates)
+    df = pd.DataFrame(
+        {
+            "open": prices,
+            "high": [p * (1 + abs(np.random.randn() * 0.01)) for p in prices],
+            "low": [p * (1 - abs(np.random.randn() * 0.01)) for p in prices],
+            "close": prices,
+            "volume": [1000000 * (1 + np.random.randn() * 0.1) for _ in prices],
+        },
+        index=dates,
+    )
 
     return df
 
@@ -71,28 +78,25 @@ def sample_multi_symbol_data(sample_ohlcv_data):
 
     # Create ETH data with high correlation to BTC
     eth_data = btc_data.copy()
-    eth_data[['open', 'high', 'low', 'close']] *= 0.05  # ETH ~5% of BTC price
+    eth_data[["open", "high", "low", "close"]] *= 0.05  # ETH ~5% of BTC price
     # Add some noise but maintain correlation
     noise = np.random.randn(len(eth_data)) * 0.01
-    eth_data['close'] = eth_data['close'] * (1 + noise)
+    eth_data["close"] = eth_data["close"] * (1 + noise)
 
     # Create SOL data with moderate correlation
     sol_data = btc_data.copy()
-    sol_data[['open', 'high', 'low', 'close']] *= 0.001  # SOL ~0.1% of BTC price
+    sol_data[["open", "high", "low", "close"]] *= 0.001  # SOL ~0.1% of BTC price
     # Add more noise for lower correlation
     noise = np.random.randn(len(sol_data)) * 0.05
-    sol_data['close'] = sol_data['close'] * (1 + noise)
+    sol_data["close"] = sol_data["close"] * (1 + noise)
 
-    return {
-        'BTC/USDT': btc_data,
-        'ETH/USDT': eth_data,
-        'SOL/USDT': sol_data
-    }
+    return {"BTC/USDT": btc_data, "ETH/USDT": eth_data, "SOL/USDT": sol_data}
 
 
 # =======================
 # ATR Position Sizing Tests
 # =======================
+
 
 def test_atr_calculation(sample_config, sample_ohlcv_data):
     """Test ATR calculation"""
@@ -134,6 +138,7 @@ def test_atr_position_sizing_zero_balance(sample_config, sample_ohlcv_data):
 # Kelly Criterion Tests
 # =======================
 
+
 def test_kelly_criterion_calculation(sample_config):
     """Test Kelly Criterion formula"""
     # TODO: Implement this test
@@ -169,6 +174,7 @@ def test_kelly_criterion_negative_edge(sample_config):
 # Correlation Analysis Tests
 # =======================
 
+
 def test_correlation_calculation(sample_config, sample_multi_symbol_data):
     """Test correlation matrix generation"""
     # TODO: Implement this test
@@ -203,6 +209,7 @@ def test_correlation_update(sample_config, sample_multi_symbol_data):
 # =======================
 # Correlation Diversification Tests
 # =======================
+
 
 def test_correlation_diversification_allows_uncorrelated(sample_config):
     """Test that uncorrelated positions are allowed"""
@@ -241,6 +248,7 @@ def test_correlation_diversification_threshold(sample_config):
 # =======================
 # Circuit Breaker Tests
 # =======================
+
 
 def test_circuit_breaker_drawdown_trigger(sample_config):
     """Test that circuit breaker triggers on drawdown"""
@@ -287,6 +295,7 @@ def test_circuit_breaker_reason_messages(sample_config):
 # Portfolio Heatmap Tests
 # =======================
 
+
 def test_portfolio_heatmap_generation(sample_config, sample_multi_symbol_data):
     """Test portfolio heatmap generation"""
     # TODO: Implement this test
@@ -319,6 +328,7 @@ def test_portfolio_heatmap_exposure_calculation(sample_config):
 # Optimal Position Sizing Tests
 # =======================
 
+
 def test_optimal_position_sizing_combines_atr_kelly(sample_config, sample_ohlcv_data):
     """Test that optimal sizing combines ATR and Kelly"""
     # TODO: Implement this test
@@ -345,6 +355,7 @@ def test_optimal_position_sizing_result_fields(sample_config, sample_ohlcv_data)
 # Risk Report Tests
 # =======================
 
+
 def test_get_risk_report(sample_config):
     """Test risk report generation"""
     # TODO: Implement this test
@@ -369,6 +380,7 @@ def test_risk_report_json_serializable(sample_config):
 # Integration Tests
 # =======================
 
+
 def test_full_workflow(sample_config, sample_multi_symbol_data):
     """Test complete workflow: correlations → sizing → heatmap"""
     # TODO: Implement this test
@@ -383,6 +395,7 @@ def test_full_workflow(sample_config, sample_multi_symbol_data):
 # =======================
 # Edge Cases
 # =======================
+
 
 def test_nan_handling(sample_config):
     """Test handling of NaN values in data"""
@@ -406,5 +419,5 @@ def test_zero_atr(sample_config):
     pass
 
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

@@ -4,11 +4,13 @@ import sys
 import os
 
 # Add src to path for imports
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
+
 
 # Add a marker for async tests
 def pytest_configure(config):
     config.addinivalue_line("markers", "asyncio: mark test as async")
+
 
 # Fixture for event loop
 @pytest.fixture(scope="session")
