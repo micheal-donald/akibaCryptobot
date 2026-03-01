@@ -36,7 +36,7 @@ jobs:
       - name: Rebuild .env and Restart Systemd Service
         uses: appleboy/ssh-action@v1.0.0
         env:
-          TRADING_MODE: ${{ secrets.TRADING_MODE != '' && secrets.TRADING_MODE || 'paper' }}
+          TRADING_MODE: ${{ vars.TRADING_MODE != '' && vars.TRADING_MODE || 'paper' }}
           BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
           BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
