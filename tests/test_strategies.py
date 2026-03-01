@@ -52,15 +52,15 @@ class TestBaseStrategy:
     """Test cases for BaseStrategy class"""
 
     def test_base_strategy_initialization(self, sample_config):
-        """Test BaseStrategy initialization"""
-        strategy = BaseStrategy(sample_config)
+        """Test BaseStrategy initialization via concrete subclass"""
+        strategy = MomentumStrategy(sample_config)
         assert strategy.min_signal_strength == 0.6
         assert strategy.stop_loss_percent == 0.02
         assert strategy.take_profit_percent == 0.04
 
     def test_signal_validation(self, sample_config):
         """Test signal validation"""
-        strategy = BaseStrategy(sample_config)
+        strategy = MomentumStrategy(sample_config)
 
         # Valid signal
         valid_signal = TradingSignal(
@@ -191,8 +191,10 @@ class TestTechnicalIndicators:
         """Test RSI calculation"""
         rsi_result = TechnicalIndicators.rsi(sample_ohlcv_data["close"])
         assert len(rsi_result) == len(sample_ohlcv_data)
-        # RSI should be between 0 and 100
-        assert (rsi_result >= 0).all() and (rsi_result <= 100).all()
+        # RSI should be between 0 and 100 for non-NaN values (first ~14 are NaN)
+        valid = rsi_result.dropna()
+        assert len(valid) > 0
+        assert (valid >= 0).all() and (valid <= 100).all()
 
     def test_macd(self, sample_ohlcv_data):
         """Test MACD calculation"""

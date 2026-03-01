@@ -116,7 +116,9 @@ class TestBinanceConnector:
         result = await connector.place_market_order("BTC/USDT", "buy", 0.1)
 
         # Check that create_market_order was called with correct parameters
-        mock_exchange.create_market_order.assert_called_once_with("BTC/USDT", "buy", 0.1)
+        mock_exchange.create_market_order.assert_called_once_with(
+            "BTC/USDT", "buy", 0.1
+        )
 
         # Check that returned data matches expected response
         assert result == mock_response
