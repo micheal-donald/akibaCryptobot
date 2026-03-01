@@ -74,8 +74,9 @@ async def train_all_models(config, pairs, candles, timeframe, output_dir):
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # Initialize exchange client (sandbox mode for data download is fine)
-    exchange = BinanceClient(sandbox=config["exchange"].get("sandbox", True))
+    # Use live endpoint for data download — public OHLCV data has no geo-restriction.
+    # Testnet (testnet.binance.vision) is blocked from GitHub Actions runners (US, HTTP 451).
+    exchange = BinanceClient(sandbox=False)
 
     # Initialize the ML strategy
     strategy = MLFreqAIStrategy(config)
