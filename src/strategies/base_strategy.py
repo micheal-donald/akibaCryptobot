@@ -329,6 +329,10 @@ class StrategyManager:
                     from strategies.momentum_strategy import MomentumStrategy
 
                     strategy_class = MomentumStrategy
+                elif strategy_name == "ensemble":
+                    from strategies.ensemble_strategy import EnsembleStrategy
+
+                    strategy_class = EnsembleStrategy
                 else:
                     raise ValueError(f"Unknown strategy: {strategy_name}")
 

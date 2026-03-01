@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-Start script for AkibaCryptoBot with FreqAI support
+Start script for AkibaCryptoBot with FastAPI + Trading Engine
+
+Launches both the HTTP/WebSocket API server and the trading bot
+in a single asyncio event loop via uvicorn.
 """
 
 import sys
 import os
 import argparse
-import asyncio
 import logging
+import uvicorn
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
-
-from bot import AkibaCryptoBot
 
 
 def setup_logging(debug=False):
@@ -32,14 +33,15 @@ def setup_logging(debug=False):
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description="AkibaCryptoBot - Automated Cryptocurrency Trading Bot with FreqAI Support",
+        description="AkibaCryptoBot - HFT Engine with FastAPI Dashboard",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   start_bot.py                              # Start with default config
-  start_bot.py --strategy freqai_ml_freqai  # Start with FreqAI ML strategy
-  start_bot.py --testnet --debug           # Start in testnet mode with debug logging
-  start_bot.py --config custom_config.json # Start with custom config
+  start_bot.py --strategy ensemble          # Start with Ensemble (ML+TA) strategy
+  start_bot.py --testnet --debug            # Start in testnet mode with debug logging
+  start_bot.py --port 8080                  # Custom API port
+  start_bot.py --no-api                     # Run bot only, no API server
         """,
     )
 
@@ -53,7 +55,7 @@ Examples:
     parser.add_argument(
         "--strategy",
         type=str,
-        help="Override strategy from config file (e.g., momentum, freqai_example_freqai, freqai_ml_freqai)",
+        help="Override strategy from config file (e.g., momentum, ensemble, freqai_ml_freqai)",
     )
 
     parser.add_argument(
@@ -67,80 +69,91 @@ Examples:
     )
 
     parser.add_argument(
-        "--train-model",
-        action="store_true",
-        help="Train FreqAI model before starting (for FreqAI strategies)",
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for the FastAPI server (default: 8000)",
     )
 
-    parser.add_argument("--model-path", type=str, help="Path to load/save FreqAI model")
+    parser.add_argument(
+        "--host",
+        type=str,
+        default="0.0.0.0",
+        help="Host to bind the FastAPI server (default: 0.0.0.0)",
+    )
+
+    parser.add_argument(
+        "--no-api",
+        action="store_true",
+        help="Run the trading bot without the API server (legacy mode)",
+    )
 
     return parser.parse_args()
 
 
-async def main():
+def main():
     """Main entry point"""
-    # Parse command line arguments
     args = parse_arguments()
-
-    # Setup logging
     logger = setup_logging(args.debug)
 
     logger.info("=" * 50)
-    logger.info("Starting AkibaCryptoBot with FreqAI Support")
+    logger.info("Starting AkibaCryptoBot")
     logger.info("=" * 50)
     logger.info(f"Configuration file: {args.config}")
     logger.info(f"Strategy override: {args.strategy}")
     logger.info(f"Testnet mode: {args.testnet}")
-    logger.info(f"Dry-run mode: {args.dry_run}")
-    logger.info(f"Train model: {args.train_model}")
-    logger.info(f"Model path: {args.model_path}")
+    logger.info(f"API mode: {'disabled' if args.no_api else f'http://{args.host}:{args.port}'}")
 
-    try:
-        # Initialize the bot
-        bot = AkibaCryptoBot(config_path=args.config)
+    if args.no_api:
+        # Legacy mode: run the bot directly without the API server
+        import asyncio
+        from bot import AkibaCryptoBot
 
-        # Override settings based on command line arguments
-        if args.testnet:
-            logger.info("Setting testnet mode")
-            bot.config["exchange"]["sandbox"] = True
+        async def run_bot():
+            bot = AkibaCryptoBot(config_path=args.config)
 
-        if args.dry_run:
-            logger.info("Setting dry-run mode")
-            bot.config["trading"]["dry_run"] = True
+            if args.testnet:
+                bot.config["exchange"]["sandbox"] = True
+            if args.dry_run:
+                bot.config["trading"]["dry_run"] = True
 
-        # Override strategy if specified
-        if args.strategy:
-            logger.info(f"Overriding strategy to: {args.strategy}")
-            try:
-                # Try to load the specified strategy
-                bot.strategy_manager.add_strategy_by_name(args.strategy, bot.config)
-                bot.strategy_manager.set_active_strategy(args.strategy)
-                logger.info(f"Successfully loaded strategy: {args.strategy}")
-            except Exception as e:
-                logger.error(f"Failed to load strategy {args.strategy}: {e}")
-                logger.info("Falling back to default strategy")
+            if args.strategy:
+                try:
+                    bot.strategy_manager.add_strategy_by_name(args.strategy, bot.config)
+                    bot.strategy_manager.set_active_strategy(args.strategy)
+                    logger.info(f"Successfully loaded strategy: {args.strategy}")
+                except Exception as e:
+                    logger.error(f"Failed to load strategy {args.strategy}: {e}")
 
-        # Train model if requested (for FreqAI strategies)
-        if args.train_model:
-            logger.info(
-                "Model training requested - this feature needs to be implemented in the bot"
-            )
-            # This would require extending the bot to support model training
+            logger.info(f"Active strategy: {bot.strategy_manager.active_strategy}")
+            await bot.start()
 
-        logger.info(f"Active strategy: {bot.strategy_manager.active_strategy}")
+        try:
+            asyncio.run(run_bot())
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, shutting down...")
+        finally:
+            logger.info("AkibaCryptoBot shutdown complete")
+    else:
+        # FastAPI mode: run bot + API server together
+        from api.app import create_app
 
-        # Start the bot
-        logger.info("Starting trading bot...")
-        await bot.start()
+        app = create_app(
+            config_path=args.config,
+            strategy_override=args.strategy,
+            testnet=args.testnet,
+        )
 
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt, shutting down gracefully...")
-    except Exception as e:
-        logger.error(f"Unexpected error: {e}", exc_info=True)
-        sys.exit(1)
-    finally:
-        logger.info("AkibaCryptoBot shutdown complete")
+        logger.info(f"API docs available at: http://{args.host}:{args.port}/docs")
+        logger.info("Starting trading bot + API server...")
+
+        uvicorn.run(
+            app,
+            host=args.host,
+            port=args.port,
+            log_level="info" if not args.debug else "debug",
+        )
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

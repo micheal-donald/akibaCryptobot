@@ -1,0 +1,75 @@
+/* Custom styling overrides built on top of Tailwind */
+
+body {
+    background-color: #0F172A; /* Slate 900 */
+    background-image: 
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.05) 0%, transparent 25%);
+    background-attachment: fixed;
+}
+
+.glass-card {
+    background: rgba(30, 41, 59, 0.7); /* Slate 800 with opacity */
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+/* Custom scrollbar for market ticker */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(15, 23, 42, 0.5); 
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(51, 65, 85, 0.8); 
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(71, 85, 105, 1); 
+}
+
+/* Price up/down animations */
+.price-up {
+    color: #10B981 !important; /* Emerald 500 */
+    animation: pulse-green 1s;
+}
+
+.price-down {
+    color: #EF4444 !important; /* Red 500 */
+    animation: pulse-red 1s;
+}
+
+@keyframes pulse-green {
+    0% { background-color: rgba(16, 185, 129, 0.2); }
+    100% { background-color: transparent; }
+}
+
+@keyframes pulse-red {
+    0% { background-color: rgba(239, 68, 68, 0.2); }
+    100% { background-color: transparent; }
+}
+
+/* Toast animations */
+.toast-enter {
+    transform: translateX(100%);
+    opacity: 0;
+}
+.toast-enter-active {
+    transform: translateX(0);
+    opacity: 1;
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.toast-leave {
+    transform: translateX(0);
+    opacity: 1;
+}
+.toast-leave-active {
+    transform: translateX(100%);
+    opacity: 0;
+    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}

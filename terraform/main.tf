@@ -57,6 +57,16 @@ resource "vultr_firewall_rule" "ssh_access" {
   port              = "22"
 }
 
+# Allow API Access (FastAPI Dashboard)
+resource "vultr_firewall_rule" "api_access" {
+  firewall_group_id = vultr_firewall_group.bot_fw.id
+  protocol          = "tcp"
+  ip_type           = "v4"
+  subnet           = split("/", var.allowed_ssh_ip)[0]
+  subnet_size      = split("/", var.allowed_ssh_ip)[1]
+  port              = "8000"
+}
+
 # Provision the Instance in Tokyo (nrt)
 resource "vultr_instance" "trading_bot" {
   plan              = var.instance_plan

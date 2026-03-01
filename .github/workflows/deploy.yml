@@ -6,13 +6,9 @@ on:
     types: [completed]
     branches: [master]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 jobs:
   deploy:
-    name: Deploy to Production
+    name: Deploy to Vultr (bare-metal)
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
@@ -23,47 +19,53 @@ jobs:
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       
-      - name: Deploy to EC2
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Sync Files to Server via Rsync
+        run: |
+          rsync -avz --exclude='.git' --exclude='venv' --exclude='__pycache__' \
+          --exclude='.pytest_cache' --exclude='logs/' --exclude='models/' \
+          -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
+          ./ root@${{ secrets.SERVER_IP }}:/opt/akibabot/
+
+      - name: Rebuild .env and Restart Systemd Service
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
+          host: ${{ secrets.SERVER_IP }}
+          username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Navigate to app directory
             cd /opt/akibabot
             
-            # Login to GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
-            # Pull latest image
-            docker pull ghcr.io/${{ github.repository }}:latest
-            
-            # Create .env file with secrets
+            # Recreate .env with Action Secrets
             cat > .env << 'EOF'
             TRADING_MODE=${{ secrets.TRADING_MODE || 'paper' }}
             BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
             BINANCE_SECRET_KEY=${{ secrets.BINANCE_SECRET_KEY }}
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+            VULTR_API_KEY=${{ secrets.VULTR_API_KEY }}
             LOG_LEVEL=INFO
             EOF
             
-            # Stop existing container gracefully
-            docker-compose down --timeout 30 || true
+            # Install any new dependencies
+            source venv/bin/activate
+            pip install -r requirements.txt
             
-            # Start new container
-            docker-compose up -d
+            # Restart the bot service
+            systemctl restart akibabot.service
             
-            # Clean up old images
-            docker image prune -f
+            # Check status (first 5 seconds of logs to verify it loaded)
+            sleep 5
+            systemctl status akibabot.service --no-pager
             
-            # Verify container is running
-            sleep 10
-            docker-compose ps
-      
-      - name: Notify Telegram
-        if: always()
+      - name: Notify Telegram (Deployment Success)
+        if: success()
         uses: appleboy/telegram-action@master
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -71,27 +73,23 @@ jobs:
           message: |
             🚀 *AkibaCryptoBot Deployment*
             
-            Status: ${{ job.status == 'success' && '✅ Success' || '❌ Failed' }}
+            Status: ✅ Success (Bare-Metal)
             Commit: `${{ steps.sha.outputs.short }}`
             Branch: `master`
+            Host: `${{ secrets.SERVER_IP }}`
             
-            ${{ job.status == 'success' && 'Bot is now running!' || 'Check GitHub Actions for details.' }}
-      
-      - name: Health Check
-        if: success()
-        uses: appleboy/ssh-action@v1.0.0
+            Bot has been restarted via systemd.
+
+      - name: Notify Telegram (Deployment Failed)
+        if: failure()
+        uses: appleboy/telegram-action@master
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            # Wait for container to be healthy
-            for i in {1..5}; do
-              if docker inspect --format='{{.State.Health.Status}}' akiba-cryptobot 2>/dev/null | grep -q healthy; then
-                echo "Container is healthy!"
-                exit 0
-              fi
-              echo "Waiting for container to be healthy... ($i/5)"
-              sleep 10
-            done
-            echo "Container health check passed (or no healthcheck configured)"
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          message: |
+            🚨 *AkibaCryptoBot CI/CD Failed*
+            
+            Status: ❌ Failed to deploy to `${{ secrets.SERVER_IP }}`
+            Commit: `${{ steps.sha.outputs.short }}`
+            
+            Check the GitHub Actions log for details.
