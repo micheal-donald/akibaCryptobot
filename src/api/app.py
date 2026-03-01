@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.dependencies import bot_state
-from api.routes import status, trading, account, performance, risk, strategy
+from api.routes import status, trading, account, performance, risk, strategy, model
 from api.websockets import router as ws_router
 
 logger = logging.getLogger(__name__)
@@ -103,6 +103,7 @@ def create_app(
     app.include_router(performance.router, prefix="/api", tags=["Performance"])
     app.include_router(risk.router, prefix="/api", tags=["Risk Management"])
     app.include_router(strategy.router, prefix="/api", tags=["Strategy"])
+    app.include_router(model.router, prefix="/api", tags=["Model Health"])
     app.include_router(ws_router, tags=["WebSocket Streams"])
 
     # Mount the UI Static Files at the root

@@ -273,6 +273,55 @@ class EnsembleStrategy(BaseStrategy):
                 except Exception as e:
                     logger.error(f"Error training {name}: {e}")
 
+    def load_models(self, models_dir: str = "models") -> int:
+        """
+        Load pre-trained models from disk for all ML-based strategies.
+
+        Scans the models/ directory for .joblib files matching the pattern
+        <SYMBOL>_freqai.joblib and loads them into the corresponding strategy.
+
+        Returns:
+            Number of models successfully loaded
+        """
+        loaded = 0
+
+        if not os.path.exists(models_dir):
+            logger.warning(f"Models directory not found: {models_dir}")
+            return loaded
+
+        for strategy, _, name in self.strategies:
+            if not hasattr(strategy, "load_model"):
+                continue
+
+            # Find model files for this strategy
+            model_files = [
+                f for f in os.listdir(models_dir)
+                if f.endswith("_freqai.joblib")
+            ]
+
+            if not model_files:
+                logger.warning(f"No pre-trained model files found in {models_dir}")
+                continue
+
+            for model_file in model_files:
+                filepath = os.path.join(models_dir, model_file)
+                try:
+                    strategy.load_model(filepath)
+                    loaded += 1
+                    logger.info(f"✅ Loaded pre-trained model: {model_file} → {name}")
+                except Exception as e:
+                    logger.error(f"Failed to load {model_file}: {e}")
+
+        if loaded > 0:
+            logger.info(f"FreqAI activated: {loaded} model(s) loaded from {models_dir}")
+        else:
+            logger.warning(
+                "No FreqAI models loaded. ML predictions will be inactive. "
+                "Run 'python scripts/train_models.py' or trigger the GitHub Actions training workflow."
+            )
+
+        return loaded
+
     def get_strategy_status(self) -> Dict:
         """Get status of all component strategies"""
         status = {}

@@ -560,8 +560,34 @@ class AkibaCryptoBot:
                 f"Active strategy: {self.strategy_manager.active_strategy}"
             )
 
+            # Load pre-trained FreqAI models from disk
+            self._load_freqai_models()
+
         except Exception as e:
             self.logger.error(f"Error loading strategies: {e}")
+
+    def _load_freqai_models(self):
+        """
+        Load pre-trained FreqAI models from the models/ directory.
+        These are produced by scripts/train_models.py (run via GitHub Actions).
+        """
+        active_strategy = self.strategy_manager.get_active_strategy()
+
+        if hasattr(active_strategy, "load_models"):
+            models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+            if not os.path.exists(models_dir):
+                models_dir = "models"  # fallback to relative path
+
+            loaded = active_strategy.load_models(models_dir)
+            if loaded > 0:
+                self.logger.info(
+                    f"🧠 FreqAI is ACTIVE: {loaded} pre-trained model(s) loaded"
+                )
+            else:
+                self.logger.warning(
+                    "🧠 FreqAI is INACTIVE: no pre-trained models found. "
+                    "Ensemble will rely on momentum signals only."
+                )
 
     async def pause_trading(self):
         """Pause trading (called by Telegram /stop command)"""
