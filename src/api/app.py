@@ -108,11 +108,13 @@ def create_app(
     # Mount the UI Static Files at the root
     import os
     from fastapi.staticfiles import StaticFiles
-    
+
     ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ui")
     if os.path.exists(ui_dir):
         app.mount("/", StaticFiles(directory=ui_dir, html=True), name="ui")
     else:
-        logger.warning(f"UI directory not found at {ui_dir}. Dashboard will not be available.")
+        logger.warning(
+            f"UI directory not found at {ui_dir}. Dashboard will not be available."
+        )
 
     return app

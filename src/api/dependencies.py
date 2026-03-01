@@ -14,7 +14,9 @@ def get_bot():
     """Return the live AkibaCryptoBot instance."""
     bot = bot_state.get("bot")
     if bot is None:
-        raise HTTPException(status_code=503, detail="Trading bot is not initialized yet")
+        raise HTTPException(
+            status_code=503, detail="Trading bot is not initialized yet"
+        )
     return bot
 
 

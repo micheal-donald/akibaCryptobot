@@ -28,7 +28,10 @@ async def get_equity_curve(bot=Depends(get_bot)):
         curve = bot.performance_tracker.equity_curve
         return {
             "data": [
-                {"timestamp": point["timestamp"].isoformat(), "balance": point["balance"]}
+                {
+                    "timestamp": point["timestamp"].isoformat(),
+                    "balance": point["balance"],
+                }
                 for point in curve
             ]
         }
