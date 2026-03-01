@@ -509,11 +509,13 @@ class AkibaCryptoBot:
         """Get account balance for Telegram commands"""
         try:
             balance = await self.exchange.get_balance()
-            return {
-                currency: data["free"]
-                for currency, data in balance.items()
-                if data["free"] > 0
-            }
+            valid_balances = {}
+            for currency, data in balance.items():
+                if isinstance(data, dict):
+                    free = data.get("free", 0)
+                    if free > 0:
+                        valid_balances[currency] = free
+            return valid_balances
         except Exception as e:
             self.logger.error(f"Error getting balance: {e}")
             return {}
