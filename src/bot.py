@@ -99,9 +99,7 @@ class AkibaCryptoBot:
 
             # Verify production data feed when running in dual-client mode
             if self.data_exchange is not self.exchange:
-                await self.data_exchange.get_ticker(
-                    self.config["trading"]["pairs"][0]
-                )
+                await self.data_exchange.get_ticker(self.config["trading"]["pairs"][0])
                 self.logger.info(
                     "Successfully connected to production Binance for market data"
                 )
