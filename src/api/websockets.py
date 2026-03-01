@@ -26,8 +26,8 @@ async def ws_prices(websocket: WebSocket):
     try:
         while True:
             bot = bot_state.get("bot")
-            if bot and bot.exchange:
-                prices = bot.exchange.realtime_prices
+            if bot and bot.data_exchange:
+                prices = bot.data_exchange.realtime_prices
                 if prices:
                     await websocket.send_json(
                         {

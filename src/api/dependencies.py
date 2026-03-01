@@ -25,6 +25,11 @@ def get_exchange(bot=Depends(get_bot)):
     return bot.exchange
 
 
+def get_data_exchange(bot=Depends(get_bot)):
+    """Return the BinanceClient used for public market data."""
+    return bot.data_exchange
+
+
 def get_risk_manager(bot=Depends(get_bot)):
     """Return the AdvancedRiskManager instance."""
     return bot.advanced_risk

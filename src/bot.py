@@ -29,6 +29,16 @@ class AkibaCryptoBot:
             sandbox=self.config["exchange"].get("sandbox", True)
         )
 
+        # Use production Binance for market data when trading in sandbox mode,
+        # because the testnet returns too few OHLCV candles for indicator calc.
+        if self.config["exchange"].get("sandbox", True):
+            self.data_exchange = BinanceClient(sandbox=False)
+            self.logger.info(
+                "Dual-client mode: sandbox for trading, production Binance for market data"
+            )
+        else:
+            self.data_exchange = self.exchange
+
         self.risk_manager = RiskManager(self.config.get("risk_management", {}))
         self.advanced_risk = AdvancedRiskManager(self.config)
         self.telegram = (
@@ -86,6 +96,15 @@ class AkibaCryptoBot:
             # Initialize exchange connection
             await self.exchange.get_balance()
             self.logger.info("Successfully connected to exchange")
+
+            # Verify production data feed when running in dual-client mode
+            if self.data_exchange is not self.exchange:
+                await self.data_exchange.get_ticker(
+                    self.config["trading"]["pairs"][0]
+                )
+                self.logger.info(
+                    "Successfully connected to production Binance for market data"
+                )
 
             if self.telegram:
                 await self.telegram.send_message(
@@ -176,11 +195,11 @@ class AkibaCryptoBot:
     async def update_market_data(self):
         for pair in self.config["trading"]["pairs"]:
             try:
-                ticker = await self.exchange.get_ticker(pair)
+                ticker = await self.data_exchange.get_ticker(pair)
                 self.logger.debug(f"Updated {pair}: {ticker['last']}")
 
                 # Cache OHLCV data for circuit breaker and correlation analysis
-                ohlcv_data = await self.exchange.get_ohlcv(
+                ohlcv_data = await self.data_exchange.get_ohlcv(
                     pair,
                     self.config["trading"]["timeframes"]["primary"],
                     100,  # Last 100 candles for analysis
@@ -206,7 +225,7 @@ class AkibaCryptoBot:
             # Add value of open positions (approximation)
             for symbol in self.active_trades:
                 trade = self.active_trades[symbol]
-                ticker = await self.exchange.get_ticker(symbol)
+                ticker = await self.data_exchange.get_ticker(symbol)
                 position_value = trade["amount"] * ticker["last"]
                 total_value += position_value
 
@@ -233,11 +252,11 @@ class AkibaCryptoBot:
                         await self.check_order_conditions(order)
 
                     # Also check current position for exit conditions
-                    ticker = await self.exchange.get_ticker(symbol)
+                    ticker = await self.data_exchange.get_ticker(symbol)
                     current_price = ticker["last"]
 
                     # Get OHLCV data for exit signal analysis
-                    ohlcv_data = await self.exchange.get_ohlcv(
+                    ohlcv_data = await self.data_exchange.get_ohlcv(
                         symbol, self.config["trading"]["timeframes"]["primary"], 50
                     )
 
@@ -262,7 +281,7 @@ class AkibaCryptoBot:
         symbol = order["symbol"]
 
         # Get current price
-        ticker = await self.exchange.get_ticker(symbol)
+        ticker = await self.data_exchange.get_ticker(symbol)
         current_price = ticker["last"]
 
         # Implement stop-loss and take-profit logic
@@ -340,7 +359,7 @@ class AkibaCryptoBot:
 
         Returns (ohlcv_data, current_price) or (None, None) on insufficient data.
         """
-        ohlcv_data = await self.exchange.get_ohlcv(
+        ohlcv_data = await self.data_exchange.get_ohlcv(
             pair,
             self.config["trading"]["timeframes"]["primary"],
             200,
@@ -348,7 +367,7 @@ class AkibaCryptoBot:
         if ohlcv_data is None or len(ohlcv_data) < 50:
             self.logger.warning(f"Insufficient data for {pair}")
             return None, None
-        ticker = await self.exchange.get_ticker(pair)
+        ticker = await self.data_exchange.get_ticker(pair)
         return ohlcv_data, ticker["last"]
 
     async def _resolve_position_size(
@@ -479,6 +498,9 @@ class AkibaCryptoBot:
 
     async def cleanup(self):
         self.logger.info("Cleaning up resources...")
+
+        if self.data_exchange and self.data_exchange is not self.exchange:
+            await self.data_exchange.close()
 
         if self.exchange:
             await self.exchange.close()
