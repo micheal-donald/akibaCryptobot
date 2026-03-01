@@ -65,6 +65,10 @@
       "training_data_period": 1000
     }
   },
+  "circuit_breaker": {
+    "volatility_threshold": 1.5,
+    "drawdown_threshold": 0.20
+  },
   "notifications": {
     "telegram_enabled": true,
     "trade_notifications": true,
