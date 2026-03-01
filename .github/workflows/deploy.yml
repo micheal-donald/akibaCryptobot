@@ -35,21 +35,29 @@ jobs:
 
       - name: Rebuild .env and Restart Systemd Service
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          TRADING_MODE: ${{ secrets.TRADING_MODE != '' && secrets.TRADING_MODE || 'paper' }}
+          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+          BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: TRADING_MODE,BINANCE_API_KEY,BINANCE_SECRET_KEY,TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,VULTR_API_KEY
           script: |
             cd /opt/akibabot
-            
+
             # Recreate .env with Action Secrets
-            cat > .env << 'EOF'
-            TRADING_MODE=${{ secrets.TRADING_MODE || 'paper' }}
-            BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
-            BINANCE_SECRET_KEY=${{ secrets.BINANCE_SECRET_KEY }}
-            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-            TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
-            VULTR_API_KEY=${{ secrets.VULTR_API_KEY }}
+            cat > .env << EOF
+            TRADING_MODE=${TRADING_MODE}
+            BINANCE_API_KEY=${BINANCE_API_KEY}
+            BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
+            TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+            TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+            VULTR_API_KEY=${VULTR_API_KEY}
             LOG_LEVEL=INFO
             EOF
             
