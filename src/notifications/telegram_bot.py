@@ -188,7 +188,7 @@ class TelegramNotifier:
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status command"""
         if hasattr(self, "bot_instance"):
-            status_info = await self.bot_instance.get_status_info()
+            status_info = self.bot_instance.get_status_info()
             message = (
                 f"🤖 Bot Status: {self.bot_status}\n"
                 f"Active Trades: {status_info.get('active_trades', 0)}\n"

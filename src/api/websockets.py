@@ -56,7 +56,7 @@ async def ws_status(websocket: WebSocket):
         while True:
             bot = bot_state.get("bot")
             if bot:
-                status_info = await bot.get_status_info()
+                status_info = bot.get_status_info()
                 status_info["circuit_breaker_active"] = bot.circuit_breaker_active
                 status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason
                 status_info["strategy"] = bot.strategy_manager.active_strategy

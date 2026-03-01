@@ -493,7 +493,7 @@ class AkibaCryptoBot:
                 self.logger.error(f"Error stopping Telegram bot: {e}")
 
     # Methods for Telegram bot integration
-    async def get_status_info(self) -> Dict:
+    def get_status_info(self) -> Dict:
         """Get bot status information for Telegram commands"""
         uptime = (
             datetime.now() - self.last_update
