@@ -50,6 +50,7 @@ class AkibaCryptoBot:
         self.active_trades = {}
         self.is_running = False
         self.last_update = datetime.now()
+        self._background_tasks: set = set()  # Prevents GC of fire-and-forget tasks
 
         # Portfolio tracking for circuit breakers
         self.portfolio_value_history = []
@@ -93,10 +94,13 @@ class AkibaCryptoBot:
                 # Start Telegram bot polling in background
                 if self.telegram.application:
                     await self.telegram.application.initialize()
-                    asyncio.create_task(self.telegram.application.start())
-                    asyncio.create_task(
-                        self.telegram.application.updater.start_polling()
-                    )
+                    for coro in (
+                        self.telegram.application.start(),
+                        self.telegram.application.updater.start_polling(),
+                    ):
+                        task = asyncio.create_task(coro)
+                        self._background_tasks.add(task)
+                        task.add_done_callback(self._background_tasks.discard)
 
             # Main trading loop
             while self.is_running:
