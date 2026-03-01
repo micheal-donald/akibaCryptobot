@@ -30,7 +30,7 @@ class AkibaCryptoBot:
         )
 
         self.risk_manager = RiskManager(self.config.get("risk_management", {}))
-        self.advanced_risk = AdvancedRiskManager(self.config.get("advanced_risk", {}))
+        self.advanced_risk = AdvancedRiskManager(self.config)
         self.telegram = (
             TelegramNotifier()
             if self.config.get("notifications", {}).get("telegram_enabled")
