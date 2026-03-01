@@ -222,7 +222,9 @@ class AkibaCryptoBot:
         """Manage existing positions and orders"""
         try:
             # Check each active trade individually to avoid rate limits
-            for symbol in list(self.active_trades.keys()):
+            # Snapshot keys — close_position() mutates active_trades mid-loop
+            open_symbols = list(self.active_trades.keys())
+            for symbol in open_symbols:
                 try:
                     # Get open orders for specific symbol
                     open_orders = await self.exchange.get_open_orders(symbol)
