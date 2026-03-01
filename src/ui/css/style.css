@@ -1,75 +1,58 @@
-/* Custom styling overrides built on top of Tailwind */
+/* Raw Custom CSS for specific visual effects not easily covered by Tailwind Utility Classes */
 
 body {
-    background-color: #0F172A; /* Slate 900 */
-    background-image: 
-        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 25%),
-        radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.05) 0%, transparent 25%);
-    background-attachment: fixed;
+    background-color: #000000;
 }
 
-.glass-card {
-    background: rgba(30, 41, 59, 0.7); /* Slate 800 with opacity */
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+::selection {
+    background: #00FF41;
+    color: #000000;
 }
 
-/* Custom scrollbar for market ticker */
+/* Phosphor Glow Effects */
+.neon-glow {
+    text-shadow: 0 0 5px rgba(0, 255, 65, 0.7),
+        0 0 10px rgba(0, 255, 65, 0.4),
+        0 0 20px rgba(0, 255, 65, 0.2);
+}
+
+.text-matrix-neon {
+    text-shadow: 0 0 4px rgba(0, 255, 65, 0.5);
+}
+
+/* Blinking cursor animation */
+.blinking-cursor {
+    animation: blinker 1s linear infinite;
+    color: #00FF41;
+    text-shadow: 0 0 8px #00FF41;
+}
+
+@keyframes blinker {
+    50% {
+        opacity: 0;
+    }
+}
+
+/* Custom Scrollbar to match Matrix Theme */
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: rgba(15, 23, 42, 0.5); 
+    background: #0D1A15;
+    border-left: 1px solid #008F11;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(51, 65, 85, 0.8); 
-    border-radius: 3px;
+    background: #008F11;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: rgba(71, 85, 105, 1); 
+    background: #00FF41;
 }
 
-/* Price up/down animations */
-.price-up {
-    color: #10B981 !important; /* Emerald 500 */
-    animation: pulse-green 1s;
-}
-
-.price-down {
-    color: #EF4444 !important; /* Red 500 */
-    animation: pulse-red 1s;
-}
-
-@keyframes pulse-green {
-    0% { background-color: rgba(16, 185, 129, 0.2); }
-    100% { background-color: transparent; }
-}
-
-@keyframes pulse-red {
-    0% { background-color: rgba(239, 68, 68, 0.2); }
-    100% { background-color: transparent; }
-}
-
-/* Toast animations */
-.toast-enter {
-    transform: translateX(100%);
-    opacity: 0;
-}
-.toast-enter-active {
-    transform: translateX(0);
-    opacity: 1;
-    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-.toast-leave {
-    transform: translateX(0);
-    opacity: 1;
-}
-.toast-leave-active {
-    transform: translateX(100%);
-    opacity: 0;
-    transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+/* Input Placeholder styling */
+input::placeholder {
+    color: #008F11;
+    opacity: 0.5;
 }
