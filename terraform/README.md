@@ -1,39 +1,38 @@
-# Terraform Deployment for AkibaCryptoBot
+# Terraform Deployment for AkibaCryptoBot (Vultr)
 
 ## Prerequisites
 
 1. Install Terraform: https://terraform.io/downloads
-2. Configure AWS credentials:
+2. Create a Vultr Account: https://www.vultr.com/
+3. Generate a Personal Access Token (API Key) from the Vultr API Dashboard.
+4. Allow your IP address in the Vultr API Access Control settings if prompted.
+5. Export your API key to your terminal:
    ```bash
-   export AWS_ACCESS_KEY_ID="your-access-key"
-   export AWS_SECRET_ACCESS_KEY="your-secret-key"
+   export VULTR_API_KEY="your-vultr-api-key"
    ```
-3. Create an EC2 key pair in AWS Console (Tokyo region)
 
 ## Quick Start
+You must pass your public SSH key to the Terraform execution so Vultr can inject it into the server for secure access.
 
 ```bash
 cd terraform
 
-# Copy and edit variables
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your settings
+# Generate an SSH key if you don't have one
+# ssh-keygen -t ed25519 -C "bot_key"
 
 # Initialize Terraform
 terraform init
 
-# Preview changes
-terraform plan
-
-# Deploy
+# Deploy! (It will prompt you to enter your SSH Public Key string)
 terraform apply
 ```
+*Tip: You can avoid the prompt by passing it directly: `terraform apply -var="ssh_public_key=$(cat ~/.ssh/id_rsa.pub)"`*
 
 ## After Deployment
 
-1. SSH into the server:
+1. SSH into the server as root (or the `botuser` you create later):
    ```bash
-   ssh -i ~/.ssh/akibabot-key.pem ubuntu@<PUBLIC_IP>
+   ssh root@<PUBLIC_IP>
    ```
 
 2. Clone and setup bot:
@@ -55,15 +54,6 @@ terraform apply
    ```bash
    python start_bot.py
    ```
-
-## Costs
-
-| Resource | Free Tier | After Free Tier |
-|----------|-----------|-----------------|
-| t3.micro | 750 hrs/month free | ~$8/month |
-| EBS 20GB | 30 GB free | ~$2/month |
-| Data transfer | 100 GB free | ~$1/month |
-| **Total** | **$0** | **~$10/month** |
 
 ## Destroy
 

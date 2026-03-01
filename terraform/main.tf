@@ -1,104 +1,73 @@
-# AkibaCryptoBot - AWS Tokyo Deployment
-# Cheapest option: t3.micro (free tier eligible)
-
 terraform {
   required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
+    vultr = {
+      source  = "vultr/vultr"
+      version = "~> 2.19"
     }
   }
   required_version = ">= 1.0"
 }
 
-provider "aws" {
-  region = "ap-northeast-1"  # Tokyo - closest to Binance servers
-  
-  # Credentials from environment variables:
-  # AWS_ACCESS_KEY_ID
-  # AWS_SECRET_ACCESS_KEY
-}
+# The provider expects the VULTR_API_KEY environment variable to be set
+provider "vultr" {}
 
-# Variables
 variable "allowed_ssh_ip" {
-  description = "Your IP address for SSH access (CIDR format)"
+  description = "Your IP address for SSH access (CIDR format). Vultr handles this via firewall groups."
   type        = string
-  default     = "0.0.0.0/0"  # Change this to your IP for security
+  default     = "0.0.0.0/0"
 }
 
-variable "instance_type" {
-  description = "EC2 instance type"
+variable "ssh_public_key" {
+  description = "Your public SSH key string (e.g., contents of ~/.ssh/id_rsa.pub)"
   type        = string
-  default     = "t3.micro"  # Free tier eligible
 }
 
-variable "key_name" {
-  description = "Name of an existing EC2 key pair"
+variable "instance_plan" {
+  description = "Vultr Plan ID. Default is 2GB RAM / 1 vCPU Standard ($10/mo)"
   type        = string
-  default     = "akibabot-key"
+  default     = "vc2-1c-2gb"
 }
 
-# Data sources
-data "aws_ami" "ubuntu" {
-  most_recent = true
-  owners      = ["099720109477"]  # Canonical
-
+# Fetch the Ubuntu 22.04 OS ID dynamically
+data "vultr_os" "ubuntu" {
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
+    values = ["Ubuntu 22.04 LTS x64"]
   }
 }
 
-# Security Group
-resource "aws_security_group" "bot_sg" {
-  name        = "akibabot-sg"
-  description = "Security group for AkibaCryptoBot"
-
-  # SSH access
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.allowed_ssh_ip]
-    description = "SSH access"
-  }
-
-  # Outbound internet access (required for Binance API)
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-    description = "Allow all outbound traffic"
-  }
-
-  tags = {
-    Name    = "akibabot-sg"
-    Project = "AkibaCryptoBot"
-  }
+# Register your SSH key with Vultr
+resource "vultr_ssh_key" "bot_key" {
+  name    = "akibabot-key"
+  ssh_key = var.ssh_public_key
 }
 
-# EC2 Instance
-resource "aws_instance" "trading_bot" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = var.instance_type
-  key_name      = var.key_name
+# Create a Firewall Group
+resource "vultr_firewall_group" "bot_fw" {
+  description = "AkibaBot Security Group"
+}
 
-  vpc_security_group_ids = [aws_security_group.bot_sg.id]
+# Allow SSH Access
+resource "vultr_firewall_rule" "ssh_access" {
+  firewall_group_id = vultr_firewall_group.bot_fw.id
+  protocol          = "tcp"
+  ip_type           = "v4"
+  subnet           = split("/", var.allowed_ssh_ip)[0]
+  subnet_size      = split("/", var.allowed_ssh_ip)[1]
+  port              = "22"
+}
 
-  # Root volume
-  root_block_device {
-    volume_size = 20  # 20 GB
-    volume_type = "gp3"
-    encrypted   = true
-  }
+# Provision the Instance in Tokyo (nrt)
+resource "vultr_instance" "trading_bot" {
+  plan              = var.instance_plan
+  region            = "nrt" # Tokyo, Japan (Lowest latency to Binance)
+  os_id             = data.vultr_os.ubuntu.id
+  label             = "akiba-cryptobot"
+  hostname          = "akibabot"
+  ssh_key_ids       = [vultr_ssh_key.bot_key.id]
+  firewall_group_id = vultr_firewall_group.bot_fw.id
 
-  # User data script for initial setup
+  # Cloud-init User data for initial setup parity with original AWS script
   user_data = <<-EOF
     #!/bin/bash
     set -e
@@ -107,11 +76,8 @@ resource "aws_instance" "trading_bot" {
     apt-get update
     apt-get upgrade -y
     
-    # Install Python and dependencies
-    apt-get install -y python3 python3-pip python3-venv git
-    
-    # Install Docker (optional, for containerized deployment)
-    apt-get install -y docker.io
+    # Install Python, Git, Docker
+    apt-get install -y python3 python3-pip python3-venv git docker.io
     systemctl enable docker
     systemctl start docker
     
@@ -125,42 +91,19 @@ resource "aws_instance" "trading_bot" {
     
     echo "Initial setup complete. Deploy your bot to /opt/akibabot"
   EOF
-
-  tags = {
-    Name    = "akiba-cryptobot"
-    Project = "AkibaCryptoBot"
-    Environment = "production"
-  }
 }
 
-# Elastic IP (optional - for static IP)
-resource "aws_eip" "bot_eip" {
-  instance = aws_instance.trading_bot.id
-  domain   = "vpc"
-
-  tags = {
-    Name    = "akibabot-eip"
-    Project = "AkibaCryptoBot"
-  }
-}
-
-# Outputs
 output "instance_id" {
-  description = "EC2 Instance ID"
-  value       = aws_instance.trading_bot.id
+  description = "Vultr Instance ID"
+  value       = vultr_instance.trading_bot.id
 }
 
 output "public_ip" {
-  description = "Public IP address (Elastic IP)"
-  value       = aws_eip.bot_eip.public_ip
+  description = "Public IP address of the Bot"
+  value       = vultr_instance.trading_bot.main_ip
 }
 
 output "ssh_command" {
   description = "SSH command to connect"
-  value       = "ssh -i ~/.ssh/${var.key_name}.pem ubuntu@${aws_eip.bot_eip.public_ip}"
-}
-
-output "estimated_monthly_cost" {
-  description = "Estimated monthly cost"
-  value       = "~$0 (free tier) or ~$8-10/month after free tier"
+  value       = "ssh root@${vultr_instance.trading_bot.main_ip}"
 }
