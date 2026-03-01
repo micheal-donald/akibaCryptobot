@@ -317,105 +317,101 @@ class AkibaCryptoBot:
         """Scan for trading opportunities using the active strategy"""
         try:
             for pair in self.config["trading"]["pairs"]:
-                # Skip if we already have an active position
                 if pair in self.active_trades:
                     continue
-
-                # Check if we're at max open trades
-                if len(self.active_trades) >= self.config["trading"].get(
-                    "max_open_trades", 3
-                ):
-                    self.logger.debug(
-                        "Maximum open trades reached, skipping new opportunities"
-                    )
+                if self._at_max_trades():
                     break
-
-                # Get market data
-                try:
-                    ohlcv_data = await self.exchange.get_ohlcv(
-                        pair,
-                        self.config["trading"]["timeframes"]["primary"],
-                        200,  # Get enough history for indicators
-                    )
-
-                    if ohlcv_data is None or len(ohlcv_data) < 50:
-                        self.logger.warning(f"Insufficient data for {pair}")
-                        continue
-
-                    ticker = await self.exchange.get_ticker(pair)
-                    current_price = ticker["last"]
-
-                    # Generate trading signal
-                    signal = await self.strategy_manager.generate_signal(
-                        pair, ohlcv_data, current_price
-                    )
-
-                    if signal and self.validate_trading_conditions(pair, signal):
-                        # Check correlation diversification before entering position
-                        if not self.advanced_risk.check_correlation_diversification(
-                            pair, self.active_trades
-                        ):
-                            self.logger.info(
-                                f"Skipping {pair} - correlation diversification check failed"
-                            )
-                            continue
-
-                        # Calculate position size
-                        balance = await self.exchange.get_balance()
-                        usdt_balance = balance.get("USDT", {}).get("free", 0)
-
-                        if usdt_balance < 10:  # Minimum balance check
-                            self.logger.warning(
-                                f"Insufficient balance: {usdt_balance} USDT"
-                            )
-                            continue
-
-                        # Use advanced ATR-based position sizing if enabled
-                        if (
-                            self.config.get("advanced_risk", {}).get(
-                                "use_atr_sizing", False
-                            )
-                            and pair in self.price_data_cache
-                        ):
-                            sizing_result = (
-                                self.advanced_risk.calculate_optimal_position_size(
-                                    balance=usdt_balance,
-                                    entry_price=current_price,
-                                    symbol_data=self.price_data_cache[pair],
-                                    symbol=pair,
-                                    signal_strength=signal.strength,
-                                )
-                            )
-                            position_size = sizing_result.position_size
-                            self.logger.info(
-                                f"ATR-based position size for {pair}: {position_size:.6f} "
-                                f"(ATR: {sizing_result.atr:.2f}, Kelly: {sizing_result.kelly_fraction:.2f})"
-                            )
-                        else:
-                            # Fallback to standard position sizing
-                            position_size = (
-                                self.risk_manager.calculate_position_size_with_signal(
-                                    usdt_balance,
-                                    signal.strength,
-                                    current_price,
-                                    signal.stop_loss,
-                                )
-                            )
-
-                        if position_size > 0:
-                            await self.place_trade(
-                                pair,
-                                signal.signal_type.value,
-                                position_size,
-                                current_price,
-                            )
-
-                except Exception as e:
-                    self.logger.error(f"Error processing {pair}: {e}")
-                    continue
-
+                await self._process_pair(pair)
         except Exception as e:
             self.logger.error(f"Error in scan_opportunities: {e}")
+
+    def _at_max_trades(self) -> bool:
+        """Return True and log when the open-trade cap is reached."""
+        max_trades = self.config["trading"].get("max_open_trades", 3)
+        if len(self.active_trades) >= max_trades:
+            self.logger.debug("Maximum open trades reached, skipping new opportunities")
+            return True
+        return False
+
+    async def _get_market_snapshot(self, pair: str):
+        """Fetch OHLCV history and current price for a pair.
+
+        Returns (ohlcv_data, current_price) or (None, None) on insufficient data.
+        """
+        ohlcv_data = await self.exchange.get_ohlcv(
+            pair,
+            self.config["trading"]["timeframes"]["primary"],
+            200,
+        )
+        if ohlcv_data is None or len(ohlcv_data) < 50:
+            self.logger.warning(f"Insufficient data for {pair}")
+            return None, None
+        ticker = await self.exchange.get_ticker(pair)
+        return ohlcv_data, ticker["last"]
+
+    async def _resolve_position_size(
+        self, pair: str, signal, current_price: float
+    ) -> float:
+        """Return the position size in base currency, or 0 if balance is too low."""
+        balance = await self.exchange.get_balance()
+        usdt_balance = balance.get("USDT", {}).get("free", 0)
+
+        if usdt_balance < 10:
+            self.logger.warning(f"Insufficient balance: {usdt_balance} USDT")
+            return 0
+
+        use_atr = (
+            self.config.get("advanced_risk", {}).get("use_atr_sizing", False)
+            and pair in self.price_data_cache
+        )
+        if use_atr:
+            sizing_result = self.advanced_risk.calculate_optimal_position_size(
+                balance=usdt_balance,
+                entry_price=current_price,
+                symbol_data=self.price_data_cache[pair],
+                symbol=pair,
+                signal_strength=signal.strength,
+            )
+            self.logger.info(
+                f"ATR-based position size for {pair}: {sizing_result.position_size:.6f} "
+                f"(ATR: {sizing_result.atr:.2f}, Kelly: {sizing_result.kelly_fraction:.2f})"
+            )
+            return sizing_result.position_size
+
+        return self.risk_manager.calculate_position_size_with_signal(
+            usdt_balance, signal.strength, current_price, signal.stop_loss
+        )
+
+    async def _process_pair(self, pair: str):
+        """Evaluate a single pair and place a trade if conditions are met."""
+        try:
+            ohlcv_data, current_price = await self._get_market_snapshot(pair)
+            if ohlcv_data is None:
+                return
+
+            signal = await self.strategy_manager.generate_signal(
+                pair, ohlcv_data, current_price
+            )
+            if not signal or not self.validate_trading_conditions(pair, signal):
+                return
+
+            if not self.advanced_risk.check_correlation_diversification(
+                pair, self.active_trades
+            ):
+                self.logger.info(
+                    f"Skipping {pair} - correlation diversification check failed"
+                )
+                return
+
+            position_size = await self._resolve_position_size(
+                pair, signal, current_price
+            )
+            if position_size > 0:
+                await self.place_trade(
+                    pair, signal.signal_type.value, position_size, current_price
+                )
+        except Exception as e:
+            self.logger.error(f"Error processing {pair}: {e}")
 
     def validate_trading_conditions(self, symbol: str, signal) -> bool:
         """Validate if trading conditions are met"""
