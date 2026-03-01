@@ -241,7 +241,7 @@ class TelegramNotifier:
         """Handle /stop command"""
         self.bot_status = "stopped"
         if hasattr(self, "bot_instance"):
-            await self.bot_instance.pause_trading()
+            self.bot_instance.pause_trading()
 
         await update.message.reply_text("🛑 Trading stopped")
 
@@ -249,7 +249,7 @@ class TelegramNotifier:
         """Handle /resume command"""
         self.bot_status = "running"
         if hasattr(self, "bot_instance"):
-            await self.bot_instance.resume_trading()
+            self.bot_instance.resume_trading()
 
         await update.message.reply_text("▶️ Trading resumed")
 

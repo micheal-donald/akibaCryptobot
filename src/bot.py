@@ -595,12 +595,12 @@ class AkibaCryptoBot:
                     "Ensemble will rely on momentum signals only."
                 )
 
-    async def pause_trading(self):
+    def pause_trading(self):
         """Pause trading (called by Telegram /stop command)"""
         self.is_running = False
         self.logger.info("Trading paused via Telegram command")
 
-    async def resume_trading(self):
+    def resume_trading(self):
         """Resume trading (called by Telegram /resume command)"""
         self.is_running = True
         self.logger.info("Trading resumed via Telegram command")
