@@ -574,7 +574,9 @@ class AkibaCryptoBot:
         active_strategy = self.strategy_manager.get_active_strategy()
 
         if hasattr(active_strategy, "load_models"):
-            models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+            models_dir = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)), "models"
+            )
             if not os.path.exists(models_dir):
                 models_dir = "models"  # fallback to relative path
 

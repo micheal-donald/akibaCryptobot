@@ -295,8 +295,7 @@ class EnsembleStrategy(BaseStrategy):
 
             # Find model files for this strategy
             model_files = [
-                f for f in os.listdir(models_dir)
-                if f.endswith("_freqai.joblib")
+                f for f in os.listdir(models_dir) if f.endswith("_freqai.joblib")
             ]
 
             if not model_files:
