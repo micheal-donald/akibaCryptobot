@@ -220,7 +220,7 @@ class TelegramNotifier:
         """Handle /trades command"""
         if hasattr(self, "bot_instance"):
             try:
-                trades_info = await self.bot_instance.get_active_trades()
+                trades_info = self.bot_instance.get_active_trades()
                 if not trades_info:
                     message = "📊 No active trades"
                 else:
@@ -279,7 +279,7 @@ class TelegramNotifier:
         """Handle /config command"""
         if hasattr(self, "bot_instance"):
             try:
-                config_info = await self.bot_instance.get_config_info()
+                config_info = self.bot_instance.get_config_info()
                 message = (
                     "⚙️ Bot Configuration:\n"
                     f"Trading Mode: {config_info.get('trading_mode', 'Unknown')}\n"

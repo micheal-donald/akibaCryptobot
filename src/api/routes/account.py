@@ -17,4 +17,4 @@ async def get_balance(bot=Depends(get_bot)):
 @router.get("/config")
 async def get_config(bot=Depends(get_bot)):
     """Get current bot configuration (trading mode, risk params, pairs)."""
-    return await bot.get_config_info()
+    return bot.get_config_info()

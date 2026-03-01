@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/trades")
 async def get_active_trades(bot=Depends(get_bot)):
     """Get all currently open positions with entry prices."""
-    trades = await bot.get_active_trades()
+    trades = bot.get_active_trades()
     return {"count": len(trades), "trades": trades}
 
 
