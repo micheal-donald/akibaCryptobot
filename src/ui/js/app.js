@@ -3,15 +3,23 @@
  * Wires every widget to the real FastAPI backend.
  *
  * REST endpoints used:
- *   GET  /api/status          -> header status, uptime
- *   GET  /api/balance         -> balance card
- *   GET  /api/trades          -> active positions table + count card
- *   GET  /api/metrics         -> PnL card
- *   GET  /api/equity-curve    -> Chart.js line chart
- *   GET  /api/trades/history  -> recent activity feed
- *   GET  /api/strategy        -> strategy label
- *   POST /api/trading/pause   -> pause button
- *   POST /api/trading/resume  -> pause button
+ *   GET  /api/status              -> header status, uptime
+ *   GET  /api/balance             -> balance card
+ *   GET  /api/trades              -> active positions table + count card
+ *   GET  /api/metrics             -> PnL, win rate, sharpe, drawdown cards
+ *   GET  /api/equity-curve        -> Chart.js line chart
+ *   GET  /api/trades/history      -> recent activity feed
+ *   GET  /api/strategy            -> strategy label + selector options
+ *   GET  /api/config              -> config bar
+ *   GET  /api/risk                -> risk panel
+ *   GET  /api/correlations        -> correlation matrix
+ *   GET  /api/heatmap             -> risk heatmap data
+ *   GET  /api/circuit-breaker     -> circuit breaker status
+ *   GET  /api/model/status        -> model health cards
+ *   GET  /api/strategy/performance -> per-strategy performance
+ *   POST /api/strategy/switch     -> strategy switching
+ *   POST /api/trading/pause       -> pause button
+ *   POST /api/trading/resume      -> resume button
  *
  * WebSocket streams:
  *   /ws/status  -> live status, uptime, circuit breaker (every 5s)
@@ -30,14 +38,22 @@ const dom = {
     pauseBtn: document.getElementById('pause-btn'),
     tradingModeBadge: document.getElementById('trading-mode-badge'),
     versionBadge: document.getElementById('version-badge'),
-
-    // Cards
-    pnlValue: document.getElementById('pnl-value'),
-    pnlPercent: document.getElementById('pnl-percent'),
-    activePositions: document.getElementById('active-positions'),
-    balanceValue: document.getElementById('balance-value'),
     uptime: document.getElementById('uptime'),
     latency: document.getElementById('latency'),
+    strategySelect: document.getElementById('strategy-select'),
+
+    // Metric Cards
+    pnlValue: document.getElementById('pnl-value'),
+    pnlReturn: document.getElementById('pnl-return'),
+    winRateValue: document.getElementById('win-rate-value'),
+    winLossDetail: document.getElementById('win-loss-detail'),
+    sharpeValue: document.getElementById('sharpe-value'),
+    sortinoValue: document.getElementById('sortino-value'),
+    maxDdValue: document.getElementById('max-dd-value'),
+    currentDdValue: document.getElementById('current-dd-value'),
+    activePositions: document.getElementById('active-positions'),
+    balanceValue: document.getElementById('balance-value'),
+    initialBalance: document.getElementById('initial-balance'),
 
     // Chart
     pnlChart: document.getElementById('pnlChart'),
@@ -50,6 +66,19 @@ const dom = {
     // Positions Table
     positionsTbody: document.getElementById('positions-tbody'),
 
+    // Strategy Performance
+    strategyPerfContainer: document.getElementById('strategy-perf-container'),
+    ensembleSection: document.getElementById('ensemble-section'),
+    ensembleComponents: document.getElementById('ensemble-components'),
+
+    // Risk / Correlations / Model Health
+    riskContainer: document.getElementById('risk-container'),
+    correlationContainer: document.getElementById('correlation-container'),
+    modelHealthContainer: document.getElementById('model-health-container'),
+
+    // Config Bar
+    configBar: document.getElementById('config-bar'),
+
     // Circuit Breaker
     cbBanner: document.getElementById('circuit-breaker-banner'),
     cbReason: document.getElementById('circuit-breaker-reason'),
@@ -59,13 +88,14 @@ const dom = {
 
 let isBotRunning = false;
 let chartInstance = null;
-let latestPrices = {};  // from /ws/prices
+let latestPrices = {};
 let wsLastPing = Date.now();
 
 // ─── Initialization ──────────────────────────────────────────────
 
 async function init() {
     setupPauseButton();
+    setupStrategySelector();
     setupWebSockets();
 
     // Initial REST data fetch (parallel)
@@ -77,13 +107,23 @@ async function init() {
         fetchEquityCurve(),
         fetchTradeHistory(),
         fetchStrategy(),
+        fetchConfig(),
+        fetchRisk(),
+        fetchCorrelations(),
+        fetchModelHealth(),
+        fetchStrategyPerformance(),
     ]);
 
-    // Periodic polling for data that isn't covered by WebSockets
+    // Periodic polling
     setInterval(fetchBalance, 15000);
     setInterval(fetchTrades, 10000);
     setInterval(fetchMetrics, 30000);
     setInterval(fetchTradeHistory, 20000);
+    setInterval(fetchEquityCurve, 60000);
+    setInterval(fetchStrategyPerformance, 30000);
+    setInterval(fetchRisk, 30000);
+    setInterval(fetchCorrelations, 60000);
+    setInterval(fetchModelHealth, 60000);
 }
 
 // ─── REST Fetchers ───────────────────────────────────────────────
@@ -104,7 +144,6 @@ async function fetchBalance() {
         const data = await res.json();
         let total = 0;
         if (typeof data === 'object') {
-            // Sum all values, or just show USDT
             total = data.USDT || Object.values(data).reduce((a, b) => a + b, 0);
         }
         dom.balanceValue.textContent = `$${total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -123,9 +162,9 @@ async function fetchTrades() {
         // Update card
         dom.activePositions.innerHTML = `${count} <span class="text-sm text-gray-500 font-sans font-normal">Pair${count !== 1 ? 's' : ''}</span>`;
 
-        // Update table
+        // Update table (8 columns)
         if (trades.length === 0) {
-            dom.positionsTbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-matrix-dim">No open positions</td></tr>`;
+            dom.positionsTbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-matrix-dim">No open positions</td></tr>`;
             return;
         }
 
@@ -135,18 +174,23 @@ async function fetchTrades() {
             const pnlPct = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice * 100) : 0;
             const isLong = (t.side || 'long').toLowerCase() === 'long' || (t.side || 'buy').toLowerCase() === 'buy';
             const effectivePnl = isLong ? pnlPct : -pnlPct;
+            const amount = parseFloat(t.amount || 0);
+            const entryTime = t.entry_time ? new Date(t.entry_time).toLocaleTimeString() : '—';
 
             return `
                 <tr class="border-b border-matrix-border/50 hover:bg-matrix-border/30 transition-colors">
                     <td class="py-3 text-white font-bold">${t.symbol || '—'}</td>
                     <td class="py-3 ${isLong ? 'text-matrix-neon' : 'text-red-500'}">${isLong ? 'LONG' : 'SHORT'}</td>
+                    <td class="py-3 text-gray-400">${amount > 0 ? amount.toFixed(6) : '—'}</td>
                     <td class="py-3 text-gray-400">$${entryPrice.toLocaleString()}</td>
                     <td class="py-3 text-white">$${currentPrice.toLocaleString()}</td>
                     <td class="py-3 ${effectivePnl >= 0 ? 'text-matrix-neon' : 'text-red-500'}">${effectivePnl >= 0 ? '+' : ''}${effectivePnl.toFixed(2)}%</td>
+                    <td class="py-3 text-matrix-dim">${t.strategy || '—'}</td>
+                    <td class="py-3 text-gray-500 text-xs">${entryTime}</td>
                 </tr>`;
         }).join('');
     } catch (e) {
-        dom.positionsTbody.innerHTML = `<tr><td colspan="5" class="py-6 text-center text-matrix-dim">Failed to load positions</td></tr>`;
+        dom.positionsTbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-matrix-dim">Failed to load positions</td></tr>`;
     }
 }
 
@@ -155,20 +199,65 @@ async function fetchMetrics() {
         const res = await fetch(`${API_BASE}/metrics`);
         const data = await res.json();
 
-        // Try to find total PnL in the response
-        const pnl = data.total_pnl ?? data.net_pnl ?? data.total_profit ?? null;
-        const winRate = data.win_rate ?? null;
-
+        // Total PnL
+        const pnl = data.total_pnl ?? null;
         if (pnl !== null) {
             dom.pnlValue.textContent = `${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
             dom.pnlValue.className = `text-3xl font-bold font-mono neon-glow ${pnl >= 0 ? 'text-matrix-neon' : 'text-red-500'}`;
         }
 
+        // Total return percent
+        const returnPct = data.total_return_percent ?? null;
+        if (returnPct !== null) {
+            dom.pnlReturn.textContent = `Return: ${returnPct >= 0 ? '+' : ''}${returnPct.toFixed(2)}%`;
+        }
+
+        // Win rate
+        const winRate = data.win_rate ?? null;
         if (winRate !== null) {
-            dom.pnlPercent.textContent = `WR: ${(winRate * 100).toFixed(1)}%`;
+            dom.winRateValue.textContent = `${(winRate * 100).toFixed(1)}%`;
+            dom.winRateValue.className = `mt-2 text-3xl font-bold font-mono ${winRate >= 0.5 ? 'text-matrix-neon' : 'text-red-500'}`;
+        }
+
+        // Win/Loss detail
+        const wt = data.winning_trades ?? null;
+        const lt = data.losing_trades ?? null;
+        if (wt !== null && lt !== null) {
+            dom.winLossDetail.textContent = `W: ${wt} / L: ${lt}`;
+        }
+
+        // Sharpe ratio
+        const sharpe = data.sharpe_ratio ?? null;
+        if (sharpe !== null) {
+            dom.sharpeValue.textContent = sharpe.toFixed(2);
+            dom.sharpeValue.className = `mt-2 text-3xl font-bold font-mono ${sharpe >= 1 ? 'text-matrix-neon' : sharpe >= 0 ? 'text-white' : 'text-red-500'}`;
+        }
+
+        // Sortino ratio
+        const sortino = data.sortino_ratio ?? null;
+        if (sortino !== null) {
+            dom.sortinoValue.textContent = `Sortino: ${sortino.toFixed(2)}`;
+        }
+
+        // Max drawdown
+        const maxDd = data.max_drawdown_percent ?? null;
+        if (maxDd !== null) {
+            dom.maxDdValue.textContent = `-${Math.abs(maxDd).toFixed(2)}%`;
+        }
+
+        // Current drawdown
+        const currDd = data.current_drawdown_percent ?? null;
+        if (currDd !== null) {
+            dom.currentDdValue.textContent = `Current: -${Math.abs(currDd).toFixed(2)}%`;
+        }
+
+        // Initial balance
+        const initBal = data.initial_balance ?? null;
+        if (initBal !== null) {
+            dom.initialBalance.textContent = `Initial: $${initBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
         }
     } catch (e) {
-        // Metrics may not be available yet — that's fine
+        // Metrics may not be available yet
     }
 }
 
@@ -217,18 +306,31 @@ async function fetchTradeHistory() {
         dom.activityFeed.innerHTML = trades.map(t => {
             const isBuy = (t.side || '').toLowerCase() === 'buy';
             const pnl = t.pnl || 0;
+            const pnlPct = t.pnl_percent != null ? t.pnl_percent : null;
+            const duration = t.duration || '';
+            const exitReason = t.exit_reason || '';
+            const time = t.exit_time ? new Date(t.exit_time).toLocaleTimeString() : '';
+
             const typeClass = isBuy
                 ? 'text-matrix-neon bg-matrix-neon/10 border-matrix-neon/20'
                 : 'text-red-500 bg-red-500/10 border-red-500/20';
 
-            const time = t.exit_time ? new Date(t.exit_time).toLocaleTimeString() : '';
+            const exitBadge = exitReason ? `<span class="exit-badge ${getExitReasonClass(exitReason)}">${formatExitReason(exitReason)}</span>` : '';
+
+            const pnlStr = pnlPct != null
+                ? `<span class="${pnl >= 0 ? 'text-matrix-neon' : 'text-red-500'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)</span>`
+                : `<span class="${pnl >= 0 ? 'text-matrix-neon' : 'text-red-500'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span>`;
 
             return `
                 <div class="flex items-start space-x-3 p-2 rounded hover:bg-matrix-border/30 transition-colors border border-transparent hover:border-matrix-border/50">
-                    <div class="${typeClass} px-2 py-0.5 rounded text-xs font-bold border">${isBuy ? 'BUY' : 'SELL'}</div>
-                    <div class="flex flex-col min-w-0">
-                        <span class="text-white text-xs truncate">${t.symbol} @ $${parseFloat(t.exit_price || 0).toLocaleString()} → <span class="${pnl >= 0 ? 'text-matrix-neon' : 'text-red-500'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></span>
-                        <span class="text-matrix-dim text-[10px]">${t.strategy || ''} · ${time}</span>
+                    <div class="${typeClass} px-2 py-0.5 rounded text-xs font-bold border shrink-0">${isBuy ? 'BUY' : 'SELL'}</div>
+                    <div class="flex flex-col min-w-0 gap-0.5">
+                        <span class="text-white text-xs truncate">${t.symbol} @ $${parseFloat(t.exit_price || 0).toLocaleString()} → ${pnlStr}</span>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            ${exitBadge}
+                            ${duration ? `<span class="text-matrix-dim text-[10px]">${duration}</span>` : ''}
+                            <span class="text-matrix-dim text-[10px]">${t.strategy || ''} · ${time}</span>
+                        </div>
                     </div>
                 </div>`;
         }).join('');
@@ -241,10 +343,314 @@ async function fetchStrategy() {
     try {
         const res = await fetch(`${API_BASE}/strategy`);
         const data = await res.json();
+
         if (data.active_strategy) {
             dom.strategyLabel.textContent = `Strategy: ${data.active_strategy}`;
         }
+
+        // Populate strategy selector
+        if (data.available_strategies && data.available_strategies.length > 0) {
+            dom.strategySelect.innerHTML = data.available_strategies.map(s => {
+                const selected = s === data.active_strategy ? ' selected' : '';
+                return `<option value="${s}"${selected}>${s}</option>`;
+            }).join('');
+        }
+
+        // Ensemble components
+        if (data.components) {
+            dom.ensembleSection.classList.remove('hidden');
+            const comps = data.components;
+            dom.ensembleComponents.innerHTML = Object.entries(comps).map(([key, val]) => {
+                if (typeof val === 'object') {
+                    return `<div class="text-matrix-dim">${key}: <span class="text-white">${JSON.stringify(val)}</span></div>`;
+                }
+                return `<div class="text-matrix-dim">${key}: <span class="text-white">${val}</span></div>`;
+            }).join('');
+        } else {
+            dom.ensembleSection.classList.add('hidden');
+        }
     } catch (e) { /* silent */ }
+}
+
+async function fetchConfig() {
+    try {
+        const res = await fetch(`${API_BASE}/config`);
+        const data = await res.json();
+
+        const items = [];
+
+        if (data.trading_mode) {
+            const modeColor = data.trading_mode === 'paper' ? 'text-yellow-400 border-yellow-400/30' : 'text-red-400 border-red-400/30';
+            items.push(`<span class="px-2 py-0.5 rounded border ${modeColor} font-semibold">${data.trading_mode.toUpperCase()}</span>`);
+        }
+
+        if (data.pairs && data.pairs.length > 0) {
+            const tags = data.pairs.map(p => `<span class="config-tag">${p}</span>`).join('');
+            items.push(`<span class="text-matrix-dim">Pairs:</span> ${tags}`);
+        }
+
+        if (data.stop_loss_percent != null) {
+            items.push(`<span class="text-matrix-dim">SL:</span> <span class="text-red-400">${(data.stop_loss_percent * 100).toFixed(1)}%</span>`);
+        }
+
+        if (data.take_profit_percent != null) {
+            items.push(`<span class="text-matrix-dim">TP:</span> <span class="text-matrix-neon">${(data.take_profit_percent * 100).toFixed(1)}%</span>`);
+        }
+
+        if (data.max_open_trades != null) {
+            items.push(`<span class="text-matrix-dim">Max Trades:</span> <span class="text-white">${data.max_open_trades}</span>`);
+        }
+
+        if (data.max_position_size != null) {
+            items.push(`<span class="text-matrix-dim">Max Pos:</span> <span class="text-white">${(data.max_position_size * 100).toFixed(0)}%</span>`);
+        }
+
+        dom.configBar.innerHTML = items.join('<span class="text-matrix-border mx-1">|</span>');
+    } catch (e) {
+        dom.configBar.innerHTML = '<span class="text-matrix-dim">Config unavailable</span>';
+    }
+}
+
+async function fetchRisk() {
+    try {
+        const [riskRes, heatmapRes, cbRes] = await Promise.allSettled([
+            fetch(`${API_BASE}/risk`).then(r => r.json()),
+            fetch(`${API_BASE}/heatmap`).then(r => r.json()),
+            fetch(`${API_BASE}/circuit-breaker`).then(r => r.json()),
+        ]);
+
+        const risk = riskRes.status === 'fulfilled' ? riskRes.value : null;
+        const heatmap = heatmapRes.status === 'fulfilled' ? heatmapRes.value : null;
+        const cb = cbRes.status === 'fulfilled' ? cbRes.value : null;
+
+        let html = '';
+
+        // Portfolio risk score from heatmap
+        if (heatmap && heatmap.total_portfolio_risk != null) {
+            const riskScore = heatmap.total_portfolio_risk;
+            const riskColor = riskScore >= 0.7 ? 'text-red-500' : riskScore >= 0.4 ? 'text-yellow-400' : 'text-matrix-neon';
+            html += `
+                <div class="flex justify-between items-center">
+                    <span class="text-matrix-dim">Portfolio Risk</span>
+                    <span class="${riskColor} font-bold text-lg">${(riskScore * 100).toFixed(1)}%</span>
+                </div>`;
+        }
+
+        // Asset exposures from heatmap
+        if (heatmap && heatmap.asset_exposures) {
+            html += `<div class="space-y-2 mt-2">`;
+            for (const [asset, exposure] of Object.entries(heatmap.asset_exposures)) {
+                const pct = Math.min(Math.abs(exposure) * 100, 100);
+                html += `
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-matrix-dim">${asset}</span>
+                            <span class="text-white">${(exposure * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="w-full bg-matrix-border rounded-full h-1.5">
+                            <div class="bg-matrix-neon h-1.5 rounded-full" style="width: ${pct}%"></div>
+                        </div>
+                    </div>`;
+            }
+            html += `</div>`;
+        }
+
+        // Position sizing params from risk
+        if (risk && risk.position_sizing_parameters) {
+            const ps = risk.position_sizing_parameters;
+            html += `
+                <div class="mt-3 pt-3 border-t border-matrix-border space-y-1">
+                    <div class="text-matrix-dim text-xs font-semibold tracking-wide mb-1">POSITION SIZING</div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">ATR Period</span><span class="text-white">${ps.atr_period}</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">ATR Multiplier</span><span class="text-white">${ps.atr_multiplier}</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">Kelly</span><span class="text-white">${ps.kelly_enabled ? `ON (cap: ${ps.kelly_cap})` : 'OFF'}</span></div>
+                </div>`;
+        }
+
+        // Circuit breaker params from risk
+        if (risk && risk.circuit_breaker_parameters) {
+            const cbp = risk.circuit_breaker_parameters;
+            html += `
+                <div class="mt-3 pt-3 border-t border-matrix-border space-y-1">
+                    <div class="text-matrix-dim text-xs font-semibold tracking-wide mb-1">CIRCUIT BREAKERS</div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">Volatility Thresh</span><span class="text-white">${(cbp.volatility_threshold * 100).toFixed(1)}%</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">Drawdown Thresh</span><span class="text-white">${(cbp.drawdown_threshold * 100).toFixed(1)}%</span></div>
+                </div>`;
+        }
+
+        // Circuit breaker active status
+        if (cb) {
+            if (cb.active) {
+                dom.cbBanner.classList.remove('hidden');
+                dom.cbReason.textContent = cb.reason || 'Unknown reason';
+            } else {
+                dom.cbBanner.classList.add('hidden');
+            }
+        }
+
+        dom.riskContainer.innerHTML = html || '<div class="text-matrix-dim text-xs text-center py-4">No risk data available</div>';
+    } catch (e) {
+        dom.riskContainer.innerHTML = '<div class="text-matrix-dim text-xs text-center py-4">Failed to load risk data</div>';
+    }
+}
+
+async function fetchCorrelations() {
+    try {
+        const res = await fetch(`${API_BASE}/correlations`);
+        const data = await res.json();
+        const corrs = data.correlations || {};
+
+        if (Object.keys(corrs).length === 0) {
+            dom.correlationContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">${data.message || 'No correlation data yet'}</div>`;
+            return;
+        }
+
+        // Extract unique symbols from pair keys (e.g., "BTC/USDT_ETH/USDT")
+        const symbolSet = new Set();
+        for (const key of Object.keys(corrs)) {
+            const parts = key.split('_');
+            if (parts.length === 2) {
+                symbolSet.add(parts[0]);
+                symbolSet.add(parts[1]);
+            }
+        }
+        const symbols = [...symbolSet].sort();
+
+        if (symbols.length === 0) {
+            dom.correlationContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">No correlation data yet</div>`;
+            return;
+        }
+
+        // Build NxN grid table
+        let tableHtml = '<table class="corr-table w-full border-collapse text-xs font-mono"><thead><tr><th></th>';
+        for (const sym of symbols) {
+            const short = sym.replace('/USDT', '').replace('/BTC', '');
+            tableHtml += `<th class="corr-header">${short}</th>`;
+        }
+        tableHtml += '</tr></thead><tbody>';
+
+        for (const rowSym of symbols) {
+            const rowShort = rowSym.replace('/USDT', '').replace('/BTC', '');
+            tableHtml += `<tr><td class="corr-header text-right pr-2">${rowShort}</td>`;
+            for (const colSym of symbols) {
+                if (rowSym === colSym) {
+                    tableHtml += `<td class="corr-cell corr-self">1.00</td>`;
+                } else {
+                    const key1 = `${rowSym}_${colSym}`;
+                    const key2 = `${colSym}_${rowSym}`;
+                    const val = corrs[key1] ?? corrs[key2] ?? null;
+                    if (val !== null) {
+                        const cls = getCorrClass(val);
+                        tableHtml += `<td class="corr-cell ${cls}">${val.toFixed(2)}</td>`;
+                    } else {
+                        tableHtml += `<td class="corr-cell text-gray-600">—</td>`;
+                    }
+                }
+            }
+            tableHtml += '</tr>';
+        }
+        tableHtml += '</tbody></table>';
+
+        dom.correlationContainer.innerHTML = tableHtml;
+    } catch (e) {
+        dom.correlationContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">Failed to load correlations</div>`;
+    }
+}
+
+async function fetchModelHealth() {
+    try {
+        const res = await fetch(`${API_BASE}/model/status`);
+        const data = await res.json();
+
+        if (!data.freqai_active) {
+            dom.modelHealthContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">${data.reason || 'FreqAI not active'}</div>`;
+            return;
+        }
+
+        const models = data.models || [];
+        if (models.length === 0) {
+            dom.modelHealthContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">No models loaded</div>`;
+            return;
+        }
+
+        dom.modelHealthContainer.innerHTML = models.map(m => {
+            const staleClass = m.stale ? 'model-card-stale' : '';
+            const ageStr = m.age_hours != null ? `${m.age_hours.toFixed(1)}h ago` : 'Unknown';
+
+            let featuresHtml = '';
+            if (m.top_features && m.top_features.length > 0) {
+                const maxImp = Math.max(...m.top_features.map(f => f.importance));
+                featuresHtml = `
+                    <div class="mt-2 space-y-1">
+                        ${m.top_features.map(f => {
+                            const pct = maxImp > 0 ? (f.importance / maxImp * 100) : 0;
+                            return `
+                                <div class="flex items-center gap-2">
+                                    <span class="text-matrix-dim w-20 truncate text-[10px]">${f.name}</span>
+                                    <div class="flex-grow bg-matrix-border rounded-full h-1">
+                                        <div class="bg-matrix-neon h-1 rounded-full" style="width: ${pct}%"></div>
+                                    </div>
+                                    <span class="text-matrix-dim text-[10px] w-10 text-right">${f.importance.toFixed(3)}</span>
+                                </div>`;
+                        }).join('')}
+                    </div>`;
+            }
+
+            return `
+                <div class="border border-matrix-border rounded-lg p-3 ${staleClass}">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-white text-xs font-bold">${m.name}</span>
+                        <span class="text-[10px] ${m.stale ? 'text-red-400' : 'text-matrix-dim'}">${ageStr}</span>
+                    </div>
+                    <div class="flex gap-3 text-[10px] text-matrix-dim">
+                        <span>W: ${m.weight != null ? m.weight.toFixed(2) : '—'}</span>
+                        <span>Feat: ${m.feature_count ?? '—'}</span>
+                        <span>${m.trained ? 'Trained' : 'Untrained'}</span>
+                    </div>
+                    ${featuresHtml}
+                </div>`;
+        }).join('');
+    } catch (e) {
+        dom.modelHealthContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">Failed to load model status</div>`;
+    }
+}
+
+async function fetchStrategyPerformance() {
+    try {
+        const res = await fetch(`${API_BASE}/strategy/performance`);
+        const data = await res.json();
+
+        const strategies = Object.entries(data);
+        if (strategies.length === 0) {
+            dom.strategyPerfContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">No strategy data available</div>`;
+            return;
+        }
+
+        dom.strategyPerfContainer.innerHTML = strategies.map(([name, perf]) => {
+            const wr = perf.win_rate != null ? `${(perf.win_rate * 100).toFixed(1)}%` : '—';
+            const pnl = perf.total_pnl != null ? perf.total_pnl : 0;
+            const pnlColor = pnl >= 0 ? 'text-matrix-neon' : 'text-red-500';
+            const signals = perf.total_signals ?? 0;
+            const lastSig = perf.last_signal || '—';
+            const lastUpdate = perf.last_update ? new Date(perf.last_update).toLocaleTimeString() : '—';
+
+            return `
+                <div class="border border-matrix-border rounded-lg p-3 hover:border-matrix-dim transition-colors">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-white text-sm font-bold">${name}</span>
+                        <span class="${pnlColor} text-sm font-mono font-bold">${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(2)}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
+                        <div class="flex justify-between"><span class="text-matrix-dim">Win Rate</span><span class="text-white">${wr}</span></div>
+                        <div class="flex justify-between"><span class="text-matrix-dim">Signals</span><span class="text-white">${signals}</span></div>
+                        <div class="flex justify-between"><span class="text-matrix-dim">Last Signal</span><span class="text-white">${lastSig}</span></div>
+                        <div class="flex justify-between"><span class="text-matrix-dim">Updated</span><span class="text-white">${lastUpdate}</span></div>
+                    </div>
+                </div>`;
+        }).join('');
+    } catch (e) {
+        dom.strategyPerfContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">Failed to load strategy performance</div>`;
+    }
 }
 
 // ─── Chart.js ────────────────────────────────────────────────────
@@ -363,7 +769,7 @@ function updateStatusUI(data) {
 
     // Uptime
     if (data.uptime) {
-        dom.uptime.textContent = data.uptime.split('.')[0]; // Strip ms
+        dom.uptime.textContent = data.uptime.split('.')[0];
     }
 
     // Trading mode badge
@@ -380,7 +786,7 @@ function updateStatusUI(data) {
         dom.cbBanner.classList.remove('hidden');
         dom.cbReason.textContent = data.circuit_breaker_reason || 'Unknown reason';
         setStatusIndicator(false, 'CIRCUIT BREAKER');
-    } else {
+    } else if (!data.circuit_breaker_active) {
         dom.cbBanner.classList.add('hidden');
     }
 
@@ -407,7 +813,64 @@ function setStatusIndicator(isOnline, textOverride = null) {
     }
 }
 
-// ─── Pause / Resume Button ───────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────
+
+function getExitReasonClass(reason) {
+    const r = reason.toLowerCase();
+    if (r.includes('take_profit') || r.includes('takeprofit') || r.includes('tp')) return 'exit-badge-tp';
+    if (r.includes('stop_loss') || r.includes('stoploss') || r.includes('sl')) return 'exit-badge-sl';
+    if (r.includes('trailing') || r.includes('trail')) return 'exit-badge-ts';
+    return 'exit-badge-default';
+}
+
+function formatExitReason(reason) {
+    return reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function getCorrClass(val) {
+    const abs = Math.abs(val);
+    if (abs >= 0.7) return 'corr-high';
+    if (abs >= 0.4) return 'corr-medium';
+    return 'corr-low';
+}
+
+// ─── Strategy Selector ──────────────────────────────────────────
+
+function setupStrategySelector() {
+    dom.strategySelect.addEventListener('change', async () => {
+        const name = dom.strategySelect.value;
+        if (!name) return;
+
+        dom.strategySelect.disabled = true;
+        try {
+            const res = await fetch(`${API_BASE}/strategy/switch`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ strategy_name: name }),
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                dom.strategyLabel.textContent = `Strategy: ${data.active_strategy}`;
+                // Refresh dependent panels
+                fetchStrategyPerformance();
+                fetchModelHealth();
+                fetchStrategy();
+            } else {
+                alert(`Strategy switch failed: ${data.detail || 'Unknown error'}`);
+                // Revert the dropdown
+                fetchStrategy();
+            }
+        } catch (e) {
+            alert('Failed to switch strategy');
+            fetchStrategy();
+        } finally {
+            dom.strategySelect.disabled = false;
+        }
+    });
+}
+
+// ─── Pause / Resume Button ──────────────────────────────────────
 
 function setupPauseButton() {
     dom.pauseBtn.addEventListener('click', async () => {
@@ -419,7 +882,6 @@ function setupPauseButton() {
             setStatusIndicator(isBotRunning);
             dom.pauseBtn.textContent = isBotRunning ? 'PAUSE BOT' : 'RESUME BOT';
         } catch (e) {
-            // Temporary visual error feedback
             dom.pauseBtn.textContent = 'ERROR';
             setTimeout(() => {
                 dom.pauseBtn.textContent = isBotRunning ? 'PAUSE BOT' : 'RESUME BOT';

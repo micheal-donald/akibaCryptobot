@@ -44,3 +44,135 @@
 ::-webkit-scrollbar-thumb:hover {
     background: #008F11;
 }
+
+/* ─── Strategy Selector Dropdown ─────────────────────────────── */
+.strategy-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2300FF41' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 28px;
+}
+
+.strategy-select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.strategy-select option {
+    background: #06120E;
+    color: #00FF41;
+}
+
+/* ─── Exit Reason Badges ─────────────────────────────────────── */
+.exit-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    border: 1px solid;
+    line-height: 1.4;
+}
+
+.exit-badge-tp {
+    color: #00FF41;
+    background: rgba(0, 255, 65, 0.1);
+    border-color: rgba(0, 255, 65, 0.2);
+}
+
+.exit-badge-sl {
+    color: #EF4444;
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.exit-badge-ts {
+    color: #F59E0B;
+    background: rgba(245, 158, 11, 0.1);
+    border-color: rgba(245, 158, 11, 0.2);
+}
+
+.exit-badge-default {
+    color: #008F11;
+    background: rgba(0, 143, 17, 0.1);
+    border-color: rgba(0, 143, 17, 0.2);
+}
+
+/* ─── Correlation Grid ───────────────────────────────────────── */
+.corr-table {
+    border-spacing: 2px;
+    border-collapse: separate;
+}
+
+.corr-header {
+    color: #008F11;
+    font-size: 10px;
+    padding: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.corr-cell {
+    text-align: center;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    transition: transform 0.15s ease;
+    cursor: default;
+}
+
+.corr-cell:hover {
+    transform: scale(1.15);
+    z-index: 1;
+    position: relative;
+}
+
+.corr-self {
+    color: #4a5568;
+    background: rgba(10, 41, 26, 0.3);
+}
+
+.corr-high {
+    color: #EF4444;
+    background: rgba(239, 68, 68, 0.15);
+}
+
+.corr-medium {
+    color: #F59E0B;
+    background: rgba(245, 158, 11, 0.15);
+}
+
+.corr-low {
+    color: #00FF41;
+    background: rgba(0, 255, 65, 0.1);
+}
+
+/* ─── Model Health — Stale Pulse ─────────────────────────────── */
+.model-card-stale {
+    border-color: #EF4444 !important;
+    animation: stale-pulse 2s ease-in-out infinite;
+}
+
+@keyframes stale-pulse {
+    0%, 100% {
+        border-color: rgba(239, 68, 68, 0.3);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+    50% {
+        border-color: rgba(239, 68, 68, 0.7);
+        box-shadow: 0 0 8px 0 rgba(239, 68, 68, 0.2);
+    }
+}
+
+/* ─── Config Bar Tags ────────────────────────────────────────── */
+.config-tag {
+    display: inline-block;
+    padding: 1px 8px;
+    margin: 0 2px;
+    border-radius: 4px;
+    font-size: 11px;
+    color: #00FF41;
+    background: rgba(0, 255, 65, 0.08);
+    border: 1px solid rgba(0, 255, 65, 0.15);
+}
