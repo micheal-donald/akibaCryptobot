@@ -27,27 +27,30 @@ class BinanceClient:
         sandbox: bool = True,
         market_type: str = "spot",  # 'spot' or 'futures'
     ):
-        self.api_key = api_key or os.getenv("BINANCE_API_KEY")
-        self.secret_key = secret_key or os.getenv("BINANCE_SECRET_KEY")
+        self.api_key = api_key if api_key is not None else os.getenv("BINANCE_API_KEY")
+        self.secret_key = (
+            secret_key if secret_key is not None else os.getenv("BINANCE_SECRET_KEY")
+        )
         self.sandbox = sandbox
         self.market_type = market_type
 
         # Initialize ccxt exchange for REST API
         exchange_class = ccxt.binance if market_type == "spot" else ccxt.binanceusdm
-        self.exchange = exchange_class(
-            {
-                "apiKey": self.api_key,
-                "secret": self.secret_key,
-                "sandbox": self.sandbox,
-                "enableRateLimit": True,
-                "rateLimit": 1200,
-                "options": {
-                    "adjustForTimeDifference": True,
-                    "warnOnFetchOpenOrdersWithoutSymbol": False,
-                    "defaultType": market_type,
-                },
-            }
-        )
+        ccxt_config = {
+            "sandbox": self.sandbox,
+            "enableRateLimit": True,
+            "rateLimit": 1200,
+            "options": {
+                "adjustForTimeDifference": True,
+                "warnOnFetchOpenOrdersWithoutSymbol": False,
+                "defaultType": market_type,
+            },
+        }
+        if self.api_key:
+            ccxt_config["apiKey"] = self.api_key
+        if self.secret_key:
+            ccxt_config["secret"] = self.secret_key
+        self.exchange = exchange_class(ccxt_config)
 
         if self.sandbox:
             self.exchange.set_sandbox_mode(True)
