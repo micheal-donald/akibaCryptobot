@@ -21,12 +21,12 @@ def get_bot():
 
 
 def get_exchange(bot=Depends(get_bot)):
-    """Return the BinanceClient instance."""
+    """Return the BinanceClient instance used for trading (sandbox when in sandbox mode)."""
     return bot.exchange
 
 
 def get_data_exchange(bot=Depends(get_bot)):
-    """Return the BinanceClient used for public market data."""
+    """Return the BinanceClient used for public market data (always production)."""
     return bot.data_exchange
 
 
