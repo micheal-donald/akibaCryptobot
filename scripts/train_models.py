@@ -35,7 +35,9 @@ logger = logging.getLogger("train_models")
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train FreqAI models for AkibaCryptoBot")
+    parser = argparse.ArgumentParser(
+        description="Train FreqAI models for AkibaCryptoBot"
+    )
     parser.add_argument(
         "--config",
         type=str,
@@ -66,17 +68,28 @@ def parse_args():
         default="models",
         help="Directory to save trained models (default: models/)",
     )
+    parser.add_argument(
+        "--binance-us",
+        action="store_true",
+        default=False,
+        help="Use binance.us API (for US-based CI runners)",
+    )
     return parser.parse_args()
 
 
-async def train_all_models(config, pairs, candles, timeframe, output_dir):
+async def train_all_models(
+    config, pairs, candles, timeframe, output_dir, binance_us=False
+):
     """Download data and train a model for each trading pair."""
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # Use live endpoint for data download — public OHLCV data has no geo-restriction.
-    # Testnet (testnet.binance.vision) is blocked from GitHub Actions runners (US, HTTP 451).
-    exchange = BinanceClient(sandbox=False)
+    # Public OHLCV data — no API keys needed.
+    # Use binance.us when running from US-based CI runners
+    # (api.binance.com returns HTTP 451 for US IPs).
+    exchange = BinanceClient(
+        api_key="", secret_key="", sandbox=False, binance_us=binance_us
+    )
 
     # Initialize the ML strategy
     strategy = MLFreqAIStrategy(config)
@@ -111,7 +124,10 @@ async def train_all_models(config, pairs, candles, timeframe, output_dir):
 
             if not strategy.model_trained:
                 logger.error(f"Model training failed for {symbol}")
-                results[symbol] = {"status": "failed", "reason": "training returned no model"}
+                results[symbol] = {
+                    "status": "failed",
+                    "reason": "training returned no model",
+                }
                 continue
 
             # 3. Save the trained model
@@ -156,7 +172,14 @@ def main():
 
     # Run training
     results = asyncio.run(
-        train_all_models(config, pairs, args.candles, args.timeframe, args.output_dir)
+        train_all_models(
+            config,
+            pairs,
+            args.candles,
+            args.timeframe,
+            args.output_dir,
+            binance_us=args.binance_us,
+        )
     )
 
     # Summary
@@ -168,7 +191,9 @@ def main():
         icon = "✅" if status == "success" else "❌" if status == "error" else "⏭️"
         logger.info(f"  {icon} {symbol}: {status}")
         if status == "success":
-            logger.info(f"     → {result['model_path']} ({result['features']} features, {result['training_candles']} candles)")
+            logger.info(
+                f"     → {result['model_path']} ({result['features']} features, {result['training_candles']} candles)"
+            )
         elif "reason" in result:
             logger.info(f"     → {result['reason']}")
 

@@ -43,7 +43,8 @@ jobs:
           python scripts/train_models.py \
             --candles ${{ github.event.inputs.candles || '1000' }} \
             --timeframe 1h \
-            --output-dir models
+            --output-dir models \
+            --binance-us
 
       - name: List trained models
         run: ls -lh models/

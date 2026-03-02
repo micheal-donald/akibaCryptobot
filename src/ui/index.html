@@ -31,38 +31,74 @@
     </script>
 </head>
 
-<body class="bg-matrix-bg font-sans min-h-screen w-screen flex flex-col relative selection:bg-matrix-neon selection:text-black">
+<body
+    class="bg-matrix-bg font-sans min-h-screen w-screen flex flex-col relative selection:bg-matrix-neon selection:text-black">
 
     <!-- Background Matrix Rain Canvas -->
     <canvas id="matrix" class="fixed inset-0 z-0 opacity-[0.04] pointer-events-none"></canvas>
 
     <!-- ═══════ Section 1: Top Navbar ═══════ -->
-    <header class="relative z-10 w-full h-16 border-b border-matrix-border bg-matrix-surface/80 backdrop-blur-md flex items-center justify-between px-6 shrink-0">
-        <div class="flex items-center space-x-3">
-            <div class="w-8 h-8 rounded border border-matrix-neon flex items-center justify-center text-matrix-neon font-bold text-xl neon-glow">
+    <header
+        class="relative z-20 w-full min-h-16 border-b border-matrix-border bg-matrix-surface/90 backdrop-blur-md flex flex-wrap items-center justify-between px-6 shrink-0 transition-all duration-300">
+        <div class="flex items-center space-x-3 h-16">
+            <div
+                class="w-8 h-8 rounded border border-matrix-neon flex items-center justify-center text-matrix-neon font-bold text-xl neon-glow">
                 A
             </div>
-            <h1 class="text-xl font-bold tracking-wider text-white">akiba<span class="text-matrix-neon">Cryptobot</span></h1>
-            <span id="version-badge" class="ml-4 px-2 py-0.5 rounded text-xs bg-matrix-border text-matrix-dim font-mono border border-matrix-border">v1.0.0</span>
+            <h1 class="text-xl font-bold tracking-wider text-white">akiba<span class="text-matrix-neon">Cryptobot</span>
+            </h1>
+            <span id="version-badge"
+                class="hidden sm:inline-block ml-4 px-2 py-0.5 rounded text-xs bg-matrix-border text-matrix-dim font-mono border border-matrix-border">v1.0.0</span>
         </div>
 
-        <div class="flex items-center space-x-6">
-            <div class="flex items-center space-x-2 text-sm">
-                <span id="status-dot" class="w-2 h-2 rounded-full bg-matrix-neon animate-pulse shadow-[0_0_8px_#00FF41]"></span>
-                <span id="status-text" class="text-matrix-neon font-mono tracking-wider">CONNECTING...</span>
-                <span class="text-matrix-border">|</span>
-                <span class="text-matrix-dim font-mono text-xs">UP:</span>
-                <span id="uptime" class="text-matrix-dim font-mono text-xs">—</span>
-                <span class="text-matrix-dim font-mono text-xs">LAT:</span>
-                <span id="latency" class="text-matrix-neon font-mono text-xs">—</span>
+        <!-- Mobile Menu Toggle -->
+        <button id="mobile-menu-btn"
+            class="md:hidden flex items-center p-2 text-matrix-neon hover:bg-matrix-neon/10 rounded transition-colors"
+            onclick="toggleMobileMenu()">
+            <svg id="menu-icon-open" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16">
+                </path>
+            </svg>
+            <svg id="menu-icon-close" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+        </button>
+
+        <!-- Navbar Content (Collapsible on mobile) -->
+        <div id="nav-content"
+            class="hidden md:flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6 w-full md:w-auto pb-6 md:pb-0 border-t border-matrix-border/30 md:border-t-0 pt-4 md:pt-0">
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm w-full md:w-auto">
+                <div
+                    class="flex items-center space-x-2 bg-matrix-border/20 px-3 py-1 rounded-full md:bg-transparent md:p-0">
+                    <span id="status-dot"
+                        class="w-2 h-2 rounded-full bg-matrix-neon animate-pulse shadow-[0_0_8px_#00FF41]"></span>
+                    <span id="status-text" class="text-matrix-neon font-mono tracking-wider">CONNECTING...</span>
+                </div>
+                <div class="flex items-center space-x-3 text-matrix-dim font-mono text-[10px] sm:text-xs">
+                    <span class="hidden md:inline text-matrix-border">|</span>
+                    <div class="flex items-center space-x-1">
+                        <span class="opacity-60">UP:</span>
+                        <span id="uptime" class="text-matrix-dim">—</span>
+                    </div>
+                    <div class="flex items-center space-x-1">
+                        <span class="opacity-60">LAT:</span>
+                        <span id="latency" class="text-matrix-neon">—</span>
+                    </div>
+                </div>
             </div>
-            <span id="trading-mode-badge" class="px-2 py-0.5 rounded text-xs font-mono border border-matrix-border text-matrix-dim hidden">PAPER</span>
-            <select id="strategy-select" class="strategy-select bg-matrix-surface border border-matrix-border text-matrix-neon text-xs font-mono rounded px-3 py-1.5 focus:outline-none focus:border-matrix-neon cursor-pointer">
-                <option value="">Loading...</option>
-            </select>
-            <button id="pause-btn" class="px-4 py-1.5 rounded text-sm font-semibold border border-matrix-neon text-matrix-neon hover:bg-matrix-neon/10 transition-colors duration-200">
-                PAUSE BOT
-            </button>
+
+            <div class="flex items-center space-x-4 w-full md:w-auto overflow-x-auto no-scrollbar">
+                <span id="trading-mode-badge"
+                    class="px-2 py-0.5 rounded text-[10px] font-mono border border-matrix-border text-matrix-dim hidden shrink-0">PAPER</span>
+                <select id="strategy-select"
+                    class="strategy-select flex-grow md:flex-grow-0 bg-matrix-surface border border-matrix-border text-matrix-neon text-xs font-mono rounded px-3 py-1.5 focus:outline-none focus:border-matrix-neon cursor-pointer min-w-[120px]">
+                    <option value="">Loading...</option>
+                </select>
+                <button id="pause-btn"
+                    class="flex-grow md:flex-grow-0 px-4 py-1.5 rounded text-sm font-semibold border border-matrix-neon text-matrix-neon hover:bg-matrix-neon/10 transition-colors duration-200 whitespace-nowrap">
+                    PAUSE BOT
+                </button>
+            </div>
         </div>
     </header>
 
@@ -72,7 +108,8 @@
         <!-- ═══════ Section 2: Metric Cards (6 cards) ═══════ -->
         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <!-- Card 1: Total PnL -->
-            <div class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
+            <div
+                class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
                 <span class="text-matrix-dim text-sm font-semibold tracking-wide">TOTAL PNL</span>
                 <div class="mt-2 flex items-baseline space-x-2">
                     <span class="text-3xl font-bold text-matrix-neon font-mono neon-glow" id="pnl-value">—</span>
@@ -81,28 +118,32 @@
             </div>
 
             <!-- Card 2: Win Rate -->
-            <div class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
+            <div
+                class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
                 <span class="text-matrix-dim text-sm font-semibold tracking-wide">WIN RATE</span>
                 <div class="mt-2 text-3xl font-bold text-white font-mono" id="win-rate-value">—</div>
                 <div class="mt-1 text-xs text-matrix-dim font-mono" id="win-loss-detail"></div>
             </div>
 
             <!-- Card 3: Sharpe Ratio -->
-            <div class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
+            <div
+                class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
                 <span class="text-matrix-dim text-sm font-semibold tracking-wide">SHARPE RATIO</span>
                 <div class="mt-2 text-3xl font-bold text-white font-mono" id="sharpe-value">—</div>
                 <div class="mt-1 text-xs text-matrix-dim font-mono" id="sortino-value"></div>
             </div>
 
             <!-- Card 4: Max Drawdown -->
-            <div class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
+            <div
+                class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
                 <span class="text-matrix-dim text-sm font-semibold tracking-wide">MAX DRAWDOWN</span>
                 <div class="mt-2 text-3xl font-bold text-red-500 font-mono" id="max-dd-value">—</div>
                 <div class="mt-1 text-xs text-matrix-dim font-mono" id="current-dd-value"></div>
             </div>
 
             <!-- Card 5: Active Positions -->
-            <div class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
+            <div
+                class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
                 <span class="text-matrix-dim text-sm font-semibold tracking-wide">ACTIVE POSITIONS</span>
                 <div class="mt-2 text-3xl font-bold text-white font-mono" id="active-positions">
                     — <span class="text-sm text-gray-500 font-sans font-normal">Pairs</span>
@@ -110,7 +151,8 @@
             </div>
 
             <!-- Card 6: USDT Balance -->
-            <div class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
+            <div
+                class="metric-card bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col justify-between group transition-transform duration-200 hover:-translate-y-1 hover:border-matrix-dim">
                 <span class="text-matrix-dim text-sm font-semibold tracking-wide">USDT BALANCE</span>
                 <div class="mt-2 text-3xl font-bold text-gray-200 font-mono" id="balance-value">—</div>
                 <div class="mt-1 text-xs text-matrix-dim font-mono" id="initial-balance"></div>
@@ -124,7 +166,9 @@
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-white font-semibold flex items-center">
                         <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z">
+                            </path>
                         </svg>
                         Portfolio Performance
                     </h2>
@@ -133,7 +177,8 @@
                 <div class="relative flex-grow w-full">
                     <canvas id="pnlChart"></canvas>
                 </div>
-                <div id="chart-empty" class="hidden flex-grow flex items-center justify-center text-matrix-dim text-sm font-mono">
+                <div id="chart-empty"
+                    class="hidden flex-grow flex items-center justify-center text-matrix-dim text-sm font-mono">
                     Awaiting equity data...
                 </div>
             </div>
@@ -142,11 +187,13 @@
             <div class="bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col">
                 <h2 class="text-white font-semibold mb-4 border-b border-matrix-border pb-2 flex items-center">
                     <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                     </svg>
                     Recent Activity
                 </h2>
-                <div class="flex-grow overflow-y-auto space-y-2 font-mono text-sm pr-2 custom-scrollbar" id="activity-feed">
+                <div class="flex-grow overflow-y-auto space-y-2 font-mono text-sm pr-2 custom-scrollbar"
+                    id="activity-feed">
                     <div class="text-matrix-dim text-xs text-center py-4">Connecting to trade history...</div>
                 </div>
             </div>
@@ -158,7 +205,8 @@
             <div class="bg-matrix-surface border border-matrix-border rounded-lg p-5 overflow-x-auto">
                 <h2 class="text-white font-semibold mb-4 flex items-center">
                     <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
                     </svg>
                     Active Positions
                 </h2>
@@ -187,7 +235,9 @@
             <div class="bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col">
                 <h2 class="text-white font-semibold mb-4 flex items-center">
                     <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z">
+                        </path>
                     </svg>
                     Strategy Performance
                 </h2>
@@ -208,7 +258,9 @@
             <div class="bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col">
                 <h2 class="text-white font-semibold mb-4 flex items-center">
                     <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z">
+                        </path>
                     </svg>
                     Risk Management
                 </h2>
@@ -221,7 +273,9 @@
             <div class="bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col">
                 <h2 class="text-white font-semibold mb-4 flex items-center">
                     <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z">
+                        </path>
                     </svg>
                     Correlations
                 </h2>
@@ -234,7 +288,9 @@
             <div class="bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col">
                 <h2 class="text-white font-semibold mb-4 flex items-center">
                     <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z">
+                        </path>
                     </svg>
                     Model Health
                 </h2>
@@ -245,14 +301,18 @@
         </div>
 
         <!-- ═══════ Section 6: Config Bar ═══════ -->
-        <div class="bg-matrix-surface border border-matrix-border rounded-lg px-5 py-3 flex flex-wrap items-center gap-4 text-xs font-mono" id="config-bar">
+        <div class="bg-matrix-surface border border-matrix-border rounded-lg px-5 py-3 flex flex-wrap items-center gap-4 text-xs font-mono"
+            id="config-bar">
             <span class="text-matrix-dim">Loading config...</span>
         </div>
 
         <!-- Circuit Breaker Warning Banner -->
-        <div id="circuit-breaker-banner" class="hidden bg-red-900/30 border border-red-600/50 rounded-lg p-4 flex items-center space-x-3">
+        <div id="circuit-breaker-banner"
+            class="hidden bg-red-900/30 border border-red-600/50 rounded-lg p-4 flex items-center space-x-3">
             <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z">
+                </path>
             </svg>
             <div>
                 <div class="text-red-400 font-bold text-sm">CIRCUIT BREAKER ACTIVE</div>
@@ -263,6 +323,17 @@
     </main>
 
     <!-- Scripts -->
+    <script>
+        function toggleMobileMenu() {
+            const nav = document.getElementById('nav-content');
+            const iconOpen = document.getElementById('menu-icon-open');
+            const iconClose = document.getElementById('menu-icon-close');
+
+            nav.classList.toggle('hidden');
+            iconOpen.classList.toggle('hidden');
+            iconClose.classList.toggle('hidden');
+        }
+    </script>
     <script src="/js/matrix.js"></script>
     <script src="/js/app.js"></script>
 </body>

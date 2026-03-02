@@ -26,6 +26,7 @@ class BinanceClient:
         secret_key: str = None,
         sandbox: bool = True,
         market_type: str = "spot",  # 'spot' or 'futures'
+        binance_us: bool = False,
     ):
         self.api_key = api_key if api_key is not None else os.getenv("BINANCE_API_KEY")
         self.secret_key = (
@@ -35,7 +36,12 @@ class BinanceClient:
         self.market_type = market_type
 
         # Initialize ccxt exchange for REST API
-        exchange_class = ccxt.binance if market_type == "spot" else ccxt.binanceusdm
+        if binance_us:
+            exchange_class = ccxt.binanceus
+        elif market_type == "spot":
+            exchange_class = ccxt.binance
+        else:
+            exchange_class = ccxt.binanceusdm
         ccxt_config = {
             "sandbox": self.sandbox,
             "enableRateLimit": True,
