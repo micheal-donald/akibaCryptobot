@@ -32,9 +32,7 @@ class AkibaCryptoBot:
         # Use production Binance for market data when trading in sandbox mode,
         # because the testnet returns too few OHLCV candles for indicator calc.
         if self.config["exchange"].get("sandbox", True):
-            self.data_exchange = BinanceClient(
-                api_key="", secret_key="", sandbox=False
-            )
+            self.data_exchange = BinanceClient(api_key="", secret_key="", sandbox=False)
             self.logger.info(
                 "Dual-client mode: sandbox for trading, production Binance for market data"
             )
