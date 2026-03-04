@@ -70,6 +70,7 @@ class AkibaCryptoBot:
         self.price_data_cache = {}  # Cache for correlation analysis
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
+        self._cached_balance = None  # Refreshed once per trading cycle
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -149,6 +150,9 @@ class AkibaCryptoBot:
     async def trading_cycle(self):
         self.logger.debug("Starting trading cycle...")
 
+        # Refresh balance cache once per cycle to avoid redundant REST calls
+        self._cached_balance = await self.exchange.get_balance()
+
         # Update market data
         await self.update_market_data()
 
@@ -218,7 +222,7 @@ class AkibaCryptoBot:
     async def update_portfolio_value(self):
         """Update portfolio value history for circuit breaker tracking"""
         try:
-            balance = await self.exchange.get_balance()
+            balance = self._cached_balance or await self.exchange.get_balance()
             total_value = 0.0
 
             # Add USDT balance
@@ -425,7 +429,7 @@ class AkibaCryptoBot:
         self, pair: str, signal, current_price: float
     ) -> float:
         """Return the position size in base currency, or 0 if balance is too low."""
-        balance = await self.exchange.get_balance()
+        balance = self._cached_balance or await self.exchange.get_balance()
         usdt_balance = balance.get("USDT", {}).get("free", 0)
 
         if usdt_balance < 10:
