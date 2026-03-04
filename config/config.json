@@ -18,7 +18,7 @@
       "primary": "1h",
       "secondary": "15m"
     },
-    "strategy": "momentum",
+    "strategy": "ensemble",
     "max_open_trades": 3,
     "stake_amount": 0.05,
     "stake_currency": "USDT"
@@ -37,7 +37,7 @@
     "fee": 0.001
   },
   "strategy_config": {
-    "min_signal_strength": 0.6,
+    "min_signal_strength": 0.45,
     "rsi_oversold": 30,
     "rsi_overbought": 70,
     "stoch_oversold": 20,
@@ -66,7 +66,7 @@
     }
   },
   "circuit_breaker": {
-    "volatility_threshold": 1.5,
+    "volatility_threshold": 3.0,
     "drawdown_threshold": 0.20
   },
   "notifications": {
@@ -76,7 +76,7 @@
     "daily_reports": true
   },
   "logging": {
-    "level": "INFO",
+    "level": "DEBUG",
     "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     "file": "logs/akiba_crypto_bot.log",
     "max_bytes": 10485760,
