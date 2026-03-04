@@ -51,6 +51,7 @@
     "model": "LightGBMClassifier",
     "identifier": "akiba_freqai_model",
     "train_period": 200,
+    "model_expiry_hours": 48,
     "include_timeframes": [
       "1h",
       "4h"

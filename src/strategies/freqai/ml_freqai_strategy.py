@@ -1,5 +1,6 @@
 import pandas as pd
 from typing import Dict
+from datetime import datetime
 import logging
 import lightgbm as lgb
 from sklearn.ensemble import RandomForestClassifier
@@ -46,6 +47,8 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
         # Initialize ML model
         self.ml_model = None
         self.model_trained = False
+        self.model_trained_at = None
+        self.model_expired = False
 
         logger.info(
             f"MLFreqAIStrategy initialized with lookahead={self.lookahead_period}"
@@ -251,6 +254,11 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
         if not self.model_trained or self.ml_model is None:
             return {"prediction": 0, "confidence": 0.0}
 
+        # Option A: skip expired models entirely, fall back to HOLD so ensemble
+        # uses momentum-only signal instead of potentially stale ML output.
+        if getattr(self, "model_expired", False):
+            logger.warning("Skipping ML prediction - model is expired")
+            return {"prediction": 0, "confidence": 0.0}
         # Select only the feature columns that were used for training
         # We use iloc[-2:-1] to predict using the last *completed* candle, not the live partial candle
         latest_features = features_df[self.feature_columns].iloc[-2:-1].dropna()
@@ -275,7 +283,7 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
 
     def save_model(self, filepath: str):
         """
-        Save the trained model to disk
+        Save the trained model to disk, including a timestamp for expiry checks.
         """
         if self.ml_model is not None:
             joblib.dump(
@@ -283,6 +291,7 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
                     "model": self.ml_model,
                     "feature_columns": self.feature_columns,
                     "model_trained": self.model_trained,
+                    "trained_at": datetime.now().isoformat(),
                 },
                 filepath,
             )
@@ -290,7 +299,7 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
 
     def load_model(self, filepath: str):
         """
-        Load a trained model from disk
+        Load a trained model from disk and check whether it has expired.
         """
         try:
             model_data = joblib.load(filepath)
@@ -298,6 +307,29 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
             self.feature_columns = model_data["feature_columns"]
             self.model_trained = model_data["model_trained"]
             self.is_model_trained = True
+
+            # Check model age against configured expiry window
+            trained_at_str = model_data.get("trained_at")
+            if trained_at_str:
+                self.model_trained_at = datetime.fromisoformat(trained_at_str)
+                max_age_hours = self.freqai_config.get("model_expiry_hours", 48)
+                age_hours = (datetime.now() - self.model_trained_at).total_seconds() / 3600
+                if age_hours > max_age_hours:
+                    logger.warning(
+                        f"Model from {filepath} is {age_hours:.1f}h old "
+                        f"(max: {max_age_hours}h) - predictions may be stale"
+                    )
+                    self.model_expired = True
+                else:
+                    self.model_expired = False
+                    logger.info(
+                        f"Model age: {age_hours:.1f}h (within {max_age_hours}h limit)"
+                    )
+            else:
+                # Backwards compat: old models without a timestamp are allowed
+                logger.warning(f"Model {filepath} has no trained_at timestamp")
+                self.model_expired = False
+
             logger.info(f"Model loaded from {filepath}")
         except Exception as e:
             logger.error(f"Error loading model from {filepath}: {e}")
