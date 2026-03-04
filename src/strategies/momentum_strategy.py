@@ -69,8 +69,8 @@ class MomentumStrategy(BaseStrategy):
             if df_with_indicators is None or len(df_with_indicators) == 0:
                 return None
 
-            # Get latest values
-            latest = df_with_indicators.iloc[-1]
+            # Get latest values from the last *completed* candle (avoiding live partial candle)
+            latest = df_with_indicators.iloc[-2]
 
             # Check if we have all required indicators
             required_indicators = [
@@ -285,7 +285,8 @@ class MomentumStrategy(BaseStrategy):
             if df_with_indicators is None or len(df_with_indicators) == 0:
                 return None
 
-            latest = df_with_indicators.iloc[-1]
+            # Use the last completed candle for exit logic
+            latest = df_with_indicators.iloc[-2]
             side = current_position.get("side")
             entry_price = current_position.get("entry_price")
 

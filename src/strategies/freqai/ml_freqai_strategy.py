@@ -252,7 +252,8 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
             return {"prediction": 0, "confidence": 0.0}
 
         # Select only the feature columns that were used for training
-        latest_features = features_df[self.feature_columns].iloc[-1:].dropna()
+        # We use iloc[-2:-1] to predict using the last *completed* candle, not the live partial candle
+        latest_features = features_df[self.feature_columns].iloc[-2:-1].dropna()
 
         if len(latest_features) == 0 or len(latest_features.columns) != len(
             self.feature_columns

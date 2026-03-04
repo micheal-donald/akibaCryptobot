@@ -193,7 +193,7 @@ class RiskManager:
             return None
 
         position = self.positions[symbol]
-        if "trailing_stop" not in position:
+        if "trailing_stop_price" not in position:
             return None
 
         side = position["side"]

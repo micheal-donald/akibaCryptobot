@@ -260,6 +260,18 @@ class AkibaCryptoBot:
                     ticker = await self.data_exchange.get_ticker(symbol)
                     current_price = ticker["last"]
 
+                    # Update trailing stop if enabled
+                    if self.risk_manager.trailing_stop:
+                        new_trailing = self.risk_manager.update_trailing_stop(symbol, current_price)
+                        if new_trailing and symbol in self.active_trades:
+                            # Update the stop_loss in active_trades to the trailing value
+                            trailing_stop_price = self.risk_manager.positions.get(symbol, {}).get("trailing_stop_price")
+                            if trailing_stop_price:
+                                self.active_trades[symbol]["stop_loss"] = trailing_stop_price
+                                # Persist to DB if trade_store exists
+                                if hasattr(self, 'trade_store'):
+                                    await self.trade_store.update_trailing_stop(symbol, trailing_stop_price)
+
                     # Get OHLCV data for exit signal analysis
                     ohlcv_data = await self.data_exchange.get_ohlcv(
                         symbol, self.config["trading"]["timeframes"]["primary"], 50
@@ -348,6 +360,11 @@ class AkibaCryptoBot:
                         f"PnL: ${pnl:.4f}\n"
                         f"Order ID: {order['id']}"
                     )
+
+                # Unregister from risk manager
+                closed_info = self.risk_manager.remove_position(symbol, exit_price)
+                if closed_info:
+                    self.logger.info(f"Trade PnL for {symbol}: {closed_info.get('pnl', 0):.6f}")
 
                 # Remove from active trades
                 del self.active_trades[symbol]
@@ -495,6 +512,17 @@ class AkibaCryptoBot:
                     f"Order rejected for {symbol}: {order.get('reason')}"
                 )
                 return
+
+            # Register position with risk manager so trailing stop and counters work
+            self.risk_manager.add_position(
+                symbol=symbol,
+                side=side,
+                amount=amount,
+                entry_price=entry_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                order_id=order["id"],
+            )
 
             # Track the trade
             trade_dict = {
