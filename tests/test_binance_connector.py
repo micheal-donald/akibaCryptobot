@@ -251,7 +251,7 @@ class TestBinanceConnector:
         # Valid order
         valid, amt = connector.validate_and_adjust_order("BTC/USDT", 0.01, 50000.0)
         assert valid
-        assert amt == 0.01
+        assert amt == pytest.approx(0.01)
 
         # Below min amount
         valid, amt = connector.validate_and_adjust_order("BTC/USDT", 0.00005, 50000.0)
@@ -264,7 +264,7 @@ class TestBinanceConnector:
         # Valid precision (integer for doge)
         valid, amt = connector.validate_and_adjust_order("DOGE/USDT", 100.5, 0.1)
         assert valid
-        assert amt == 100.0
+        assert amt == pytest.approx(100.0)
 
     @pytest.mark.asyncio
     @patch("ccxt.binance")
