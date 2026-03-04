@@ -1,11 +1,8 @@
 import ccxt
 import os
-from typing import Dict, List, Optional, Tuple, Callable
-from decimal import Decimal
+from typing import Dict, List, Optional, Callable
 import pandas as pd
-from datetime import datetime
 import logging
-import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +105,9 @@ class BinanceClient:
             self._markets_loaded = True
             logger.info(f"Loaded {len(self.exchange.markets)} markets")
 
-    def validate_and_adjust_order(self, symbol: str, amount: float, price: float) -> tuple[bool, float]:
+    def validate_and_adjust_order(
+        self, symbol: str, amount: float, price: float
+    ) -> tuple[bool, float]:
         """Validate order against exchange limits. Returns (valid, adjusted_amount)."""
         market = self.exchange.markets.get(symbol)
         if not market:
@@ -135,15 +134,21 @@ class BinanceClient:
 
         return True, amount
 
-    async def place_market_order(self, symbol: str, side: str, amount: float, price: float = None) -> Dict:
+    async def place_market_order(
+        self, symbol: str, side: str, amount: float, price: float = None
+    ) -> Dict:
         try:
             await self.ensure_markets_loaded()
-            
+
             if price is not None:
                 valid, amount = self.validate_and_adjust_order(symbol, amount, price)
                 if not valid:
-                    return {"id": None, "status": "rejected", "reason": "Fails min notional or amount limit"}
-                    
+                    return {
+                        "id": None,
+                        "status": "rejected",
+                        "reason": "Fails min notional or amount limit",
+                    }
+
             order = self.exchange.create_market_order(symbol, side, amount)
             logger.info(f"Market order placed: {side} {amount} {symbol}")
             return order
@@ -158,8 +163,12 @@ class BinanceClient:
             await self.ensure_markets_loaded()
             valid, amount = self.validate_and_adjust_order(symbol, amount, price)
             if not valid:
-                return {"id": None, "status": "rejected", "reason": "Fails min notional or amount limit"}
-                
+                return {
+                    "id": None,
+                    "status": "rejected",
+                    "reason": "Fails min notional or amount limit",
+                }
+
             order = self.exchange.create_limit_order(symbol, side, amount, price)
             logger.info(f"Limit order placed: {side} {amount} {symbol} at {price}")
             return order

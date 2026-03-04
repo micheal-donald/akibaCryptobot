@@ -5,7 +5,6 @@ Test script to verify FreqAI strategy loading
 
 import sys
 import os
-import json
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))

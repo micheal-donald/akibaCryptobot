@@ -1,7 +1,5 @@
 import pandas as pd
-import numpy as np
 from typing import Dict, Optional
-from datetime import datetime
 import logging
 import sys
 import os
@@ -16,7 +14,6 @@ if parent_dir not in sys.path:
 from strategies.freqai.base_freqai_strategy import (
     BaseFreqAIStrategy,
     TradingSignal,
-    SignalType,
 )
 from indicators.technical_indicators import TechnicalIndicators
 

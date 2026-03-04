@@ -1,10 +1,9 @@
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 from datetime import datetime
 import logging
 from dataclasses import dataclass
-from scipy.stats import pearsonr
 
 from indicators.technical_indicators import TechnicalIndicators
 

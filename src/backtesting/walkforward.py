@@ -1,11 +1,9 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Tuple
 from datetime import datetime, timedelta
 import logging
 from dataclasses import dataclass
-from sklearn.model_selection import TimeSeriesSplit
-import asyncio
 
 from backtesting.engine import BacktestEngine, BacktestResult
 from strategies.base_strategy import BaseStrategy
@@ -28,7 +26,9 @@ class WalkForwardResult:
     sharpe_ratio: float
     avg_win: float
     avg_loss: float
-    overfitting_score: float  # Score indicating potential overfitting (0-1, higher = more overfitting)
+    overfitting_score: (
+        float  # Score indicating potential overfitting (0-1, higher = more overfitting)
+    )
     equity_curve: List[float]
     timestamps: List[datetime]
 
@@ -90,7 +90,7 @@ class WalkForwardAnalyzer:
 
         # Run walk-forward analysis
         for i, (train_start, train_end, test_start, test_end) in enumerate(periods):
-            logger.info(f"Processing fold {i+1}/{len(periods)}")
+            logger.info(f"Processing fold {i + 1}/{len(periods)}")
             logger.info(f"Train: {train_start} to {train_end}")
             logger.info(f"Test: {test_start} to {test_end}")
 
@@ -419,7 +419,7 @@ class WalkForwardAnalyzer:
         for i, (in_sample, out_of_sample) in enumerate(
             zip(result.in_sample_results, result.out_of_sample_results)
         ):
-            print(f"\nFold {i+1}:")
+            print(f"\nFold {i + 1}:")
             print(f"  In-sample Win Rate: {in_sample.win_rate:.2f}%")
             print(f"  Out-of-sample Win Rate: {out_of_sample.win_rate:.2f}%")
             print(

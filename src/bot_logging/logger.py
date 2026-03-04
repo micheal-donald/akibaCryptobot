@@ -1,8 +1,7 @@
 import logging
 import logging.handlers
 import os
-from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict
 
 
 def setup_logging(config: Dict) -> logging.Logger:
@@ -45,7 +44,9 @@ def setup_logging(config: Dict) -> logging.Logger:
     # Trade logger - separate file for trade-specific logs
     trade_logger = logging.getLogger("akiba_crypto_bot.trades")
     trade_handler = logging.handlers.RotatingFileHandler(
-        "logs/trades.log", maxBytes=5242880, backupCount=10  # 5MB
+        "logs/trades.log",
+        maxBytes=5242880,
+        backupCount=10,  # 5MB
     )
     trade_formatter = logging.Formatter(
         "%(asctime)s - TRADE - %(levelname)s - %(message)s"
@@ -57,7 +58,9 @@ def setup_logging(config: Dict) -> logging.Logger:
     # Error logger - separate file for errors
     error_logger = logging.getLogger("akiba_crypto_bot.errors")
     error_handler = logging.handlers.RotatingFileHandler(
-        "logs/errors.log", maxBytes=5242880, backupCount=10  # 5MB
+        "logs/errors.log",
+        maxBytes=5242880,
+        backupCount=10,  # 5MB
     )
     error_formatter = logging.Formatter(
         "%(asctime)s - ERROR - %(name)s - %(levelname)s - %(message)s - %(pathname)s:%(lineno)d"
@@ -138,7 +141,9 @@ class PerformanceLogger:
 
         # Setup performance log file
         perf_handler = logging.handlers.RotatingFileHandler(
-            "logs/performance.log", maxBytes=10485760, backupCount=5  # 10MB
+            "logs/performance.log",
+            maxBytes=10485760,
+            backupCount=5,  # 10MB
         )
         perf_formatter = logging.Formatter("%(asctime)s - PERF - %(message)s")
         perf_handler.setFormatter(perf_formatter)

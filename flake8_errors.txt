@@ -1,0 +1,605 @@
+src/advanced_risk_management.py:3:1: F401 'typing.Optional' imported but unused
+src/advanced_risk_management.py:7:1: F401 'scipy.stats.pearsonr' imported but unused
+src/advanced_risk_management.py:20:80: E501 line too long (83 > 79 characters)
+src/advanced_risk_management.py:37:80: E501 line too long (89 > 79 characters)
+src/advanced_risk_management.py:43:80: E501 line too long (84 > 79 characters)
+src/advanced_risk_management.py:44:80: E501 line too long (85 > 79 characters)
+src/advanced_risk_management.py:47:80: E501 line too long (88 > 79 characters)
+src/advanced_risk_management.py:53:80: E501 line too long (81 > 79 characters)
+src/advanced_risk_management.py:74:80: E501 line too long (88 > 79 characters)
+src/advanced_risk_management.py:90:80: E501 line too long (85 > 79 characters)
+src/advanced_risk_management.py:124:80: E501 line too long (82 > 79 characters)
+src/advanced_risk_management.py:220:80: E501 line too long (87 > 79 characters)
+src/advanced_risk_management.py:329:80: E501 line too long (86 > 79 characters)
+src/advanced_risk_management.py:346:80: E501 line too long (83 > 79 characters)
+src/advanced_risk_management.py:373:80: E501 line too long (86 > 79 characters)
+src/advanced_risk_management.py:421:80: E501 line too long (87 > 79 characters)
+src/advanced_risk_management.py:444:80: E501 line too long (113 > 79 characters)
+src/advanced_risk_management.py:457:80: E501 line too long (86 > 79 characters)
+src/advanced_risk_management.py:461:80: E501 line too long (124 > 79 characters)
+src/advanced_risk_management.py:480:80: E501 line too long (88 > 79 characters)
+src/advanced_risk_management.py:484:80: E501 line too long (83 > 79 characters)
+src/api/app.py:15:80: E501 line too long (83 > 79 characters)
+src/api/app.py:43:80: E501 line too long (84 > 79 characters)
+src/api/app.py:80:80: E501 line too long (85 > 79 characters)
+src/api/app.py:118:80: E501 line too long (83 > 79 characters)
+src/api/dependencies.py:24:80: E501 line too long (92 > 79 characters)
+src/api/dependencies.py:29:80: E501 line too long (83 > 79 characters)
+src/api/routes/model.py:23:80: E501 line too long (87 > 79 characters)
+src/api/routes/model.py:42:80: E501 line too long (81 > 79 characters)
+src/api/routes/model.py:47:80: E501 line too long (80 > 79 characters)
+src/api/routes/model.py:50:80: E501 line too long (86 > 79 characters)
+src/api/routes/model.py:53:80: E501 line too long (81 > 79 characters)
+src/api/routes/model.py:62:80: E501 line too long (80 > 79 characters)
+src/api/routes/model.py:65:80: E501 line too long (85 > 79 characters)
+src/api/routes/risk.py:21:80: E501 line too long (85 > 79 characters)
+src/api/routes/risk.py:37:80: E501 line too long (83 > 79 characters)
+src/api/routes/risk.py:52:80: E501 line too long (81 > 79 characters)
+src/api/websockets.py:6:1: F401 'json' imported but unused
+src/api/websockets.py:60:80: E501 line too long (82 > 79 characters)
+src/api/websockets.py:61:80: E501 line too long (82 > 79 characters)
+src/api/websockets.py:65:80: E501 line too long (82 > 79 characters)
+src/backtesting/backtest_runner.py:17:1: E402 module level import not at top of file
+src/backtesting/backtest_runner.py:18:1: E402 module level import not at top of file
+src/backtesting/backtest_runner.py:19:1: E402 module level import not at top of file
+src/backtesting/backtest_runner.py:20:1: E402 module level import not at top of file
+src/backtesting/backtest_runner.py:21:1: F401 'exchange.binance_client.BinanceClient' imported but unused
+src/backtesting/backtest_runner.py:21:1: E402 module level import not at top of file
+src/backtesting/backtest_runner.py:22:1: E402 module level import not at top of file
+src/backtesting/backtest_runner.py:24:1: E402 module level import not at top of file
+src/backtesting/backtest_runner.py:50:80: E501 line too long (84 > 79 characters)
+src/backtesting/backtest_runner.py:92:80: E501 line too long (87 > 79 characters)
+src/backtesting/backtest_runner.py:95:80: E501 line too long (87 > 79 characters)
+src/backtesting/backtest_runner.py:100:80: E501 line too long (88 > 79 characters)
+src/backtesting/backtest_runner.py:147:80: E501 line too long (82 > 79 characters)
+src/backtesting/backtest_runner.py:158:80: E501 line too long (88 > 79 characters)
+src/backtesting/backtest_runner.py:161:80: E501 line too long (85 > 79 characters)
+src/backtesting/backtest_runner.py:171:80: E501 line too long (87 > 79 characters)
+src/backtesting/backtest_runner.py:190:23: F541 f-string is missing placeholders
+src/backtesting/backtest_runner.py:217:80: E501 line too long (92 > 79 characters)
+src/backtesting/backtest_runner.py:225:80: E501 line too long (81 > 79 characters)
+src/backtesting/backtest_runner.py:248:80: E501 line too long (89 > 79 characters)
+src/backtesting/backtest_runner.py:258:80: E501 line too long (85 > 79 characters)
+src/backtesting/backtest_runner.py:260:80: E501 line too long (102 > 79 characters)
+src/backtesting/engine.py:7:1: F401 'enum.Enum' imported but unused
+src/backtesting/engine.py:9:1: F401 'strategies.base_strategy.SignalType' imported but unused
+src/backtesting/engine.py:68:80: E501 line too long (87 > 79 characters)
+src/backtesting/engine.py:72:80: E501 line too long (87 > 79 characters)
+src/backtesting/engine.py:85:80: E501 line too long (87 > 79 characters)
+src/backtesting/engine.py:143:80: E501 line too long (82 > 79 characters)
+src/backtesting/engine.py:154:80: E501 line too long (87 > 79 characters)
+src/backtesting/engine.py:239:80: E501 line too long (85 > 79 characters)
+src/backtesting/engine.py:266:80: E501 line too long (95 > 79 characters)
+src/backtesting/engine.py:282:80: E501 line too long (80 > 79 characters)
+src/backtesting/engine.py:287:80: E501 line too long (80 > 79 characters)
+src/backtesting/engine.py:300:80: E501 line too long (99 > 79 characters)
+src/backtesting/engine.py:326:80: E501 line too long (83 > 79 characters)
+src/backtesting/engine.py:352:80: E501 line too long (86 > 79 characters)
+src/backtesting/engine.py:471:80: E501 line too long (86 > 79 characters)
+src/backtesting/walkforward.py:3:1: F401 'typing.Optional' imported but unused
+src/backtesting/walkforward.py:3:1: F401 'typing.Any' imported but unused
+src/backtesting/walkforward.py:7:1: F401 'sklearn.model_selection.TimeSeriesSplit' imported but unused
+src/backtesting/walkforward.py:8:1: F401 'asyncio' imported but unused
+src/backtesting/walkforward.py:31:80: E501 line too long (103 > 79 characters)
+src/backtesting/walkforward.py:45:80: E501 line too long (87 > 79 characters)
+src/backtesting/walkforward.py:50:80: E501 line too long (83 > 79 characters)
+src/backtesting/walkforward.py:52:80: E501 line too long (91 > 79 characters)
+src/backtesting/walkforward.py:56:80: E501 line too long (87 > 79 characters)
+src/backtesting/walkforward.py:92:80: E501 line too long (84 > 79 characters)
+src/backtesting/walkforward.py:98:80: E501 line too long (80 > 79 characters)
+src/backtesting/walkforward.py:109:80: E501 line too long (81 > 79 characters)
+src/backtesting/walkforward.py:116:80: E501 line too long (85 > 79 characters)
+src/backtesting/walkforward.py:126:80: E501 line too long (87 > 79 characters)
+src/backtesting/walkforward.py:137:80: E501 line too long (87 > 79 characters)
+src/backtesting/walkforward.py:200:80: E501 line too long (85 > 79 characters)
+src/backtesting/walkforward.py:215:80: E501 line too long (85 > 79 characters)
+src/backtesting/walkforward.py:249:80: E501 line too long (83 > 79 characters)
+src/backtesting/walkforward.py:253:80: E501 line too long (84 > 79 characters)
+src/backtesting/walkforward.py:257:80: E501 line too long (88 > 79 characters)
+src/backtesting/walkforward.py:265:80: E501 line too long (84 > 79 characters)
+src/backtesting/walkforward.py:267:80: E501 line too long (84 > 79 characters)
+src/backtesting/walkforward.py:362:80: E501 line too long (106 > 79 characters)
+src/backtesting/walkforward.py:367:80: E501 line too long (81 > 79 characters)
+src/backtesting/walkforward.py:372:80: E501 line too long (85 > 79 characters)
+src/backtesting/walkforward.py:374:80: E501 line too long (83 > 79 characters)
+src/backtesting/walkforward.py:375:80: E501 line too long (84 > 79 characters)
+src/backtesting/walkforward.py:414:80: E501 line too long (86 > 79 characters)
+src/backtesting/walkforward.py:426:80: E501 line too long (96 > 79 characters)
+src/bot.py:3:1: F401 'logging' imported but unused
+src/bot.py:5:1: F401 'typing.List' imported but unused
+src/bot.py:5:1: F401 'typing.Optional' imported but unused
+src/bot.py:8:1: F401 'sys' imported but unused
+src/bot.py:14:1: E402 module level import not at top of file
+src/bot.py:15:1: E402 module level import not at top of file
+src/bot.py:16:1: E402 module level import not at top of file
+src/bot.py:17:1: E402 module level import not at top of file
+src/bot.py:18:1: E402 module level import not at top of file
+src/bot.py:19:1: E402 module level import not at top of file
+src/bot.py:20:1: E402 module level import not at top of file
+src/bot.py:21:1: E402 module level import not at top of file
+src/bot.py:36:80: E501 line too long (88 > 79 characters)
+src/bot.py:38:80: E501 line too long (91 > 79 characters)
+src/bot.py:62:80: E501 line too long (85 > 79 characters)
+src/bot.py:68:80: E501 line too long (83 > 79 characters)
+src/bot.py:93:80: E501 line too long (82 > 79 characters)
+src/bot.py:111:80: E501 line too long (87 > 79 characters)
+src/bot.py:113:80: E501 line too long (82 > 79 characters)
+src/bot.py:173:80: E501 line too long (80 > 79 characters)
+src/bot.py:193:80: E501 line too long (82 > 79 characters)
+src/bot.py:197:80: E501 line too long (83 > 79 characters)
+src/bot.py:218:80: E501 line too long (80 > 79 characters)
+src/bot.py:227:80: E501 line too long (80 > 79 characters)
+src/bot.py:267:80: E501 line too long (83 > 79 characters)
+src/bot.py:271:80: E501 line too long (105 > 79 characters)
+src/bot.py:272:80: E501 line too long (85 > 79 characters)
+src/bot.py:278:80: E501 line too long (85 > 79 characters)
+src/bot.py:282:80: E501 line too long (83 > 79 characters)
+src/bot.py:343:80: E501 line too long (80 > 79 characters)
+src/bot.py:376:80: E501 line too long (88 > 79 characters)
+src/bot.py:383:80: E501 line too long (81 > 79 characters)
+src/bot.py:399:80: E501 line too long (84 > 79 characters)
+src/bot.py:420:80: E501 line too long (89 > 79 characters)
+src/bot.py:421:80: E501 line too long (92 > 79 characters)
+src/bot.py:439:80: E501 line too long (80 > 79 characters)
+src/bot.py:446:80: E501 line too long (81 > 79 characters)
+src/bot.py:455:80: E501 line too long (80 > 79 characters)
+src/bot.py:465:80: E501 line too long (84 > 79 characters)
+src/bot.py:473:80: E501 line too long (89 > 79 characters)
+src/bot.py:480:80: E501 line too long (87 > 79 characters)
+src/bot.py:488:80: E501 line too long (80 > 79 characters)
+src/bot.py:489:80: E501 line too long (84 > 79 characters)
+src/bot.py:550:80: E501 line too long (83 > 79 characters)
+src/bot.py:605:80: E501 line too long (80 > 79 characters)
+src/bot.py:613:80: E501 line too long (88 > 79 characters)
+src/bot.py:617:80: E501 line too long (80 > 79 characters)
+src/bot.py:619:80: E501 line too long (88 > 79 characters)
+src/bot_logging/logger.py:4:1: F401 'datetime.datetime' imported but unused
+src/bot_logging/logger.py:5:1: F401 'typing.Optional' imported but unused
+src/bot_logging/logger.py:25:80: E501 line too long (84 > 79 characters)
+src/bot_logging/logger.py:63:80: E501 line too long (96 > 79 characters)
+src/bot_logging/logger.py:80:80: E501 line too long (80 > 79 characters)
+src/bot_logging/logger.py:84:80: E501 line too long (104 > 79 characters)
+src/bot_logging/logger.py:100:80: E501 line too long (86 > 79 characters)
+src/bot_logging/logger.py:104:80: E501 line too long (87 > 79 characters)
+src/bot_logging/logger.py:107:80: E501 line too long (96 > 79 characters)
+src/bot_logging/logger.py:119:80: E501 line too long (86 > 79 characters)
+src/bot_logging/logger.py:124:80: E501 line too long (87 > 79 characters)
+src/bot_logging/logger.py:130:80: E501 line too long (82 > 79 characters)
+src/bot_logging/logger.py:156:80: E501 line too long (83 > 79 characters)
+src/bot_logging/logger.py:158:80: E501 line too long (84 > 79 characters)
+src/bot_logging/logger.py:163:80: E501 line too long (82 > 79 characters)
+src/config_validator.py:9:1: F401 'typing.Any' imported but unused
+src/config_validator.py:65:80: E501 line too long (85 > 79 characters)
+src/config_validator.py:78:80: E501 line too long (82 > 79 characters)
+src/config_validator.py:87:80: E501 line too long (82 > 79 characters)
+src/config_validator.py:98:80: E501 line too long (111 > 79 characters)
+src/config_validator.py:104:80: E501 line too long (86 > 79 characters)
+src/config_validator.py:112:80: E501 line too long (87 > 79 characters)
+src/config_validator.py:116:80: E501 line too long (109 > 79 characters)
+src/config_validator.py:128:80: E501 line too long (104 > 79 characters)
+src/config_validator.py:132:80: E501 line too long (100 > 79 characters)
+src/config_validator.py:154:80: E501 line too long (87 > 79 characters)
+src/config_validator.py:156:80: E501 line too long (82 > 79 characters)
+src/config_validator.py:160:80: E501 line too long (106 > 79 characters)
+src/config_validator.py:185:80: E501 line too long (85 > 79 characters)
+src/config_validator.py:194:80: E501 line too long (85 > 79 characters)
+src/config_validator.py:198:80: E501 line too long (130 > 79 characters)
+src/config_validator.py:204:80: E501 line too long (80 > 79 characters)
+src/config_validator.py:206:80: E501 line too long (83 > 79 characters)
+src/config_validator.py:213:80: E501 line too long (93 > 79 characters)
+src/config_validator.py:232:80: E501 line too long (80 > 79 characters)
+src/config_validator.py:236:80: E501 line too long (127 > 79 characters)
+src/config_validator.py:250:80: E501 line too long (90 > 79 characters)
+src/config_validator.py:263:80: E501 line too long (87 > 79 characters)
+src/config_validator.py:271:80: E501 line too long (117 > 79 characters)
+src/config_validator.py:290:80: E501 line too long (98 > 79 characters)
+src/config_validator.py:300:80: E501 line too long (101 > 79 characters)
+src/config_validator.py:307:80: E501 line too long (107 > 79 characters)
+src/config_validator.py:316:80: E501 line too long (83 > 79 characters)
+src/config_validator.py:318:80: E501 line too long (85 > 79 characters)
+src/config_validator.py:329:80: E501 line too long (84 > 79 characters)
+src/config_validator.py:339:80: E501 line too long (84 > 79 characters)
+src/config_validator.py:378:80: E501 line too long (82 > 79 characters)
+src/config_validator.py:380:80: E501 line too long (85 > 79 characters)
+src/exchange/binance_client.py:3:1: F401 'typing.Tuple' imported but unused
+src/exchange/binance_client.py:4:1: F401 'decimal.Decimal' imported but unused
+src/exchange/binance_client.py:6:1: F401 'datetime.datetime' imported but unused
+src/exchange/binance_client.py:8:1: F401 'asyncio' imported but unused
+src/exchange/binance_client.py:31:80: E501 line too long (87 > 79 characters)
+src/exchange/binance_client.py:33:80: E501 line too long (85 > 79 characters)
+src/exchange/binance_client.py:96:80: E501 line too long (86 > 79 characters)
+src/exchange/binance_client.py:114:80: E501 line too long (87 > 79 characters)
+src/exchange/binance_client.py:147:80: E501 line too long (85 > 79 characters)
+src/exchange/binance_client.py:167:80: E501 line too long (81 > 79 characters)
+src/exchange/binance_client.py:175:80: E501 line too long (81 > 79 characters)
+src/exchange/binance_client.py:176:80: E501 line too long (83 > 79 characters)
+src/exchange/binance_client.py:254:80: E501 line too long (86 > 79 characters)
+src/exchange/binance_client.py:259:80: E501 line too long (80 > 79 characters)
+src/exchange/binance_client.py:276:80: E501 line too long (86 > 79 characters)
+src/exchange/binance_client.py:334:80: E501 line too long (88 > 79 characters)
+src/exchange/binance_client.py:337:80: E501 line too long (82 > 79 characters)
+src/exchange/binance_client.py:350:80: E501 line too long (88 > 79 characters)
+src/exchange/binance_client.py:365:80: E501 line too long (83 > 79 characters)
+src/exchange/websocket_manager.py:4:80: E501 line too long (83 > 79 characters)
+src/exchange/websocket_manager.py:12:1: F401 'json' imported but unused
+src/exchange/websocket_manager.py:16:1: F401 'binance.enums.FuturesType' imported but unused
+src/exchange/websocket_manager.py:59:80: E501 line too long (86 > 79 characters)
+src/exchange/websocket_manager.py:64:80: E501 line too long (80 > 79 characters)
+src/exchange/websocket_manager.py:168:80: E501 line too long (81 > 79 characters)
+src/exchange/websocket_manager.py:205:80: E501 line too long (81 > 79 characters)
+src/exchange/websocket_manager.py:244:80: E501 line too long (82 > 79 characters)
+src/exchange/websocket_manager.py:270:80: E501 line too long (84 > 79 characters)
+src/exchange/websocket_manager.py:273:80: E501 line too long (84 > 79 characters)
+src/exchange/websocket_manager.py:283:80: E501 line too long (81 > 79 characters)
+src/exchange/websocket_manager.py:361:80: E501 line too long (87 > 79 characters)
+src/indicators/technical_indicators.py:3:1: F401 'typing.Tuple' imported but unused
+src/indicators/technical_indicators.py:3:1: F401 'typing.Optional' imported but unused
+src/indicators/technical_indicators.py:69:80: E501 line too long (84 > 79 characters)
+src/indicators/technical_indicators.py:83:80: E501 line too long (93 > 79 characters)
+src/indicators/technical_indicators.py:106:80: E501 line too long (81 > 79 characters)
+src/indicators/technical_indicators.py:110:80: E501 line too long (104 > 79 characters)
+src/indicators/technical_indicators.py:112:80: E501 line too long (81 > 79 characters)
+src/indicators/technical_indicators.py:118:80: E501 line too long (80 > 79 characters)
+src/indicators/technical_indicators.py:127:80: E501 line too long (81 > 79 characters)
+src/indicators/technical_indicators.py:152:80: E501 line too long (81 > 79 characters)
+src/indicators/technical_indicators.py:298:80: E501 line too long (88 > 79 characters)
+src/indicators/technical_indicators.py:305:80: E501 line too long (84 > 79 characters)
+src/indicators/technical_indicators.py:408:80: E501 line too long (83 > 79 characters)
+src/indicators/technical_indicators.py:411:80: E501 line too long (84 > 79 characters)
+src/indicators/technical_indicators.py:414:80: E501 line too long (86 > 79 characters)
+src/indicators/technical_indicators.py:470:80: E501 line too long (87 > 79 characters)
+src/indicators/technical_indicators.py:525:80: E501 line too long (83 > 79 characters)
+src/indicators/technical_indicators.py:542:80: E501 line too long (80 > 79 characters)
+src/indicators/technical_indicators.py:567:80: E501 line too long (80 > 79 characters)
+src/indicators/technical_indicators.py:599:80: E501 line too long (103 > 79 characters)
+src/indicators/technical_indicators.py:636:80: E501 line too long (87 > 79 characters)
+src/indicators/technical_indicators.py:641:80: E501 line too long (86 > 79 characters)
+src/indicators/technical_indicators.py:645:80: E501 line too long (82 > 79 characters)
+src/indicators/technical_indicators.py:662:80: E501 line too long (86 > 79 characters)
+src/indicators/technical_indicators.py:665:80: E501 line too long (83 > 79 characters)
+src/indicators/technical_indicators.py:670:80: E501 line too long (82 > 79 characters)
+src/indicators/technical_indicators.py:671:80: E501 line too long (82 > 79 characters)
+src/indicators/technical_indicators.py:698:80: E501 line too long (84 > 79 characters)
+src/indicators/technical_indicators.py:700:80: E501 line too long (87 > 79 characters)
+src/indicators/technical_indicators.py:701:80: E501 line too long (83 > 79 characters)
+src/indicators/technical_indicators.py:705:80: E501 line too long (102 > 79 characters)
+src/notifications/telegram_bot.py:1:1: F401 'asyncio' imported but unused
+src/notifications/telegram_bot.py:3:1: F401 'typing.Optional' imported but unused
+src/notifications/telegram_bot.py:3:1: F401 'typing.List' imported but unused
+src/notifications/telegram_bot.py:8:1: F401 'json' imported but unused
+src/notifications/telegram_bot.py:19:80: E501 line too long (85 > 79 characters)
+src/notifications/telegram_bot.py:24:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:120:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:156:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:160:80: E501 line too long (86 > 79 characters)
+src/notifications/telegram_bot.py:167:80: E501 line too long (82 > 79 characters)
+src/notifications/telegram_bot.py:188:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:199:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:203:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:219:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:232:80: E501 line too long (80 > 79 characters)
+src/notifications/telegram_bot.py:240:80: E501 line too long (81 > 79 characters)
+src/notifications/telegram_bot.py:248:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:256:80: E501 line too long (81 > 79 characters)
+src/notifications/telegram_bot.py:278:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:285:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:286:80: E501 line too long (94 > 79 characters)
+src/notifications/telegram_bot.py:287:80: E501 line too long (86 > 79 characters)
+src/notifications/telegram_bot.py:288:80: E501 line too long (90 > 79 characters)
+src/notifications/telegram_bot.py:289:80: E501 line too long (81 > 79 characters)
+src/notifications/telegram_bot.py:313:80: E501 line too long (88 > 79 characters)
+src/notifications/telegram_bot.py:319:80: E501 line too long (85 > 79 characters)
+src/notifications/telegram_bot.py:332:80: E501 line too long (119 > 79 characters)
+src/notifications/telegram_bot.py:345:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:351:80: E501 line too long (85 > 79 characters)
+src/notifications/telegram_bot.py:358:80: E501 line too long (101 > 79 characters)
+src/notifications/telegram_bot.py:374:80: E501 line too long (81 > 79 characters)
+src/notifications/telegram_bot.py:384:80: E501 line too long (83 > 79 characters)
+src/notifications/telegram_bot.py:391:80: E501 line too long (87 > 79 characters)
+src/notifications/telegram_bot.py:397:80: E501 line too long (88 > 79 characters)
+src/notifications/telegram_bot.py:410:80: E501 line too long (82 > 79 characters)
+src/notifications/telegram_bot.py:412:80: E501 line too long (81 > 79 characters)
+src/notifications/telegram_bot.py:436:80: E501 line too long (98 > 79 characters)
+src/notifications/telegram_bot.py:437:80: E501 line too long (106 > 79 characters)
+src/notifications/telegram_bot.py:438:80: E501 line too long (104 > 79 characters)
+src/notifications/telegram_bot.py:439:80: E501 line too long (102 > 79 characters)
+src/notifications/telegram_bot.py:441:80: E501 line too long (96 > 79 characters)
+src/notifications/telegram_bot.py:442:80: E501 line too long (114 > 79 characters)
+src/notifications/telegram_bot.py:444:80: E501 line too long (122 > 79 characters)
+src/notifications/telegram_bot.py:445:80: E501 line too long (120 > 79 characters)
+src/notifications/telegram_bot.py:446:80: E501 line too long (94 > 79 characters)
+src/notifications/telegram_bot.py:455:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:465:80: E501 line too long (81 > 79 characters)
+src/notifications/telegram_bot.py:469:80: E501 line too long (118 > 79 characters)
+src/notifications/telegram_bot.py:480:80: E501 line too long (80 > 79 characters)
+src/notifications/telegram_bot.py:500:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:502:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:510:80: E501 line too long (84 > 79 characters)
+src/notifications/telegram_bot.py:514:80: E501 line too long (85 > 79 characters)
+src/notifications/telegram_bot.py:526:27: F541 f-string is missing placeholders
+src/notifications/telegram_bot.py:528:80: E501 line too long (86 > 79 characters)
+src/notifications/telegram_bot.py:534:80: E501 line too long (85 > 79 characters)
+src/notifications/telegram_bot.py:559:80: E501 line too long (88 > 79 characters)
+src/notifications/telegram_bot.py:561:80: E501 line too long (84 > 79 characters)
+src/performance/metrics_tracker.py:3:80: E501 line too long (82 > 79 characters)
+src/performance/metrics_tracker.py:52:80: E501 line too long (87 > 79 characters)
+src/performance/metrics_tracker.py:58:80: E501 line too long (94 > 79 characters)
+src/performance/metrics_tracker.py:90:80: E501 line too long (83 > 79 characters)
+src/performance/metrics_tracker.py:123:80: E501 line too long (86 > 79 characters)
+src/performance/metrics_tracker.py:138:80: E501 line too long (86 > 79 characters)
+src/performance/metrics_tracker.py:194:80: E501 line too long (97 > 79 characters)
+src/performance/metrics_tracker.py:211:80: E501 line too long (81 > 79 characters)
+src/performance/metrics_tracker.py:238:80: E501 line too long (80 > 79 characters)
+src/performance/metrics_tracker.py:249:80: E501 line too long (85 > 79 characters)
+src/performance/metrics_tracker.py:346:80: E501 line too long (80 > 79 characters)
+src/performance/metrics_tracker.py:347:80: E501 line too long (84 > 79 characters)
+src/performance/metrics_tracker.py:389:80: E501 line too long (80 > 79 characters)
+src/performance/metrics_tracker.py:390:80: E501 line too long (83 > 79 characters)
+src/performance/metrics_tracker.py:418:80: E501 line too long (80 > 79 characters)
+src/performance/metrics_tracker.py:422:80: E501 line too long (83 > 79 characters)
+src/performance/metrics_tracker.py:447:80: E501 line too long (85 > 79 characters)
+src/persistence/trade_store.py:72:80: E501 line too long (85 > 79 characters)
+src/persistence/trade_store.py:156:80: E501 line too long (96 > 79 characters)
+src/risk_management.py:1:1: F401 'os' imported but unused
+src/risk_management.py:3:1: F401 'decimal.Decimal' imported but unused
+src/risk_management.py:3:1: F401 'decimal.ROUND_DOWN' imported but unused
+src/risk_management.py:5:1: F401 'datetime.timedelta' imported but unused
+src/risk_management.py:19:80: E501 line too long (87 > 79 characters)
+src/risk_management.py:20:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:25:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:28:80: E501 line too long (81 > 79 characters)
+src/risk_management.py:53:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:60:80: E501 line too long (82 > 79 characters)
+src/risk_management.py:78:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:88:80: E501 line too long (85 > 79 characters)
+src/risk_management.py:99:80: E501 line too long (88 > 79 characters)
+src/risk_management.py:111:80: E501 line too long (87 > 79 characters)
+src/risk_management.py:142:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:209:80: E501 line too long (80 > 79 characters)
+src/risk_management.py:217:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:223:80: E501 line too long (80 > 79 characters)
+src/risk_management.py:231:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:292:80: E501 line too long (81 > 79 characters)
+src/risk_management.py:298:80: E501 line too long (80 > 79 characters)
+src/risk_management.py:300:80: E501 line too long (80 > 79 characters)
+src/risk_management.py:335:80: E501 line too long (81 > 79 characters)
+src/risk_management.py:346:80: E501 line too long (80 > 79 characters)
+src/risk_management.py:353:80: E501 line too long (86 > 79 characters)
+src/risk_management.py:405:80: E501 line too long (80 > 79 characters)
+src/risk_management.py:407:80: E501 line too long (85 > 79 characters)
+src/strategies/__init__.py:1:80: E501 line too long (83 > 79 characters)
+src/strategies/base_strategy.py:2:1: F401 'typing.List' imported but unused
+src/strategies/base_strategy.py:2:1: F401 'typing.Tuple' imported but unused
+src/strategies/base_strategy.py:2:1: F401 'typing.Any' imported but unused
+src/strategies/base_strategy.py:7:1: F401 'importlib' imported but unused
+src/strategies/base_strategy.py:40:80: E501 line too long (111 > 79 characters)
+src/strategies/base_strategy.py:111:80: E501 line too long (99 > 79 characters)
+src/strategies/base_strategy.py:158:80: E501 line too long (82 > 79 characters)
+src/strategies/base_strategy.py:170:80: E501 line too long (84 > 79 characters)
+src/strategies/base_strategy.py:189:80: E501 line too long (82 > 79 characters)
+src/strategies/base_strategy.py:233:80: E501 line too long (81 > 79 characters)
+src/strategies/base_strategy.py:237:80: E501 line too long (86 > 79 characters)
+src/strategies/base_strategy.py:261:9: F841 local variable 'indicators_data' is assigned to but never used
+src/strategies/base_strategy.py:321:80: E501 line too long (85 > 79 characters)
+src/strategies/base_strategy.py:325:80: E501 line too long (81 > 79 characters)
+src/strategies/base_strategy.py:369:80: E501 line too long (84 > 79 characters)
+src/strategies/ensemble_strategy.py:12:1: F401 'numpy as np' imported but unused
+src/strategies/ensemble_strategy.py:22:1: E402 module level import not at top of file
+src/strategies/ensemble_strategy.py:23:1: E402 module level import not at top of file
+src/strategies/ensemble_strategy.py:24:1: E402 module level import not at top of file
+src/strategies/ensemble_strategy.py:38:80: E501 line too long (87 > 79 characters)
+src/strategies/ensemble_strategy.py:83:80: E501 line too long (85 > 79 characters)
+src/strategies/ensemble_strategy.py:144:80: E501 line too long (87 > 79 characters)
+src/strategies/ensemble_strategy.py:150:80: E501 line too long (82 > 79 characters)
+src/strategies/ensemble_strategy.py:158:80: E501 line too long (83 > 79 characters)
+src/strategies/ensemble_strategy.py:174:80: E501 line too long (83 > 79 characters)
+src/strategies/ensemble_strategy.py:175:80: E501 line too long (88 > 79 characters)
+src/strategies/ensemble_strategy.py:179:80: E501 line too long (85 > 79 characters)
+src/strategies/ensemble_strategy.py:184:80: E501 line too long (85 > 79 characters)
+src/strategies/ensemble_strategy.py:210:80: E501 line too long (93 > 79 characters)
+src/strategies/ensemble_strategy.py:298:80: E501 line too long (81 > 79 characters)
+src/strategies/ensemble_strategy.py:302:80: E501 line too long (83 > 79 characters)
+src/strategies/ensemble_strategy.py:310:80: E501 line too long (85 > 79 characters)
+src/strategies/ensemble_strategy.py:315:80: E501 line too long (88 > 79 characters)
+src/strategies/ensemble_strategy.py:319:80: E501 line too long (103 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:3:1: F401 'typing.List' imported but unused
+src/strategies/freqai/base_freqai_strategy.py:3:1: F401 'typing.Tuple' imported but unused
+src/strategies/freqai/base_freqai_strategy.py:3:1: F401 'typing.Any' imported but unused
+src/strategies/freqai/base_freqai_strategy.py:16:1: E402 module level import not at top of file
+src/strategies/freqai/base_freqai_strategy.py:17:1: E402 module level import not at top of file
+src/strategies/freqai/base_freqai_strategy.py:24:80: E501 line too long (82 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:33:80: E501 line too long (81 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:35:80: E501 line too long (85 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:38:80: E501 line too long (86 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:39:80: E501 line too long (82 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:57:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:65:80: E501 line too long (83 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:67:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:70:80: E501 line too long (84 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:75:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:85:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:95:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:105:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:177:80: E501 line too long (86 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:264:13: F841 local variable 'training_data' is assigned to but never used
+src/strategies/freqai/base_freqai_strategy.py:266:80: E501 line too long (90 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:267:80: E501 line too long (81 > 79 characters)
+src/strategies/freqai/base_freqai_strategy.py:312:80: E501 line too long (84 > 79 characters)
+src/strategies/freqai/example_freqai_strategy.py:2:1: F401 'numpy as np' imported but unused
+src/strategies/freqai/example_freqai_strategy.py:4:1: F401 'datetime.datetime' imported but unused
+src/strategies/freqai/example_freqai_strategy.py:16:1: F401 'strategies.freqai.base_freqai_strategy.SignalType' imported but unused
+src/strategies/freqai/example_freqai_strategy.py:16:1: E402 module level import not at top of file
+src/strategies/freqai/example_freqai_strategy.py:21:1: E402 module level import not at top of file
+src/strategies/freqai/example_freqai_strategy.py:61:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/example_freqai_strategy.py:64:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/example_freqai_strategy.py:86:80: E501 line too long (85 > 79 characters)
+src/strategies/freqai/example_freqai_strategy.py:90:80: E501 line too long (84 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:2:1: F401 'numpy as np' imported but unused
+src/strategies/freqai/ml_freqai_strategy.py:3:1: F401 'typing.Optional' imported but unused
+src/strategies/freqai/ml_freqai_strategy.py:4:1: F401 'datetime.datetime' imported but unused
+src/strategies/freqai/ml_freqai_strategy.py:9:80: E501 line too long (83 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:21:1: F401 'strategies.freqai.base_freqai_strategy.TradingSignal' imported but unused
+src/strategies/freqai/ml_freqai_strategy.py:21:1: F401 'strategies.freqai.base_freqai_strategy.SignalType' imported but unused
+src/strategies/freqai/ml_freqai_strategy.py:21:1: E402 module level import not at top of file
+src/strategies/freqai/ml_freqai_strategy.py:26:1: E402 module level import not at top of file
+src/strategies/freqai/ml_freqai_strategy.py:33:80: E501 line too long (83 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:47:80: E501 line too long (84 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:55:80: E501 line too long (82 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:66:80: E501 line too long (82 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:67:80: E501 line too long (82 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:102:80: E501 line too long (88 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:103:80: E501 line too long (88 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:107:80: E501 line too long (83 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:111:80: E501 line too long (84 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:115:80: E501 line too long (84 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:117:80: E501 line too long (81 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:122:80: E501 line too long (81 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:173:80: E501 line too long (83 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:186:80: E501 line too long (87 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:200:80: E501 line too long (87 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:216:80: E501 line too long (80 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:238:80: E501 line too long (81 > 79 characters)
+src/strategies/freqai/ml_freqai_strategy.py:274:80: E501 line too long (83 > 79 characters)
+src/strategies/momentum_strategy.py:2:1: F401 'numpy as np' imported but unused
+src/strategies/momentum_strategy.py:8:1: F401 'indicators.technical_indicators.PatternRecognition' imported but unused
+src/strategies/momentum_strategy.py:8:80: E501 line too long (88 > 79 characters)
+src/strategies/momentum_strategy.py:41:80: E501 line too long (88 > 79 characters)
+src/strategies/momentum_strategy.py:53:80: E501 line too long (122 > 79 characters)
+src/strategies/momentum_strategy.py:85:80: E501 line too long (87 > 79 characters)
+src/strategies/momentum_strategy.py:90:80: E501 line too long (80 > 79 characters)
+src/strategies/momentum_strategy.py:100:80: E501 line too long (82 > 79 characters)
+src/strategies/momentum_strategy.py:107:80: E501 line too long (85 > 79 characters)
+src/strategies/momentum_strategy.py:129:80: E501 line too long (82 > 79 characters)
+src/strategies/momentum_strategy.py:167:80: E501 line too long (86 > 79 characters)
+src/strategies/momentum_strategy.py:198:80: E501 line too long (86 > 79 characters)
+src/strategies/momentum_strategy.py:253:80: E501 line too long (84 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:13:1: F401 'datetime.datetime' imported but unused
+tests/test_advanced_risk_TEMPLATE.py:13:1: F401 'datetime.timedelta' imported but unused
+tests/test_advanced_risk_TEMPLATE.py:14:1: F401 'unittest.mock.Mock' imported but unused
+tests/test_advanced_risk_TEMPLATE.py:21:1: F401 'advanced_risk_management.AdvancedRiskManager' imported but unused
+tests/test_advanced_risk_TEMPLATE.py:21:1: F401 'advanced_risk_management.PositionSizingResult' imported but unused
+tests/test_advanced_risk_TEMPLATE.py:21:1: F401 'advanced_risk_management.PortfolioHeatMap' imported but unused
+tests/test_advanced_risk_TEMPLATE.py:21:1: E402 module level import not at top of file
+tests/test_advanced_risk_TEMPLATE.py:66:80: E501 line too long (80 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:88:80: E501 line too long (81 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:123:80: E501 line too long (81 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:162:80: E501 line too long (84 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:332:80: E501 line too long (86 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:339:80: E501 line too long (83 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:347:80: E501 line too long (81 > 79 characters)
+tests/test_advanced_risk_TEMPLATE.py:350:80: E501 line too long (87 > 79 characters)
+tests/test_akiba_crypto_bot.py:2:1: F401 'asyncio' imported but unused
+tests/test_akiba_crypto_bot.py:5:1: F401 'unittest.mock.AsyncMock' imported but unused
+tests/test_akiba_crypto_bot.py:12:1: E402 module level import not at top of file
+tests/test_akiba_crypto_bot.py:210:80: E501 line too long (86 > 79 characters)
+tests/test_akiba_crypto_bot.py:258:80: E501 line too long (83 > 79 characters)
+tests/test_akiba_crypto_bot.py:273:80: E501 line too long (86 > 79 characters)
+tests/test_binance_connector.py:2:1: F401 'asyncio' imported but unused
+tests/test_binance_connector.py:5:1: F401 'unittest.mock.AsyncMock' imported but unused
+tests/test_binance_connector.py:12:1: E402 module level import not at top of file
+tests/test_binance_connector.py:62:34: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_binance_connector.py:84:80: E501 line too long (84 > 79 characters)
+tests/test_binance_connector.py:88:80: E501 line too long (85 > 79 characters)
+tests/test_binance_connector.py:153:80: E501 line too long (82 > 79 characters)
+tests/test_binance_connector.py:194:80: E501 line too long (83 > 79 characters)
+tests/test_binance_connector.py:208:80: E501 line too long (84 > 79 characters)
+tests/test_binance_connector.py:217:80: E501 line too long (80 > 79 characters)
+tests/test_binance_connector.py:223:80: E501 line too long (80 > 79 characters)
+tests/test_binance_connector.py:248:80: E501 line too long (91 > 79 characters)
+tests/test_binance_connector.py:254:80: E501 line too long (83 > 79 characters)
+tests/test_binance_connector.py:259:80: E501 line too long (86 > 79 characters)
+tests/test_binance_connector.py:263:80: E501 line too long (85 > 79 characters)
+tests/test_binance_connector.py:267:80: E501 line too long (81 > 79 characters)
+tests/test_binance_connector.py:285:80: E501 line too long (80 > 79 characters)
+tests/test_config.py:2:1: F401 'asyncio' imported but unused
+tests/test_config.py:6:1: F401 'unittest.mock.Mock' imported but unused
+tests/test_config.py:6:1: F401 'unittest.mock.patch' imported but unused
+tests/test_config.py:6:1: F401 'unittest.mock.mock_open' imported but unused
+tests/test_config.py:13:80: E501 line too long (99 > 79 characters)
+tests/test_config.py:15:80: E501 line too long (82 > 79 characters)
+tests/test_config.py:58:18: F821 undefined name 'load_config'
+tests/test_config.py:68:13: F821 undefined name 'load_config'
+tests/test_config.py:82:13: F821 undefined name 'load_config'
+tests/test_config.py:114:9: F821 undefined name 'validate_config'
+tests/test_config.py:138:13: F821 undefined name 'validate_config'
+tests/test_config.py:167:13: F821 undefined name 'validate_config'
+tests/test_config.py:197:13: F821 undefined name 'validate_config'
+tests/test_config.py:220:80: E501 line too long (86 > 79 characters)
+tests/test_config.py:221:13: F821 undefined name 'validate_config'
+tests/test_freqai_strategies.py:4:1: F401 'unittest.mock.AsyncMock' imported but unused
+tests/test_freqai_strategies.py:4:1: F401 'unittest.mock.Mock' imported but unused
+tests/test_freqai_strategies.py:4:1: F401 'unittest.mock.patch' imported but unused
+tests/test_freqai_strategies.py:11:1: E402 module level import not at top of file
+tests/test_freqai_strategies.py:12:1: E402 module level import not at top of file
+tests/test_freqai_strategies.py:13:1: F401 'strategies.base_strategy.SignalType' imported but unused
+tests/test_freqai_strategies.py:13:1: E402 module level import not at top of file
+tests/test_freqai_strategies.py:52:36: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_freqai_strategies.py:62:36: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_freqai_strategies.py:65:35: E712 comparison to False should be 'if cond is False:' or 'if not cond:'
+tests/test_freqai_strategies.py:69:80: E501 line too long (80 > 79 characters)
+tests/test_freqai_strategies.py:74:80: E501 line too long (83 > 79 characters)
+tests/test_logger.py:1:1: F401 'pytest' imported but unused
+tests/test_logger.py:5:1: F401 'unittest.mock.Mock' imported but unused
+tests/test_logger.py:10:1: E402 module level import not at top of file
+tests/test_logger.py:38:80: E501 line too long (80 > 79 characters)
+tests/test_logger.py:76:80: E501 line too long (80 > 79 characters)
+tests/test_logger.py:97:50: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_logger.py:98:51: E712 comparison to False should be 'if cond is False:' or 'if not cond:'
+tests/test_logger.py:99:53: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_logger.py:100:51: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_performance_tracker.py:6:1: F401 'datetime.datetime' imported but unused
+tests/test_performance_tracker.py:6:1: F401 'datetime.timedelta' imported but unused
+tests/test_performance_tracker.py:7:1: F401 'performance.metrics_tracker.Trade' imported but unused
+tests/test_performance_tracker.py:241:80: E501 line too long (84 > 79 characters)
+tests/test_portfolio_manager.py:2:1: F401 'asyncio' imported but unused
+tests/test_portfolio_manager.py:3:1: F401 'pandas as pd' imported but unused
+tests/test_portfolio_manager.py:4:1: F401 'numpy as np' imported but unused
+tests/test_portfolio_manager.py:5:1: F401 'unittest.mock.Mock' imported but unused
+tests/test_portfolio_manager.py:5:1: F401 'unittest.mock.patch' imported but unused
+tests/test_portfolio_manager.py:5:1: F401 'unittest.mock.AsyncMock' imported but unused
+tests/test_portfolio_manager.py:52:29: F821 undefined name 'PortfolioManager'
+tests/test_portfolio_manager.py:62:29: F821 undefined name 'PortfolioManager'
+tests/test_portfolio_manager.py:72:29: F821 undefined name 'PortfolioManager'
+tests/test_portfolio_manager.py:86:29: F821 undefined name 'PortfolioManager'
+tests/test_portfolio_manager.py:89:59: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_portfolio_manager.py:90:59: E712 comparison to False should be 'if cond is False:' or 'if not cond:'
+tests/test_portfolio_manager.py:92:80: E501 line too long (83 > 79 characters)
+tests/test_portfolio_manager.py:94:29: F821 undefined name 'PortfolioManager'
+tests/test_strategies.py:2:1: F401 'asyncio' imported but unused
+tests/test_strategies.py:5:1: F401 'unittest.mock.Mock' imported but unused
+tests/test_strategies.py:5:1: F401 'unittest.mock.patch' imported but unused
+tests/test_strategies.py:5:1: F401 'unittest.mock.AsyncMock' imported but unused
+tests/test_strategies.py:12:1: F401 'strategies.base_strategy.BaseStrategy' imported but unused
+tests/test_strategies.py:12:1: E402 module level import not at top of file
+tests/test_strategies.py:13:1: E402 module level import not at top of file
+tests/test_strategies.py:14:1: E402 module level import not at top of file
+tests/test_strategies.py:15:1: E402 module level import not at top of file
+tests/test_strategies.py:72:55: E712 comparison to True should be 'if cond is True:' or 'if cond:'
+tests/test_strategies.py:81:57: E712 comparison to False should be 'if cond is False:' or 'if not cond:'
+tests/test_strategies.py:98:80: E501 line too long (82 > 79 characters)
+tests/test_strategies.py:115:80: E501 line too long (84 > 79 characters)
+tests/test_strategies.py:194:80: E501 line too long (80 > 79 characters)
+tests/test_strategy_imports.py:18:9: F401 'strategies.freqai.example_freqai_strategy.ExampleFreqAIStrategy' imported but unused
+tests/test_strategy_imports.py:18:80: E501 line too long (83 > 79 characters)
+tests/test_strategy_imports.py:28:9: F401 'strategies.freqai.ml_freqai_strategy.MLFreqAIStrategy' imported but unused
+tests/test_strategy_imports.py:43:80: E501 line too long (83 > 79 characters)
+tests/test_strategy_imports.py:58:9: F841 local variable 'strategy' is assigned to but never used
+tests/test_strategy_loading.py:8:1: F401 'json' imported but unused
+tests/test_strategy_loading.py:13:1: E402 module level import not at top of file
+tests/test_strategy_manager_loading.py:35:80: E501 line too long (85 > 79 characters)
+tests/test_strategy_manager_loading.py:37:80: E501 line too long (96 > 79 characters)
+tests/test_strategy_manager_loading.py:50:80: E501 line too long (80 > 79 characters)
+tests/test_strategy_manager_loading.py:52:80: E501 line too long (91 > 79 characters)
+tests/test_trade_store.py:4:1: F401 'json' imported but unused
+tests/test_trade_store.py:6:1: F401 'persistence.trade_store.CREATE_TABLE_SQL' imported but unused
+tests/test_trade_store.py:33:80: E501 line too long (81 > 79 characters)
+tests/test_trade_store.py:89:80: E501 line too long (85 > 79 characters)
+tests/test_trade_store.py:99:80: E501 line too long (81 > 79 characters)
+tests/test_walkforward.py:5:1: F401 'datetime.timedelta' imported but unused
+tests/test_walkforward.py:13:1: E402 module level import not at top of file
+tests/test_walkforward.py:14:1: E402 module level import not at top of file
+tests/test_walkforward.py:15:1: E402 module level import not at top of file
+tests/test_walkforward.py:91:80: E501 line too long (80 > 79 characters)
+tests/test_walkforward.py:215:80: E501 line too long (81 > 79 characters)
+tests/test_walkforward.py:405:80: E501 line too long (81 > 79 characters)
+tests/test_walkforward.py:498:9: F841 local variable 'result' is assigned to but never used

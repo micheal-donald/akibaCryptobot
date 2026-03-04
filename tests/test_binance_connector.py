@@ -1,8 +1,7 @@
 import pytest
-import asyncio
 import pandas as pd
 import numpy as np
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 import sys
 import os
 
@@ -232,19 +231,21 @@ class TestBinanceConnector:
                 "limits": {
                     "amount": {"min": 0.0001, "max": 1000.0},
                     "price": {"min": 0.01},
-                    "cost": {"min": 10.0} # minimum notional
-                }
+                    "cost": {"min": 10.0},  # minimum notional
+                },
             },
             "DOGE/USDT": {
                 "precision": {"amount": 0, "price": 5},
                 "limits": {
                     "amount": {"min": 1.0, "max": 1000000.0},
                     "price": {"min": 0.00001},
-                    "cost": {"min": 5.0}
-                }
-            }
+                    "cost": {"min": 5.0},
+                },
+            },
         }
-        mock_exchange.amount_to_precision = lambda sym, amt: f"{amt:.{mock_exchange.markets[sym]['precision']['amount']}f}"
+        mock_exchange.amount_to_precision = lambda sym, amt: (
+            f"{amt:.{mock_exchange.markets[sym]['precision']['amount']}f}"
+        )
         connector.exchange = mock_exchange
         connector._markets_loaded = True
 
@@ -273,14 +274,18 @@ class TestBinanceConnector:
         mock_exchange = Mock()
         mock_exchange.markets = {}
         mock_binance.return_value = mock_exchange
-        
+
         connector = BinanceConnector(
             api_key="test_api_key", secret_key="test_api_secret", sandbox=True
         )
-        
+
         # Override validate to fail
-        with patch.object(connector, 'validate_and_adjust_order', return_value=(False, 0.0001)):
-            order = await connector.place_market_order("BTC/USDT", "buy", 0.0001, price=50000.0)
-            
+        with patch.object(
+            connector, "validate_and_adjust_order", return_value=(False, 0.0001)
+        ):
+            order = await connector.place_market_order(
+                "BTC/USDT", "buy", 0.0001, price=50000.0
+            )
+
             assert order["status"] == "rejected"
             mock_exchange.create_market_order.assert_not_called()

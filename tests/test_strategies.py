@@ -1,15 +1,13 @@
 import pytest
-import asyncio
 import pandas as pd
 import numpy as np
-from unittest.mock import Mock, patch, AsyncMock
 import sys
 import os
 
 # Add src to path for imports
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from strategies.base_strategy import BaseStrategy, TradingSignal, SignalType
+from strategies.base_strategy import TradingSignal, SignalType
 from strategies.momentum_strategy import MomentumStrategy
 from risk_management import RiskManager
 from indicators.technical_indicators import (

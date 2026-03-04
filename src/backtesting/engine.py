@@ -4,9 +4,8 @@ from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 from dataclasses import dataclass
-from enum import Enum
 
-from strategies.base_strategy import BaseStrategy, TradingSignal, SignalType
+from strategies.base_strategy import BaseStrategy, TradingSignal
 from risk_management import RiskManager
 
 logger = logging.getLogger(__name__)

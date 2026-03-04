@@ -9,7 +9,6 @@ Uses weighted voting to combine:
 import logging
 from typing import Dict, Optional, List, Tuple
 import pandas as pd
-import numpy as np
 from dataclasses import dataclass
 import sys
 import os

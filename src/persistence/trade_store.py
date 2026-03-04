@@ -69,9 +69,7 @@ class TradeStore:
 
     async def load_open_trades(self) -> Dict[str, Dict]:
         """Return all open trades as a dict keyed by symbol."""
-        cursor = await self._db.execute(
-            "SELECT * FROM trades WHERE status = 'open'"
-        )
+        cursor = await self._db.execute("SELECT * FROM trades WHERE status = 'open'")
         rows = await cursor.fetchall()
         trades: Dict[str, Dict] = {}
         for row in rows:

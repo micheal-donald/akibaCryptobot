@@ -577,41 +577,41 @@ class PerformanceMetricsTracker:
 
 📊 BALANCE & RETURNS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Initial Balance:      ${metrics['initial_balance']:,.2f}
-  Current Balance:      ${metrics['current_balance']:,.2f}
-  Total P&L:            ${metrics['total_pnl']:,.2f}
-  Total Return:         {metrics['total_return_percent']:.2f}%
+  Initial Balance:      ${metrics["initial_balance"]:,.2f}
+  Current Balance:      ${metrics["current_balance"]:,.2f}
+  Total P&L:            ${metrics["total_pnl"]:,.2f}
+  Total Return:         {metrics["total_return_percent"]:.2f}%
 
 📈 TRADE STATISTICS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Total Trades:         {metrics['total_trades']}
-  Winning Trades:       {metrics['winning_trades']}
-  Losing Trades:        {metrics['losing_trades']}
-  Win Rate:             {metrics['win_rate']:.2f}%
+  Total Trades:         {metrics["total_trades"]}
+  Winning Trades:       {metrics["winning_trades"]}
+  Losing Trades:        {metrics["losing_trades"]}
+  Win Rate:             {metrics["win_rate"]:.2f}%
 
-  Average Win:          ${metrics['average_win']:.2f}
-  Average Loss:         ${metrics['average_loss']:.2f}
-  Win/Loss Ratio:       {metrics['win_loss_ratio']:.2f}
+  Average Win:          ${metrics["average_win"]:.2f}
+  Average Loss:         ${metrics["average_loss"]:.2f}
+  Win/Loss Ratio:       {metrics["win_loss_ratio"]:.2f}
 
 ⚖️ RISK-ADJUSTED METRICS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Sharpe Ratio:         {metrics['sharpe_ratio']:.3f}
-  Sortino Ratio:        {metrics['sortino_ratio']:.3f}
-  Profit Factor:        {metrics['profit_factor']:.3f}
-  Expectancy:           ${metrics['expectancy']:.2f}
+  Sharpe Ratio:         {metrics["sharpe_ratio"]:.3f}
+  Sortino Ratio:        {metrics["sortino_ratio"]:.3f}
+  Profit Factor:        {metrics["profit_factor"]:.3f}
+  Expectancy:           ${metrics["expectancy"]:.2f}
 
 📉 DRAWDOWN ANALYSIS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Max Drawdown:         {metrics['max_drawdown_percent']:.2f}%
-  Max DD Amount:        ${metrics['max_drawdown_amount']:.2f}
-  Max DD Duration:      {metrics['max_drawdown_duration_hours']:.1f} hours
-  Current Drawdown:     {metrics['current_drawdown_percent']:.2f}%
+  Max Drawdown:         {metrics["max_drawdown_percent"]:.2f}%
+  Max DD Amount:        ${metrics["max_drawdown_amount"]:.2f}
+  Max DD Duration:      {metrics["max_drawdown_duration_hours"]:.1f} hours
+  Current Drawdown:     {metrics["current_drawdown_percent"]:.2f}%
 
 📂 CURRENT STATUS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Open Positions:       {metrics['open_trades_count']}
+  Open Positions:       {metrics["open_trades_count"]}
 
-Generated: {metrics['calculated_at']}
+Generated: {metrics["calculated_at"]}
 ╚══════════════════════════════════════════════════════════════╝
 """
         return report.strip()

@@ -1,11 +1,10 @@
 import pandas as pd
-import numpy as np
 from typing import Dict, Optional
 from datetime import datetime
 import logging
 
 from .base_strategy import BaseStrategy, TradingSignal, SignalType
-from indicators.technical_indicators import calculate_all_indicators, PatternRecognition
+from indicators.technical_indicators import calculate_all_indicators
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,6 @@
-import os
 from typing import Dict, Optional, Tuple
-from decimal import Decimal, ROUND_DOWN
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 
 # Import the new advanced risk management features
@@ -42,10 +40,10 @@ class RiskManager:
         self.portfolio_history = []
 
         logger.info("Risk Manager initialized with parameters:")
-        logger.info(f"- Max position size: {self.max_position_size*100}%")
-        logger.info(f"- Max daily loss: {self.max_daily_loss*100}%")
-        logger.info(f"- Stop loss: {self.stop_loss_percent*100}%")
-        logger.info(f"- Take profit: {self.take_profit_percent*100}%")
+        logger.info(f"- Max position size: {self.max_position_size * 100}%")
+        logger.info(f"- Max daily loss: {self.max_daily_loss * 100}%")
+        logger.info(f"- Stop loss: {self.stop_loss_percent * 100}%")
+        logger.info(f"- Take profit: {self.take_profit_percent * 100}%")
 
     def reset_daily_counters(self):
         """Reset daily counters at the start of each day"""

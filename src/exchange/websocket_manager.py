@@ -9,11 +9,9 @@ import asyncio
 import logging
 from typing import Dict, List, Callable, Optional, Any
 from collections import defaultdict
-import json
 from datetime import datetime
 
 from binance import AsyncClient, BinanceSocketManager
-from binance.enums import FuturesType
 
 logger = logging.getLogger(__name__)
 

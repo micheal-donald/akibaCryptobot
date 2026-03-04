@@ -1,11 +1,9 @@
-import asyncio
 import os
-from typing import Optional, Dict, List
+from typing import Dict
 import logging
 from datetime import datetime
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -283,9 +281,9 @@ class TelegramNotifier:
                 message = (
                     "⚙️ Bot Configuration:\n"
                     f"Trading Mode: {config_info.get('trading_mode', 'Unknown')}\n"
-                    f"Max Position Size: {config_info.get('max_position_size', 0)*100:.1f}%\n"
-                    f"Stop Loss: {config_info.get('stop_loss_percent', 0)*100:.1f}%\n"
-                    f"Take Profit: {config_info.get('take_profit_percent', 0)*100:.1f}%\n"
+                    f"Max Position Size: {config_info.get('max_position_size', 0) * 100:.1f}%\n"
+                    f"Stop Loss: {config_info.get('stop_loss_percent', 0) * 100:.1f}%\n"
+                    f"Take Profit: {config_info.get('take_profit_percent', 0) * 100:.1f}%\n"
                     f"Max Open Trades: {config_info.get('max_open_trades', 0)}\n"
                     f"Trading Pairs: {', '.join(config_info.get('pairs', []))}"
                 )
@@ -523,7 +521,7 @@ class TelegramNotifier:
                     )
                     return
 
-                message = f"🔥 Portfolio Risk Heatmap\n\n"
+                message = "🔥 Portfolio Risk Heatmap\n\n"
                 message += (
                     f"⚡ Total Portfolio Risk: {heatmap.total_portfolio_risk:.2f}%\n\n"
                 )
@@ -556,7 +554,9 @@ class TelegramNotifier:
 
                 await update.message.reply_text(message)
             except Exception as e:
-                await update.message.reply_text(f"❌ Error generating heatmap: {str(e)}")
+                await update.message.reply_text(
+                    f"❌ Error generating heatmap: {str(e)}"
+                )
         else:
             await update.message.reply_text("❌ Advanced risk manager not available")
 

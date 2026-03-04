@@ -1,8 +1,7 @@
 import pytest
-import asyncio
 import pandas as pd
 import numpy as np
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
 import sys
 import os
 

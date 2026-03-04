@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, Optional
 from datetime import datetime
 import logging
 import sys
@@ -261,7 +261,7 @@ class BaseFreqAIStrategy(BaseStrategy):
             logger.info(f"Training FreqAI model for {symbol}")
 
             # Prepare training data
-            training_data = self._prepare_training_data(ohlcv_data)
+            self._prepare_training_data(ohlcv_data)
 
             # In a real implementation, this would interface with FreqAI's training system
             # For now, we'll just set the flag to indicate the model is "trained"

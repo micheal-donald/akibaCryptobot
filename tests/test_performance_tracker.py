@@ -3,8 +3,7 @@ Tests for performance metrics tracker
 """
 
 import pytest
-from datetime import datetime, timedelta
-from performance.metrics_tracker import PerformanceMetricsTracker, Trade
+from performance.metrics_tracker import PerformanceMetricsTracker
 
 
 class TestPerformanceMetricsTracker:

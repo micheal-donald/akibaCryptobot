@@ -3,7 +3,6 @@ WebSocket streams for real-time data push to browser clients.
 """
 
 import asyncio
-import json
 import logging
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect

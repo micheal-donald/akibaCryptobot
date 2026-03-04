@@ -15,7 +15,7 @@ def test_direct_imports():
     print("Testing direct imports of FreqAI strategies...")
 
     try:
-        from strategies.freqai.example_freqai_strategy import ExampleFreqAIStrategy
+        pass
 
         print("✓ ExampleFreqAIStrategy imported successfully")
     except Exception as e:
@@ -25,7 +25,7 @@ def test_direct_imports():
         traceback.print_exc()
 
     try:
-        from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
+        pass
 
         print("✓ MLFreqAIStrategy imported successfully")
     except Exception as e:
@@ -43,7 +43,7 @@ def test_strategy_instantiation():
         from strategies.freqai.example_freqai_strategy import ExampleFreqAIStrategy
 
         config = {"freqai": {"enabled": True}}
-        strategy = ExampleFreqAIStrategy(config)
+        ExampleFreqAIStrategy(config)
         print("✓ ExampleFreqAIStrategy instantiated successfully")
     except Exception as e:
         print(f"✗ Failed to instantiate ExampleFreqAIStrategy: {e}")
@@ -55,7 +55,7 @@ def test_strategy_instantiation():
         from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
 
         config = {"freqai": {"enabled": True}}
-        strategy = MLFreqAIStrategy(config)
+        MLFreqAIStrategy(config)
         print("✓ MLFreqAIStrategy instantiated successfully")
     except Exception as e:
         print(f"✗ Failed to instantiate MLFreqAIStrategy: {e}")

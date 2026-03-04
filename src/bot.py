@@ -1,11 +1,9 @@
 import asyncio
 import json
-import logging
 import os
-from typing import Dict, List, Optional
+from typing import Dict
 from datetime import datetime, timedelta
 import signal
-import sys
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -489,9 +487,13 @@ class AkibaCryptoBot:
             take_profit = self.risk_manager.calculate_take_profit(entry_price, side)
 
             # Place the order
-            order = await self.exchange.place_market_order(symbol, side, amount, price=entry_price)
+            order = await self.exchange.place_market_order(
+                symbol, side, amount, price=entry_price
+            )
             if order.get("status") == "rejected":
-                self.logger.warning(f"Order rejected for {symbol}: {order.get('reason')}")
+                self.logger.warning(
+                    f"Order rejected for {symbol}: {order.get('reason')}"
+                )
                 return
 
             # Track the trade

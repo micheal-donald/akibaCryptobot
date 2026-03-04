@@ -18,7 +18,6 @@ from backtesting.engine import BacktestEngine
 from backtesting.walkforward import WalkForwardAnalyzer
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
-from exchange.binance_client import BinanceClient
 from bot_logging.logger import setup_logging
 
 import logging
@@ -187,10 +186,10 @@ async def main():
 
             # Additional analysis
             if result.trades:
-                print(f"\nFirst 5 trades:")
+                print("\nFirst 5 trades:")
                 for i, trade in enumerate(result.trades[:5]):
                     print(
-                        f"  {i+1}. {trade.symbol} {trade.side.upper()} "
+                        f"  {i + 1}. {trade.symbol} {trade.side.upper()} "
                         f"{trade.quantity:.6f} @ {trade.entry_price:.2f} -> "
                         f"{trade.exit_price:.2f} ({trade.pnl_percentage:.2f}%)"
                     )
@@ -253,7 +252,7 @@ def save_walkforward_results_to_file(result, filename: str):
             for i, (in_sample, out_of_sample) in enumerate(
                 zip(result.in_sample_results, result.out_of_sample_results)
             ):
-                f.write(f"\nFold {i+1}:\n")
+                f.write(f"\nFold {i + 1}:\n")
                 f.write(f"  In-sample Win Rate: {in_sample.win_rate:.2f}%\n")
                 f.write(f"  Out-of-sample Win Rate: {out_of_sample.win_rate:.2f}%\n")
                 f.write(

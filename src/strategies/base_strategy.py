@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, Optional
 import pandas as pd
 import logging
 from datetime import datetime
 from enum import Enum
-import importlib
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +80,6 @@ class BaseStrategy(ABC):
         Returns:
             TradingSignal or None if no signal
         """
-        pass
 
     @abstractmethod
     def calculate_indicators(self, ohlcv_data: pd.DataFrame) -> pd.DataFrame:
@@ -94,7 +92,6 @@ class BaseStrategy(ABC):
         Returns:
             DataFrame with calculated indicators
         """
-        pass
 
     def validate_signal(self, signal: TradingSignal) -> bool:
         """
@@ -258,7 +255,7 @@ class BaseStrategy(ABC):
         logger.info(f"Warming up strategy {self.name} for {symbol}")
 
         # Calculate indicators with historical data
-        indicators_data = self.calculate_indicators(ohlcv_data)
+        self.calculate_indicators(ohlcv_data)
 
         # This can be overridden by specific strategies for more complex warmup
         logger.info(f"Strategy {self.name} warmup completed for {symbol}")

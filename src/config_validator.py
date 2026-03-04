@@ -6,7 +6,7 @@ parameters are present and have valid values.
 """
 
 import logging
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ class ConfigValidator:
                 )
             elif max_risk > 0.05:
                 self.warnings.append(
-                    f"'risk_management.max_risk_per_trade' is {max_risk*100}% - consider reducing to 1-2%"
+                    f"'risk_management.max_risk_per_trade' is {max_risk * 100}% - consider reducing to 1-2%"
                 )
 
     def _validate_advanced_risk(self, adv_risk: Dict):
@@ -233,7 +233,7 @@ class ConfigValidator:
                 )
             elif dd_thresh > 0.5:
                 self.warnings.append(
-                    f"'advanced_risk.drawdown_threshold' is {dd_thresh*100}% - very high, circuit breaker may trigger too late"
+                    f"'advanced_risk.drawdown_threshold' is {dd_thresh * 100}% - very high, circuit breaker may trigger too late"
                 )
 
     def _validate_walkforward(self, walkforward: Dict):

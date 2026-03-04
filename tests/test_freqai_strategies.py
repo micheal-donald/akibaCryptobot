@@ -1,7 +1,6 @@
 import pytest
 import pandas as pd
 import numpy as np
-from unittest.mock import AsyncMock, Mock, patch
 import sys
 import os
 
@@ -10,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from strategies.freqai.example_freqai_strategy import ExampleFreqAIStrategy
 from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
-from strategies.base_strategy import TradingSignal, SignalType
+from strategies.base_strategy import TradingSignal
 
 
 @pytest.fixture
