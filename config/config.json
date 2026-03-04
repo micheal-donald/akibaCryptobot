@@ -29,7 +29,8 @@
     "stop_loss_percent": 0.02,
     "take_profit_percent": 0.04,
     "trailing_stop": true,
-    "trailing_stop_positive": 0.01
+    "trailing_stop_positive": 0.01,
+    "cooldown_candles": 5
   },
   "backtesting": {
     "timerange": "20230101-20231231",
@@ -50,14 +51,20 @@
     "model": "LightGBMClassifier",
     "identifier": "akiba_freqai_model",
     "train_period": 200,
-    "include_timeframes": ["1h", "4h"],
+    "include_timeframes": [
+      "1h",
+      "4h"
+    ],
     "include_corr_pairs": [],
     "data_split_parameters": {
       "test_size": 0.2,
       "random_state": 42
     },
     "feature_parameters": {
-      "include_timeframes": ["1h", "4h"],
+      "include_timeframes": [
+        "1h",
+        "4h"
+      ],
       "include_corr_pairs": []
     },
     "ml_params": {

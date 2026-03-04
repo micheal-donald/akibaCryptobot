@@ -71,6 +71,7 @@ class AkibaCryptoBot:
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self._cached_balance = None  # Refreshed once per trading cycle
+        self.pair_cooldowns: Dict[str, datetime] = {}  # symbol -> cooldown-expiry datetime
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -383,6 +384,19 @@ class AkibaCryptoBot:
                 if closed_info:
                     self.logger.info(f"Trade PnL for {symbol}: {closed_info.get('pnl', 0):.6f}")
 
+                # Enforce cooldown after stop-loss exits to prevent immediate re-entry
+                if reason in ("stop_loss", "trailing_stop"):
+                    cooldown_candles = self.config.get("risk_management", {}).get(
+                        "cooldown_candles", 5
+                    )
+                    timeframe = self.config["trading"]["timeframes"]["primary"]
+                    candle_minutes = self._timeframe_to_minutes(timeframe)
+                    cooldown_delta = timedelta(minutes=candle_minutes * cooldown_candles)
+                    self.pair_cooldowns[symbol] = datetime.now() + cooldown_delta
+                    self.logger.info(
+                        f"Cooldown set for {symbol}: {cooldown_candles} candles ({cooldown_delta})"
+                    )
+
                 # Remove from active trades
                 del self.active_trades[symbol]
 
@@ -408,6 +422,13 @@ class AkibaCryptoBot:
             self.logger.debug("Maximum open trades reached, skipping new opportunities")
             return True
         return False
+
+    def _timeframe_to_minutes(self, timeframe: str) -> int:
+        """Convert a ccxt timeframe string (e.g. '1h', '15m', '1d') to minutes."""
+        multipliers = {"m": 1, "h": 60, "d": 1440, "w": 10080}
+        unit = timeframe[-1]
+        value = int(timeframe[:-1])
+        return value * multipliers.get(unit, 60)
 
     async def _get_market_snapshot(self, pair: str):
         """Fetch OHLCV history and current price for a pair.
@@ -461,6 +482,16 @@ class AkibaCryptoBot:
     async def _process_pair(self, pair: str):
         """Evaluate a single pair and place a trade if conditions are met."""
         try:
+            # Check cooldown — skip pairs that recently hit stop-loss
+            if pair in self.pair_cooldowns:
+                if datetime.now() < self.pair_cooldowns[pair]:
+                    self.logger.debug(
+                        f"Skipping {pair} - on cooldown until {self.pair_cooldowns[pair]}"
+                    )
+                    return
+                else:
+                    del self.pair_cooldowns[pair]  # Cooldown expired, allow trading again
+
             ohlcv_data, current_price = await self._get_market_snapshot(pair)
             if ohlcv_data is None:
                 return

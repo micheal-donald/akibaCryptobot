@@ -244,6 +244,29 @@ class RiskManager:
             return new_trailing_stop
         return current_trailing_stop
 
+    def _check_exit_trigger(
+        self,
+        is_long: bool,
+        price: float,
+        stop_loss: Optional[float],
+        trailing_stop: Optional[float],
+        take_profit: Optional[float],
+    ) -> Tuple[bool, str]:
+        """Check individual exit triggers for a position."""
+        if stop_loss and (
+            (is_long and price <= stop_loss) or (not is_long and price >= stop_loss)
+        ):
+            return True, "stop_loss"
+        if trailing_stop and (
+            (is_long and price <= trailing_stop) or (not is_long and price >= trailing_stop)
+        ):
+            return True, "trailing_stop"
+        if take_profit and (
+            (is_long and price >= take_profit) or (not is_long and price <= take_profit)
+        ):
+            return True, "take_profit"
+        return False, "hold"
+
     def should_close_position(
         self, symbol: str, current_price: float
     ) -> Tuple[bool, str]:
@@ -252,34 +275,15 @@ class RiskManager:
             return False, "No position found"
 
         position = self.positions[symbol]
-        side = position["side"].lower()
-        is_long = side == "buy"
-        stop_loss = position.get("stop_loss")
-        take_profit = position.get("take_profit")
-        trailing_stop = position.get("trailing_stop_price")
+        is_long = position["side"].lower() == "buy"
 
-        # Check stop loss — hit if price moves against the position
-        if stop_loss and (
-            (is_long and current_price <= stop_loss)
-            or (not is_long and current_price >= stop_loss)
-        ):
-            return True, "stop_loss"
-
-        # Check trailing stop — same directional logic as stop loss
-        if trailing_stop and (
-            (is_long and current_price <= trailing_stop)
-            or (not is_long and current_price >= trailing_stop)
-        ):
-            return True, "trailing_stop"
-
-        # Check take profit — hit if price moves in favour of the position
-        if take_profit and (
-            (is_long and current_price >= take_profit)
-            or (not is_long and current_price <= take_profit)
-        ):
-            return True, "take_profit"
-
-        return False, "hold"
+        return self._check_exit_trigger(
+            is_long,
+            current_price,
+            position.get("stop_loss"),
+            position.get("trailing_stop_price"),
+            position.get("take_profit"),
+        )
 
     def add_position(
         self,
