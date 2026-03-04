@@ -176,7 +176,8 @@ class BaseFreqAIStrategy(BaseStrategy):
         """
         # This is a placeholder - actual implementation would depend on the model type
         # and would interface with FreqAI's prediction system
-        latest_features = features_df.iloc[-1:].dropna()
+        # Use iloc[-2:-1] to use the last *completed* candle, not the still-forming live candle
+        latest_features = features_df.iloc[-2:-1].dropna()
 
         if len(latest_features) == 0:
             return {"prediction": 0, "confidence": 0.0}
