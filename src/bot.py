@@ -441,7 +441,9 @@ class AkibaCryptoBot:
                 return False
 
             # Check if signal meets minimum strength
-            if signal.strength < self.config.get("strategy_config", {}).get("min_signal_strength", 0.6):
+            if signal.strength < self.config.get("strategy_config", {}).get(
+                "min_signal_strength", 0.6
+            ):
                 self.logger.debug(
                     f"Signal strength {signal.strength:.2f} below threshold for {symbol}"
                 )
