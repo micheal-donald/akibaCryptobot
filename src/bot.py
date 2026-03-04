@@ -336,28 +336,41 @@ class AkibaCryptoBot:
                     symbol, side, trade["amount"]
                 )
 
-                # Calculate PnL
+                # Extract exit fee and compute net PnL
+                exit_fee_info = order.get("fee", {})
+                exit_fee_cost = exit_fee_info.get("cost", 0.0) if exit_fee_info else 0.0
+
+                # Get exit price from ticker
                 ticker = await self.data_exchange.get_ticker(symbol)
                 exit_price = ticker["last"]
+
+                entry_fee = trade.get("entry_fee", 0.0)
+                total_fees = entry_fee + exit_fee_cost
+
                 if trade["side"] == "buy":
-                    pnl = (exit_price - trade["entry_price"]) * trade["amount"]
+                    gross_pnl = (exit_price - trade["entry_price"]) * trade["amount"]
                 else:
-                    pnl = (trade["entry_price"] - exit_price) * trade["amount"]
+                    gross_pnl = (trade["entry_price"] - exit_price) * trade["amount"]
+
+                net_pnl = gross_pnl - total_fees
+
+                self.logger.info(
+                    f"Closed {symbol}: gross PnL={gross_pnl:.4f}, fees={total_fees:.4f}, net PnL={net_pnl:.4f}"
+                )
 
                 # Persist exit to database
                 await self.trade_store.update_trade_exit(
-                    symbol, exit_price, reason, pnl
-                )
-
-                self.logger.info(
-                    f"Closed position {symbol} due to {reason} | PnL: {pnl:.4f}"
+                    symbol, exit_price, reason, net_pnl, total_fees
                 )
 
                 if self.telegram:
                     await self.telegram.send_message(
                         f"📊 Closed {symbol} position\n"
                         f"Reason: {reason}\n"
-                        f"PnL: ${pnl:.4f}\n"
+                        f"Exit Price: ${exit_price:.4f}\n"
+                        f"Gross PnL: ${gross_pnl:.4f}\n"
+                        f"Fees: ${total_fees:.4f}\n"
+                        f"Net PnL: ${net_pnl:.4f}\n"
                         f"Order ID: {order['id']}"
                     )
 
@@ -524,6 +537,10 @@ class AkibaCryptoBot:
                 order_id=order["id"],
             )
 
+            # Extract entry fee from order response (ccxt provides this)
+            fee_info = order.get("fee", {})
+            entry_fee = fee_info.get("cost", 0.0) if fee_info else 0.0
+
             # Track the trade
             trade_dict = {
                 "symbol": symbol,
@@ -534,6 +551,8 @@ class AkibaCryptoBot:
                 "take_profit": take_profit,
                 "timestamp": datetime.now().isoformat(),
                 "order_id": order["id"],
+                "entry_fee": entry_fee,     # actual fee paid on entry
+                "exit_fee": 0.0,            # filled on exit
             }
             db_id = await self.trade_store.insert_trade(trade_dict)
             trade_dict["db_id"] = db_id
