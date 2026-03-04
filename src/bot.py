@@ -615,6 +615,19 @@ class AkibaCryptoBot:
     async def cleanup(self):
         self.logger.info("Cleaning up resources...")
 
+        # Cancel open orders for all active trades (best-effort, errors are logged)
+        for symbol in list(self.active_trades.keys()):
+            try:
+                open_orders = await self.exchange.get_open_orders(symbol)
+                for order in open_orders:
+                    try:
+                        await self.exchange.cancel_order(order["id"], symbol)
+                        self.logger.info(f"Cancelled order {order['id']} for {symbol} on shutdown")
+                    except Exception as e:
+                        self.logger.error(f"Failed to cancel order {order['id']} for {symbol}: {e}")
+            except Exception as e:
+                self.logger.error(f"Failed to fetch open orders for {symbol} during cleanup: {e}")
+
         # Close trade persistence DB
         await self.trade_store.close()
 
@@ -632,6 +645,7 @@ class AkibaCryptoBot:
                     await self.telegram.application.shutdown()
             except Exception as e:
                 self.logger.error(f"Error stopping Telegram bot: {e}")
+
 
     # Methods for Telegram bot integration
     def get_status_info(self) -> Dict:
