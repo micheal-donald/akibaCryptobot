@@ -65,6 +65,9 @@
       "training_data_period": 1000
     }
   },
+  "persistence": {
+    "db_path": "data/trades.db"
+  },
   "circuit_breaker": {
     "volatility_threshold": 3.0,
     "drawdown_threshold": 0.20

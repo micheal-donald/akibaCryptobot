@@ -18,6 +18,7 @@ from advanced_risk_management import AdvancedRiskManager
 from notifications.telegram_bot import TelegramNotifier
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.base_strategy import StrategyManager
+from persistence.trade_store import TradeStore
 
 
 class AkibaCryptoBot:
@@ -57,7 +58,11 @@ class AkibaCryptoBot:
         # Load strategies based on configuration
         self._load_strategies()
 
-        self.active_trades = {}
+        # Trade persistence (SQLite)
+        db_path = self.config.get("persistence", {}).get("db_path", "data/trades.db")
+        self.trade_store = TradeStore(db_path)
+        self.active_trades: Dict[str, Dict] = {}
+
         self.is_running = False
         self.last_update = datetime.now()
         self._background_tasks: set = set()  # Prevents GC of fire-and-forget tasks
@@ -93,6 +98,10 @@ class AkibaCryptoBot:
         self.is_running = True
 
         try:
+            # Initialize trade persistence and reload open positions
+            await self.trade_store.initialize()
+            self.active_trades = await self.trade_store.load_open_trades()
+
             # Initialize exchange connection
             await self.exchange.get_balance()
             self.logger.info("Successfully connected to exchange")
@@ -317,12 +326,28 @@ class AkibaCryptoBot:
                     symbol, side, trade["amount"]
                 )
 
-                self.logger.info(f"Closed position {symbol} due to {reason}")
+                # Calculate PnL
+                ticker = await self.data_exchange.get_ticker(symbol)
+                exit_price = ticker["last"]
+                if trade["side"] == "buy":
+                    pnl = (exit_price - trade["entry_price"]) * trade["amount"]
+                else:
+                    pnl = (trade["entry_price"] - exit_price) * trade["amount"]
+
+                # Persist exit to database
+                await self.trade_store.update_trade_exit(
+                    symbol, exit_price, reason, pnl
+                )
+
+                self.logger.info(
+                    f"Closed position {symbol} due to {reason} | PnL: {pnl:.4f}"
+                )
 
                 if self.telegram:
                     await self.telegram.send_message(
                         f"📊 Closed {symbol} position\n"
                         f"Reason: {reason}\n"
+                        f"PnL: ${pnl:.4f}\n"
                         f"Order ID: {order['id']}"
                     )
 
@@ -467,15 +492,19 @@ class AkibaCryptoBot:
             order = await self.exchange.place_market_order(symbol, side, amount)
 
             # Track the trade
-            self.active_trades[symbol] = {
+            trade_dict = {
+                "symbol": symbol,
                 "side": side,
                 "amount": amount,
                 "entry_price": entry_price,
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
-                "timestamp": datetime.now(),
+                "timestamp": datetime.now().isoformat(),
                 "order_id": order["id"],
             }
+            db_id = await self.trade_store.insert_trade(trade_dict)
+            trade_dict["db_id"] = db_id
+            self.active_trades[symbol] = trade_dict
 
             self.logger.info(f"Placed {side} order for {amount} {symbol}")
 
@@ -498,6 +527,9 @@ class AkibaCryptoBot:
 
     async def cleanup(self):
         self.logger.info("Cleaning up resources...")
+
+        # Close trade persistence DB
+        await self.trade_store.close()
 
         if self.data_exchange and self.data_exchange is not self.exchange:
             await self.data_exchange.close()
