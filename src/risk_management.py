@@ -188,7 +188,7 @@ class RiskManager:
     def update_trailing_stop(
         self, symbol: str, current_price: float
     ) -> Optional[float]:
-        """Update trailing stop loss if applicable"""
+        """Update trailing stop loss if applicable."""
         if not self.trailing_stop or symbol not in self.positions:
             return None
 
@@ -196,75 +196,88 @@ class RiskManager:
         if "trailing_stop_price" not in position:
             return None
 
-        side = position["side"]
+        side = position["side"].lower()
         entry_price = position["entry_price"]
         current_trailing_stop = position.get("trailing_stop_price")
 
-        if side.lower() == "buy":
-            # For long positions, trailing stop moves up with price
-            # Only update if price has moved up significantly
-            if current_price > entry_price * (1 + self.trailing_stop_positive):
-                new_trailing_stop = current_price * (1 - self.stop_loss_percent)
+        if side == "buy":
+            return self._update_long_trailing_stop(
+                symbol, position, current_price, entry_price, current_trailing_stop
+            )
+        return self._update_short_trailing_stop(
+            symbol, position, current_price, entry_price, current_trailing_stop
+        )
 
-                if (
-                    current_trailing_stop is None
-                    or new_trailing_stop > current_trailing_stop
-                ):
-                    position["trailing_stop_price"] = new_trailing_stop
-                    logger.info(
-                        f"Updated trailing stop for {symbol}: {new_trailing_stop:.6f}"
-                    )
-                    return new_trailing_stop
-        else:
-            # For short positions, trailing stop moves down with price
-            if current_price < entry_price * (1 - self.trailing_stop_positive):
-                new_trailing_stop = current_price * (1 + self.stop_loss_percent)
+    def _update_long_trailing_stop(
+        self,
+        symbol: str,
+        position: Dict,
+        current_price: float,
+        entry_price: float,
+        current_trailing_stop: Optional[float],
+    ) -> Optional[float]:
+        """Ratchet trailing stop upward for long positions."""
+        if current_price <= entry_price * (1 + self.trailing_stop_positive):
+            return current_trailing_stop
+        new_trailing_stop = current_price * (1 - self.stop_loss_percent)
+        if current_trailing_stop is None or new_trailing_stop > current_trailing_stop:
+            position["trailing_stop_price"] = new_trailing_stop
+            logger.info(f"Updated trailing stop for {symbol}: {new_trailing_stop:.6f}")
+            return new_trailing_stop
+        return current_trailing_stop
 
-                if (
-                    current_trailing_stop is None
-                    or new_trailing_stop < current_trailing_stop
-                ):
-                    position["trailing_stop_price"] = new_trailing_stop
-                    logger.info(
-                        f"Updated trailing stop for {symbol}: {new_trailing_stop:.6f}"
-                    )
-                    return new_trailing_stop
-
+    def _update_short_trailing_stop(
+        self,
+        symbol: str,
+        position: Dict,
+        current_price: float,
+        entry_price: float,
+        current_trailing_stop: Optional[float],
+    ) -> Optional[float]:
+        """Ratchet trailing stop downward for short positions."""
+        if current_price >= entry_price * (1 - self.trailing_stop_positive):
+            return current_trailing_stop
+        new_trailing_stop = current_price * (1 + self.stop_loss_percent)
+        if current_trailing_stop is None or new_trailing_stop < current_trailing_stop:
+            position["trailing_stop_price"] = new_trailing_stop
+            logger.info(f"Updated trailing stop for {symbol}: {new_trailing_stop:.6f}")
+            return new_trailing_stop
         return current_trailing_stop
 
     def should_close_position(
         self, symbol: str, current_price: float
     ) -> Tuple[bool, str]:
-        """Check if position should be closed based on risk rules"""
+        """Check if position should be closed based on risk rules."""
         if symbol not in self.positions:
             return False, "No position found"
 
         position = self.positions[symbol]
-        side = position["side"]
+        side = position["side"].lower()
+        is_long = side == "buy"
         stop_loss = position.get("stop_loss")
         take_profit = position.get("take_profit")
         trailing_stop = position.get("trailing_stop_price")
 
-        # Check stop loss
-        if stop_loss:
-            if side.lower() == "buy" and current_price <= stop_loss:
-                return True, "stop_loss"
-            elif side.lower() == "sell" and current_price >= stop_loss:
-                return True, "stop_loss"
+        # Check stop loss — hit if price moves against the position
+        if stop_loss and (
+            (is_long and current_price <= stop_loss)
+            or (not is_long and current_price >= stop_loss)
+        ):
+            return True, "stop_loss"
 
-        # Check trailing stop
-        if trailing_stop:
-            if side.lower() == "buy" and current_price <= trailing_stop:
-                return True, "trailing_stop"
-            elif side.lower() == "sell" and current_price >= trailing_stop:
-                return True, "trailing_stop"
+        # Check trailing stop — same directional logic as stop loss
+        if trailing_stop and (
+            (is_long and current_price <= trailing_stop)
+            or (not is_long and current_price >= trailing_stop)
+        ):
+            return True, "trailing_stop"
 
-        # Check take profit
-        if take_profit:
-            if side.lower() == "buy" and current_price >= take_profit:
-                return True, "take_profit"
-            elif side.lower() == "sell" and current_price <= take_profit:
-                return True, "take_profit"
+        # Check take profit — hit if price moves in favour of the position
+        if take_profit and (
+            (is_long and current_price >= take_profit)
+            or (not is_long and current_price <= take_profit)
+        ):
+            return True, "take_profit"
 
         return False, "hold"
 
@@ -344,15 +357,12 @@ class RiskManager:
             "daily_pnl_percent": self.daily_pnl / balance if balance > 0 else 0,
         }
 
-    def check_correlation_diversification(
-        self, symbol: str, price_data: Dict[str, pd.DataFrame]
-    ) -> bool:
+    def check_correlation_diversification(self, symbol: str) -> bool:
         """
-        Check if adding a new position would violate correlation diversification rules
+        Check if adding a new position would violate correlation diversification rules.
 
         Args:
             symbol: Symbol to check
-            price_data: Dictionary mapping symbols to OHLCV data
 
         Returns:
             True if position can be added, False otherwise
