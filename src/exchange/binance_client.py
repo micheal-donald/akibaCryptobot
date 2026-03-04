@@ -61,6 +61,8 @@ class BinanceClient:
         if self.sandbox:
             self.exchange.set_sandbox_mode(True)
 
+        self._markets_loaded = False
+
         # WebSocket manager (lazy initialized)
         self._ws_manager = None
         self._ws_callbacks: Dict[str, List[Callable]] = {}
@@ -100,8 +102,48 @@ class BinanceClient:
             logger.error(f"Error fetching OHLCV data for {symbol}: {e}")
             raise
 
-    async def place_market_order(self, symbol: str, side: str, amount: float) -> Dict:
+    async def ensure_markets_loaded(self):
+        if not self._markets_loaded:
+            self.exchange.load_markets()
+            self._markets_loaded = True
+            logger.info(f"Loaded {len(self.exchange.markets)} markets")
+
+    def validate_and_adjust_order(self, symbol: str, amount: float, price: float) -> tuple[bool, float]:
+        """Validate order against exchange limits. Returns (valid, adjusted_amount)."""
+        market = self.exchange.markets.get(symbol)
+        if not market:
+            logger.warning(f"No market info for {symbol}, allowing order")
+            return True, amount
+
+        # Check and adjust precision
+        amount_precision = market.get("precision", {}).get("amount")
+        if amount_precision is not None:
+            amount = float(self.exchange.amount_to_precision(symbol, amount))
+
+        # Check minimum amount
+        min_amount = market.get("limits", {}).get("amount", {}).get("min")
+        if min_amount and amount < min_amount:
+            logger.warning(f"{symbol}: amount {amount} < min {min_amount}")
+            return False, amount
+
+        # Check minimum cost (notional)
+        min_cost = market.get("limits", {}).get("cost", {}).get("min")
+        cost = amount * price
+        if min_cost and cost < min_cost:
+            logger.warning(f"{symbol}: cost {cost} < min notional {min_cost}")
+            return False, amount
+
+        return True, amount
+
+    async def place_market_order(self, symbol: str, side: str, amount: float, price: float = None) -> Dict:
         try:
+            await self.ensure_markets_loaded()
+            
+            if price is not None:
+                valid, amount = self.validate_and_adjust_order(symbol, amount, price)
+                if not valid:
+                    return {"id": None, "status": "rejected", "reason": "Fails min notional or amount limit"}
+                    
             order = self.exchange.create_market_order(symbol, side, amount)
             logger.info(f"Market order placed: {side} {amount} {symbol}")
             return order
@@ -113,6 +155,11 @@ class BinanceClient:
         self, symbol: str, side: str, amount: float, price: float
     ) -> Dict:
         try:
+            await self.ensure_markets_loaded()
+            valid, amount = self.validate_and_adjust_order(symbol, amount, price)
+            if not valid:
+                return {"id": None, "status": "rejected", "reason": "Fails min notional or amount limit"}
+                
             order = self.exchange.create_limit_order(symbol, side, amount, price)
             logger.info(f"Limit order placed: {side} {amount} {symbol} at {price}")
             return order

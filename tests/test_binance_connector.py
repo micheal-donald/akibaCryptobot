@@ -93,6 +93,7 @@ class TestBinanceConnector:
     async def test_create_market_order(self, mock_binance):
         """Test creating market order"""
         mock_exchange = Mock()
+        mock_exchange.markets = {}
         mock_binance.return_value = mock_exchange
 
         # Mock the create_market_order method to return sample response
@@ -128,6 +129,7 @@ class TestBinanceConnector:
     async def test_create_limit_order(self, mock_binance):
         """Test creating limit order"""
         mock_exchange = Mock()
+        mock_exchange.markets = {}
         mock_binance.return_value = mock_exchange
 
         # Mock the create_limit_order method to return sample response
@@ -216,3 +218,69 @@ class TestBinanceConnector:
 
         # Check that returned data matches expected response
         assert result == mock_response
+
+    def test_validate_and_adjust_order(self):
+        """Test the validation and adjustment of orders against market limits"""
+        connector = BinanceConnector(
+            api_key="test_api_key", secret_key="test_api_secret", sandbox=True
+        )
+        # Mock the internal ccxt exchange object
+        mock_exchange = Mock()
+        mock_exchange.markets = {
+            "BTC/USDT": {
+                "precision": {"amount": 5, "price": 2},
+                "limits": {
+                    "amount": {"min": 0.0001, "max": 1000.0},
+                    "price": {"min": 0.01},
+                    "cost": {"min": 10.0} # minimum notional
+                }
+            },
+            "DOGE/USDT": {
+                "precision": {"amount": 0, "price": 5},
+                "limits": {
+                    "amount": {"min": 1.0, "max": 1000000.0},
+                    "price": {"min": 0.00001},
+                    "cost": {"min": 5.0}
+                }
+            }
+        }
+        mock_exchange.amount_to_precision = lambda sym, amt: f"{amt:.{mock_exchange.markets[sym]['precision']['amount']}f}"
+        connector.exchange = mock_exchange
+        connector._markets_loaded = True
+
+        # Valid order
+        valid, amt = connector.validate_and_adjust_order("BTC/USDT", 0.01, 50000.0)
+        assert valid
+        assert amt == 0.01
+
+        # Below min amount
+        valid, amt = connector.validate_and_adjust_order("BTC/USDT", 0.00005, 50000.0)
+        assert not valid
+
+        # Below min notional (cost < 10)
+        valid, amt = connector.validate_and_adjust_order("BTC/USDT", 0.0001, 50000.0)
+        assert not valid
+
+        # Valid precision (integer for doge)
+        valid, amt = connector.validate_and_adjust_order("DOGE/USDT", 100.5, 0.1)
+        assert valid
+        assert amt == 100.0
+
+    @pytest.mark.asyncio
+    @patch("ccxt.binance")
+    async def test_place_market_order_rejected(self, mock_binance):
+        """Test market order is rejected if validation fails"""
+        mock_exchange = Mock()
+        mock_exchange.markets = {}
+        mock_binance.return_value = mock_exchange
+        
+        connector = BinanceConnector(
+            api_key="test_api_key", secret_key="test_api_secret", sandbox=True
+        )
+        
+        # Override validate to fail
+        with patch.object(connector, 'validate_and_adjust_order', return_value=(False, 0.0001)):
+            order = await connector.place_market_order("BTC/USDT", "buy", 0.0001, price=50000.0)
+            
+            assert order["status"] == "rejected"
+            mock_exchange.create_market_order.assert_not_called()
