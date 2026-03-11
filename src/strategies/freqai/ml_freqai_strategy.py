@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Dict
+from typing import Dict, Optional
 from datetime import datetime
 import logging
 import lightgbm as lgb
@@ -20,6 +20,7 @@ if parent_dir not in sys.path:
 from strategies.freqai.base_freqai_strategy import (
     BaseFreqAIStrategy,
 )
+from strategies.base_strategy import TradingSignal, SignalType
 from indicators.technical_indicators import TechnicalIndicators
 
 logger = logging.getLogger(f"akiba_crypto_bot.{__name__}")
@@ -280,6 +281,44 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
         except Exception as e:
             logger.error(f"Error getting ML prediction: {e}")
             return {"prediction": 0, "confidence": 0.0}
+
+    def _prediction_to_signal(
+        self, prediction: Dict, current_price: float
+    ) -> Optional[TradingSignal]:
+        """
+        Convert binary classifier prediction to trading signal.
+
+        The model is trained with target &-price_up:
+          1 = price goes up   → BUY
+          0 = price goes down → SELL
+        """
+        pred_value = prediction.get("prediction", 0)
+        confidence = prediction.get("confidence", 0.0)
+
+        if confidence < self.min_signal_strength:
+            return None
+
+        if pred_value == 1:  # Price going up
+            signal_type = SignalType.BUY
+        else:  # pred_value == 0, price going down
+            signal_type = SignalType.SELL
+
+        stop_loss = self._calculate_stop_loss(current_price, signal_type)
+        take_profit = self._calculate_take_profit(current_price, signal_type)
+
+        return TradingSignal(
+            signal_type=signal_type,
+            strength=confidence,
+            price=current_price,
+            timestamp=datetime.now(),
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            metadata={
+                "strategy": "freqai_ml",
+                "confidence": confidence,
+                "model_prediction": pred_value,
+            },
+        )
 
     def save_model(self, filepath: str):
         """

@@ -7,6 +7,7 @@ Uses weighted voting to combine:
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Optional, List, Tuple
 import pandas as pd
 from dataclasses import dataclass
@@ -125,6 +126,10 @@ class EnsembleStrategy(BaseStrategy):
 
                     if signal:
                         component_signals.append((name, signal, weight))
+                        logger.debug(
+                            f"  {name} → {signal.signal_type.name} "
+                            f"(strength={signal.strength:.2f}, weight={weight})"
+                        )
 
                         if signal.signal_type == SignalType.BUY:
                             buy_weight += weight * signal.strength
@@ -135,6 +140,7 @@ class EnsembleStrategy(BaseStrategy):
                     else:
                         # No signal = effective HOLD
                         component_signals.append((name, None, weight))
+                        logger.debug(f"  {name} → HOLD (no signal)")
 
                 except Exception as e:
                     logger.warning(f"Error getting signal from {name}: {e}")
@@ -151,7 +157,7 @@ class EnsembleStrategy(BaseStrategy):
             # Determine signal type
             if net_signal > 0 and buy_count >= self.min_strategies_agree:
                 signal_type = SignalType.BUY
-                base_strength = buy_weight / sum(w for _, _, w in self.strategies)
+                base_strength = buy_weight / sum(w for _, w, _ in self.strategies)
                 agreeing_signals = [
                     (n, s)
                     for n, s, _ in component_signals
@@ -159,7 +165,7 @@ class EnsembleStrategy(BaseStrategy):
                 ]
             elif net_signal < 0 and sell_count >= self.min_strategies_agree:
                 signal_type = SignalType.SELL
-                base_strength = sell_weight / sum(w for _, _, w in self.strategies)
+                base_strength = sell_weight / sum(w for _, w, _ in self.strategies)
                 agreeing_signals = [
                     (n, s)
                     for n, s, _ in component_signals
@@ -194,6 +200,8 @@ class EnsembleStrategy(BaseStrategy):
             signal = TradingSignal(
                 signal_type=signal_type,
                 strength=base_strength,
+                price=current_price,
+                timestamp=datetime.now(),
                 stop_loss=stop_loss,
                 take_profit=take_profit,
                 metadata={
@@ -253,6 +261,8 @@ class EnsembleStrategy(BaseStrategy):
                     if position.get("side") == "buy"
                     else SignalType.BUY,
                     strength=exit_weight,
+                    price=current_price,
+                    timestamp=datetime.now(),
                     stop_loss=None,
                     take_profit=None,
                     metadata={

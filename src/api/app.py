@@ -37,14 +37,18 @@ async def lifespan(app: FastAPI):
     if testnet:
         bot.config["exchange"]["sandbox"] = True
 
-    # Override strategy if requested
-    if strategy_override:
+    # Override strategy if requested (skip if already active from config)
+    if strategy_override and strategy_override != bot.strategy_manager.active_strategy:
         try:
             bot.strategy_manager.add_strategy_by_name(strategy_override, bot.config)
             bot.strategy_manager.set_active_strategy(strategy_override)
             logger.info(f"Strategy override applied: {strategy_override}")
         except Exception as e:
             logger.error(f"Failed to load strategy {strategy_override}: {e}")
+    elif strategy_override:
+        logger.info(
+            f"Strategy '{strategy_override}' already active from config, skipping redundant reload"
+        )
 
     # Store the bot instance globally for dependency injection
     bot_state["bot"] = bot

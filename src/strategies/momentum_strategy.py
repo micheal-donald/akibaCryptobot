@@ -100,6 +100,10 @@ class MomentumStrategy(BaseStrategy):
                 signal_type = SignalType.SELL
                 strength = min(sell_score, 1.0)
             else:
+                logger.debug(
+                    f"No signal for {symbol}: buy_score={buy_score:.2f}, "
+                    f"sell_score={sell_score:.2f} (threshold={self.min_signal_strength})"
+                )
                 return None
 
             # Calculate stop loss and take profit
@@ -214,6 +218,13 @@ class MomentumStrategy(BaseStrategy):
             # Weak trend, reduce signal strength
             buy_score *= 0.7
             sell_score *= 0.7
+
+        logger.debug(
+            f"Scores for {latest.name if hasattr(latest, 'name') else 'latest'}: "
+            f"RSI={latest['rsi']:.1f}, MACD={latest['macd']:.4f}, "
+            f"Trend={'UP' if current_price > latest['sma_20'] else 'DOWN'}, "
+            f"ADX={latest['adx']:.1f} | BUY={buy_score:.2f}, SELL={sell_score:.2f}"
+        )
 
         return {"buy_score": buy_score, "sell_score": sell_score}
 

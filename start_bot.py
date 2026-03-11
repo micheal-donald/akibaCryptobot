@@ -117,13 +117,15 @@ def main():
             if args.dry_run:
                 bot.config["trading"]["dry_run"] = True
 
-            if args.strategy:
+            if args.strategy and args.strategy != bot.strategy_manager.active_strategy:
                 try:
                     bot.strategy_manager.add_strategy_by_name(args.strategy, bot.config)
                     bot.strategy_manager.set_active_strategy(args.strategy)
                     logger.info(f"Successfully loaded strategy: {args.strategy}")
                 except Exception as e:
                     logger.error(f"Failed to load strategy {args.strategy}: {e}")
+            elif args.strategy:
+                logger.info(f"Strategy '{args.strategy}' already active from config")
 
             logger.info(f"Active strategy: {bot.strategy_manager.active_strategy}")
             await bot.start()
