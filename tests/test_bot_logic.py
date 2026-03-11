@@ -1,12 +1,7 @@
 import pytest
-import asyncio
-import joblib
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 from bot import AkibaCryptoBot
-from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
-from strategies.momentum_strategy import MomentumStrategy
-from strategies.base_strategy import SignalType, StrategyManager
 
 
 @pytest.fixture

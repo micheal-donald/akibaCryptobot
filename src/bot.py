@@ -108,7 +108,9 @@ class AkibaCryptoBot:
 
             # Record this bot session in the database
             strategy = self.strategy_manager.active_strategy or ""
-            trading_mode = "paper" if self.config["exchange"].get("sandbox", True) else "live"
+            trading_mode = (
+                "paper" if self.config["exchange"].get("sandbox", True) else "live"
+            )
             self.session_id = await self.trade_store.start_session(
                 strategy=strategy, trading_mode=trading_mode
             )

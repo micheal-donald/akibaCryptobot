@@ -185,9 +185,7 @@ class TradeStore:
     # Bot sessions
     # ------------------------------------------------------------------
 
-    async def start_session(
-        self, strategy: str = "", trading_mode: str = ""
-    ) -> int:
+    async def start_session(self, strategy: str = "", trading_mode: str = "") -> int:
         """Record a new bot session. Returns the session row id."""
         cursor = await self._db.execute(
             """
@@ -246,8 +244,6 @@ class TradeStore:
 
     async def get_session_count(self) -> int:
         """Return the total number of recorded sessions (restarts)."""
-        cursor = await self._db.execute(
-            "SELECT COUNT(*) as cnt FROM bot_sessions"
-        )
+        cursor = await self._db.execute("SELECT COUNT(*) as cnt FROM bot_sessions")
         row = await cursor.fetchone()
         return int(row["cnt"]) if row else 0

@@ -4,11 +4,10 @@ import numpy as np
 import os
 import tempfile
 import joblib
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from datetime import datetime, timedelta
 from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
 from strategies.momentum_strategy import MomentumStrategy
-from strategies.base_strategy import SignalType
 
 
 @pytest.fixture

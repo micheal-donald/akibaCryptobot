@@ -82,8 +82,8 @@ class TestPortfolioManager:
         portfolio_manager = PortfolioManager(sample_config)
         portfolio_manager.update_portfolio(sample_portfolio_data)
 
-        assert portfolio_manager.has_position("BTC/USDT") == True
-        assert portfolio_manager.has_position("ETH/USDT") == False
+        assert portfolio_manager.has_position("BTC/USDT")
+        assert not portfolio_manager.has_position("ETH/USDT")
 
     def test_calculate_portfolio_value(self, sample_config, sample_portfolio_data):
         """Test portfolio value calculation"""

@@ -495,7 +495,7 @@ async def test_run_walkforward_analysis_with_ml_strategy(
         new_callable=AsyncMock,
         return_value=mock_backtest_result,
     ):
-        result = await analyzer.run_walkforward_analysis(
+        await analyzer.run_walkforward_analysis(
             strategy, sample_multi_symbol_data, symbols
         )
 

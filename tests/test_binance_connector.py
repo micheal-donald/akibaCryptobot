@@ -58,7 +58,7 @@ class TestBinanceConnector:
         )
 
         # Check that sandbox was set correctly
-        assert connector.sandbox == True
+        assert connector.sandbox
 
     @pytest.mark.asyncio
     @patch("ccxt.binance")

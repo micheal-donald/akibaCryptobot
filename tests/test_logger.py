@@ -93,10 +93,10 @@ class TestLogger:
 
         logger = setup_logging({"level": "INFO"})
 
-        assert logger.isEnabledFor(logging.INFO) == True
-        assert logger.isEnabledFor(logging.DEBUG) == False
-        assert logger.isEnabledFor(logging.WARNING) == True
-        assert logger.isEnabledFor(logging.ERROR) == True
+        assert logger.isEnabledFor(logging.INFO)
+        assert not logger.isEnabledFor(logging.DEBUG)
+        assert logger.isEnabledFor(logging.WARNING)
+        assert logger.isEnabledFor(logging.ERROR)
 
         # Clean up
         for handler in logger.handlers[:]:

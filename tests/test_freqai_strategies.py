@@ -48,7 +48,7 @@ def test_example_freqai_strategy_initialization(freqai_config):
     """Test ExampleFreqAIStrategy initialization"""
     strategy = ExampleFreqAIStrategy(freqai_config)
 
-    assert strategy.freqai_enabled == True
+    assert strategy.freqai_enabled
     assert strategy.freqai_model == "LightGBMClassifier"
     assert hasattr(strategy, "feature_engineering_standard")
     assert hasattr(strategy, "set_freqai_targets")
@@ -58,10 +58,10 @@ def test_ml_freqai_strategy_initialization(freqai_config):
     """Test MLFreqAIStrategy initialization"""
     strategy = MLFreqAIStrategy(freqai_config)
 
-    assert strategy.freqai_enabled == True
+    assert strategy.freqai_enabled
     assert strategy.lookahead_period == 5
     assert strategy.ml_model is None
-    assert strategy.model_trained == False
+    assert not strategy.model_trained
 
 
 @pytest.mark.asyncio

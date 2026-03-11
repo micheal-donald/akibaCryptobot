@@ -67,7 +67,7 @@ class TestBaseStrategy:
             price=45000,
             timestamp=pd.Timestamp.now(),
         )
-        assert strategy.validate_signal(valid_signal) == True
+        assert strategy.validate_signal(valid_signal)
 
         # Invalid signal (low strength)
         invalid_signal = TradingSignal(
@@ -76,7 +76,7 @@ class TestBaseStrategy:
             price=45000,
             timestamp=pd.Timestamp.now(),
         )
-        assert strategy.validate_signal(invalid_signal) == False
+        assert not strategy.validate_signal(invalid_signal)
 
 
 class TestMomentumStrategy:
