@@ -8,12 +8,16 @@ FreqAI is Freqtrade's integrated machine learning framework that enables users t
 
 ## Prerequisites
 
-Before using FreqAI strategies, ensure you have installed the required dependencies:
+> [!IMPORTANT]
+> AkibaCryptoBot uses its **own custom FreqAI-style ML implementation** built on LightGBM, scikit-learn, and joblib — it does **not** use or require the Freqtrade package.
+
+All required dependencies are already included in `requirements.txt`. Install them with:
 
 ```bash
-make install-dev
-pip install freqtrade[freqai]
+pip install -r requirements.txt
 ```
+
+Key ML dependencies: `lightgbm`, `scikit-learn`, `numpy`, `pandas`.
 
 ## Available FreqAI Strategies
 

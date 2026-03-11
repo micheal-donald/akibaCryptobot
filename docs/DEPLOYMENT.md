@@ -1,116 +1,237 @@
-# CI/CD Deployment Guide
+# Deployment Guide
 
-## GitHub Secrets Required
-
-Go to your GitHub repository → Settings → Secrets and variables → Actions → New repository secret
-
-### Required Secrets
-
-| Secret | Description | Example |
-|--------|-------------|---------|
-| `EC2_HOST` | EC2 public IP or DNS | `54.178.xxx.xxx` |
-| `SSH_PRIVATE_KEY` | EC2 SSH private key (full content) | `-----BEGIN RSA PRIVATE KEY-----...` |
-| `BINANCE_API_KEY` | Binance API key | `aBcDeFgHiJk...` |
-| `BINANCE_SECRET_KEY` | Binance secret key | `xYz123456...` |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token | `123456789:ABC...` |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID | `123456789` |
-| `TRADING_MODE` | Trading mode | `paper` or `live` |
-
-### How to Get SSH Private Key
-
-After running Terraform:
-```bash
-# If you created a new key pair
-cat ~/.ssh/akibabot-key.pem
-```
-
-Copy the entire content including `-----BEGIN` and `-----END` lines.
+This guide covers local development, Docker deployment, and CI/CD pipeline configuration.
 
 ---
 
-## Deployment Flow
+## Prerequisites
 
-```
-Push to master → CI runs tests → Build Docker image → Push to GHCR → 
-SSH to EC2 → Pull image → Restart container → Telegram notification
-```
+- Python 3.10+
+- Docker & Docker Compose (for containerized deployment)
+- Binance API credentials
+- Telegram bot token (optional, for notifications)
 
 ---
 
-## First Time Setup
+## Local Development
 
-### 1. Run Terraform
+### 1. Clone & Install
 
 ```bash
+git clone https://github.com/micheal-donald/akibaCryptobot.git
+cd akibaCryptobot
+
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+pip install -r requirements.txt
+```
+
+### 2. Configure
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+### 3. Run
+
+```bash
+# Bot + API server (default port 8000)
+python start_bot.py
+
+# With options
+python start_bot.py --testnet --debug --port 8080
+
+# Bot only (no API server)
+python start_bot.py --no-api
+
+# Override strategy
+python start_bot.py --strategy momentum
+```
+
+**CLI Options:**
+
+| Flag | Description |
+|---|---|
+| `--config PATH` | Config file path (default: `config/config.json`) |
+| `--strategy NAME` | Override strategy (`momentum`, `ensemble`, `freqai_ml_freqai`) |
+| `--testnet` | Force testnet mode (paper trading) |
+| `--debug` | Enable debug logging |
+| `--dry-run` | Dry-run mode (no trades) |
+| `--port PORT` | API server port (default: 8000) |
+| `--host HOST` | API server host (default: 0.0.0.0) |
+| `--no-api` | Run trading bot without the API server |
+
+### 4. Access
+
+- **Dashboard:** http://localhost:8000
+- **API docs:** http://localhost:8000/docs
+- **Health check:** http://localhost:8000/api/health
+
+---
+
+## Docker Deployment
+
+### Dockerfile
+
+The project uses a multi-stage build for smaller images:
+
+```
+Stage 1 (builder): Install Python dependencies with gcc/g++
+Stage 2 (runtime): Copy only the installed packages + app code
+                    Runs as non-root user (botuser)
+```
+
+### Build & Run
+
+```bash
+# Build
+docker build -t akibacryptobot .
+
+# Run
+docker run -d \
+  --name akiba-cryptobot \
+  --env-file .env \
+  -v $(pwd)/logs:/app/logs \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/models:/app/models \
+  -p 8000:8000 \
+  akibacryptobot
+```
+
+### Docker Compose (recommended)
+
+```bash
+# Start
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
+
+# Rebuild after code changes
+docker-compose up -d --build
+```
+
+#### Environment Variables in Docker Compose
+
+| Variable | Description | Default |
+|---|---|---|
+| `TRADING_MODE` | `paper` or `live` | `paper` |
+| `LOG_LEVEL` | Logging level | `INFO` |
+| `BINANCE_API_KEY` | Binance API key | — |
+| `BINANCE_SECRET_KEY` | Binance API secret | — |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID | — |
+| `MAX_POSITION_SIZE` | Max portfolio fraction per trade | `0.05` |
+| `MAX_DAILY_LOSS` | Max daily loss fraction | `0.02` |
+
+#### Persistent Volumes
+
+| Mount | Purpose |
+|---|---|
+| `./logs:/app/logs` | Log files |
+| `./data:/app/data` | SQLite trade database |
+| `./models:/app/models` | Trained ML models |
+
+#### Resource Limits
+
+The `docker-compose.yml` sets:
+- **CPU limit:** 1.0 core
+- **Memory limit:** 1 GB
+- **CPU reservation:** 0.25 core
+- **Memory reservation:** 256 MB
+
+---
+
+## CI/CD Pipeline
+
+Three GitHub Actions workflows in `.github/workflows/`:
+
+### 1. `ci.yml` — Continuous Integration
+
+**Triggers:** Push to `master`, `develop`, `feature/**`; PRs to `master`
+
+```
+Lint & Format → Test → Smoke Test
+```
+
+| Job | Steps |
+|---|---|
+| **lint** | Install deps → Black check → Flake8 → MyPy |
+| **test** | Install deps → pytest with coverage → Upload to Codecov |
+| **smoke** | Install deps → Verify app starts → Check routes registered |
+
+### 2. `deploy.yml` — Continuous Deployment
+
+**Triggers:** Push to `master` (after CI passes)
+
+```
+Build Docker → Push to GHCR → SSH to EC2 → Pull & Restart → Notify Telegram
+```
+
+### 3. `train.yml` — Model Training
+
+Handles FreqAI model re-training on schedule or manual trigger.
+
+### GitHub Secrets Required
+
+| Secret | Description |
+|---|---|
+| `EC2_HOST` | EC2 public IP or DNS |
+| `SSH_PRIVATE_KEY` | SSH private key for EC2 |
+| `BINANCE_API_KEY` | Binance API key |
+| `BINANCE_SECRET_KEY` | Binance secret key |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID |
+| `TRADING_MODE` | `paper` or `live` |
+
+---
+
+## Cloud Deployment (EC2)
+
+### First-Time Setup
+
+```bash
+# 1. Provision infrastructure
 cd terraform
 terraform init
 terraform apply
-```
+# Note the public_ip from output
 
-Note the `public_ip` from output.
-
-### 2. SSH and Setup EC2
-
-```bash
+# 2. SSH into the instance
 ssh -i ~/.ssh/akibabot-key.pem ubuntu@<public_ip>
 
-# Run setup script (or manually)
+# 3. Run the setup script
 curl -sSL https://raw.githubusercontent.com/YOUR_REPO/master/scripts/setup-ec2.sh | bash
-```
 
-### 3. Add GitHub Secrets
+# 4. Add GitHub Secrets to your repository
 
-Add all secrets listed above to GitHub repository settings.
-
-### 4. Push to Deploy
-
-```bash
-git add .
-git commit -m "Initial deployment"
+# 5. Push to master to trigger deployment
 git push origin master
 ```
 
-The CI/CD pipeline will automatically:
-1. Run tests
-2. Build Docker image
-3. Deploy to EC2
-4. Send Telegram notification
-
----
-
-## Manual Deployment
-
-If you need to deploy manually:
+### Manual Deployment
 
 ```bash
 ssh -i ~/.ssh/akibabot-key.pem ubuntu@<ec2_ip>
-
 cd /opt/akibabot
 docker-compose pull
 docker-compose up -d
-docker-compose logs -f
 ```
 
 ---
 
 ## Troubleshooting
 
-### Container not starting
-```bash
-docker-compose logs
-```
-
-### Check container status
-```bash
-docker-compose ps
-```
-
-### Restart container
-```bash
-docker-compose restart
-```
-
-### View bot logs
-```bash
-tail -f /opt/akibabot/logs/akiba_crypto_bot.log
-```
+| Problem | Command |
+|---|---|
+| Container won't start | `docker-compose logs` |
+| Check status | `docker-compose ps` |
+| Restart | `docker-compose restart` |
+| View bot logs | `tail -f logs/akiba_crypto_bot.log` |
+| View trade logs | `tail -f logs/trades.log` |
+| View error logs | `tail -f logs/errors.log` |
+| Check DB | `sqlite3 data/trades.db "SELECT * FROM trades WHERE status='open'"` |

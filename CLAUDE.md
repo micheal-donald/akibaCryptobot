@@ -6,7 +6,57 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AkibaCryptoBot is an autonomous cryptocurrency trading bot built in Python. It's designed for spot trading on Binance with support for both paper trading (sandbox) and live trading. The bot uses technical analysis strategies, FreqAI machine learning integration, and includes comprehensive risk management, monitoring, and notification systems.
 
-## Development Commands
+---
+
+## Documentation Protocol
+
+> **These rules are mandatory and must be followed in every session.**
+
+### 1 — Read Docs on Initialisation
+
+Before making **any** code changes, read the documentation index first:
+
+```
+docs/README.md          ← always read this first
+```
+
+Then read the relevant doc for the area you are about to work on:
+
+| Working on… | Read… |
+|---|---|
+| Trading logic, components, data flow | `docs/ARCHITECTURE.md` |
+| `config/config.json` or `.env` | `docs/CONFIGURATION.md` |
+| Strategies or signal logic | `docs/STRATEGIES.md` |
+| API routes or WebSocket | `docs/API_REFERENCE.md` |
+| Telegram commands/notifications | `docs/TELEGRAM_COMMANDS.md` |
+| Backtesting or performance metrics | `docs/BACKTESTING.md` |
+| Risk management, position sizing | `docs/RISK_MANAGEMENT.md` |
+| Docker, CI/CD, deployment | `docs/DEPLOYMENT.md` |
+| FreqAI ML strategies | `docs/freqai_integration.md` |
+
+This prevents duplicating work that has already been done and ensures changes are consistent with the existing architecture.
+
+### 2 — Update Docs After Significant Changes
+
+After completing a task, update the relevant documentation file if the change falls into any of these categories:
+
+| Change type | Update which doc |
+|---|---|
+| New module, class, or major feature | `docs/ARCHITECTURE.md` (component table + data-flow if needed) |
+| New or modified config key in `config.json` | `docs/CONFIGURATION.md` |
+| New strategy or changes to signal logic | `docs/STRATEGIES.md` |
+| New or modified REST/WebSocket endpoint | `docs/API_REFERENCE.md` |
+| New or modified Telegram command | `docs/TELEGRAM_COMMANDS.md` |
+| Changes to backtest engine or metrics | `docs/BACKTESTING.md` |
+| Changes to risk rules, position sizing, circuit breakers | `docs/RISK_MANAGEMENT.md` |
+| Changes to Docker, CI/CD workflow, or startup | `docs/DEPLOYMENT.md` |
+| Changes to FreqAI ML strategies or feature engineering | `docs/freqai_integration.md` |
+
+**What counts as significant:** new public API, changed config keys, new Telegram commands, new strategies, changed risk parameters, changed deployment steps. Refactors and bug fixes that don't change external behaviour do not require doc updates.
+
+---
+
+
 
 ### Running the Bot
 ```bash
