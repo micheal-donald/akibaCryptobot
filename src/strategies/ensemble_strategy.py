@@ -22,7 +22,7 @@ from strategies.base_strategy import BaseStrategy, TradingSignal, SignalType
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.freqai.ml_freqai_strategy import MLFreqAIStrategy
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"akiba_crypto_bot.{__name__}")
 
 
 @dataclass
@@ -60,20 +60,23 @@ class EnsembleStrategy(BaseStrategy):
         # Initialize component strategies with their weights
         self.strategies: List[Tuple[BaseStrategy, float, str]] = []
 
+        # Use strategy-specific config for sub-strategies
+        strat_config = config.get("strategy_config", {})
+
         # Momentum strategy (40% weight)
         momentum_weight = ensemble_config.get("momentum_weight", 0.4)
-        self.momentum = MomentumStrategy(config)
+        self.momentum = MomentumStrategy(strat_config)
         self.strategies.append((self.momentum, momentum_weight, "momentum"))
 
         # FreqAI ML strategy (60% weight)
         freqai_weight = ensemble_config.get("freqai_weight", 0.6)
-        self.freqai = MLFreqAIStrategy(config)
+        self.freqai = MLFreqAIStrategy(config) # FreqAI needs full config for its sub-keys
         self.strategies.append((self.freqai, freqai_weight, "freqai"))
 
         # Voting thresholds
         self.min_consensus = ensemble_config.get(
             "min_consensus", 0.3
-        )  # Min weighted vote to trigger (0.3 allows momentum-only signals)
+        )  # Min weighted vote to trigger
         self.min_strategies_agree = ensemble_config.get(
             "min_strategies_agree", 1
         )  # Min strategies that must agree

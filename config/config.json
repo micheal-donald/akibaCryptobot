@@ -39,7 +39,7 @@
     "fee": 0.001
   },
   "strategy_config": {
-    "min_signal_strength": 0.45,
+    "min_signal_strength": 0.35,
     "rsi_oversold": 30,
     "rsi_overbought": 70,
     "stoch_oversold": 20,

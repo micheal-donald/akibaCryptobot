@@ -22,7 +22,7 @@ from strategies.freqai.base_freqai_strategy import (
 )
 from indicators.technical_indicators import TechnicalIndicators
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"akiba_crypto_bot.{__name__}")
 
 
 class MLFreqAIStrategy(BaseFreqAIStrategy):

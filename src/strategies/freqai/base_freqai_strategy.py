@@ -16,7 +16,7 @@ if parent_dir not in sys.path:
 from strategies.base_strategy import BaseStrategy, TradingSignal, SignalType
 from indicators.technical_indicators import TechnicalIndicators
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"akiba_crypto_bot.{__name__}")
 
 
 class BaseFreqAIStrategy(BaseStrategy):

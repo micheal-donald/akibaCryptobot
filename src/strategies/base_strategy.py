@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from enum import Enum
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"akiba_crypto_bot.{__name__}")
 
 
 class SignalType(Enum):

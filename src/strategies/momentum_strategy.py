@@ -6,7 +6,7 @@ import logging
 from .base_strategy import BaseStrategy, TradingSignal, SignalType
 from indicators.technical_indicators import calculate_all_indicators
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger(f"akiba_crypto_bot.{__name__}")
 
 
 class MomentumStrategy(BaseStrategy):
