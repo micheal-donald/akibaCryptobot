@@ -62,7 +62,9 @@ class AkibaCryptoBot:
         self.active_trades: Dict[str, Dict] = {}
 
         self.is_running = False
+        self.start_time = datetime.now()
         self.last_update = datetime.now()
+        self.session_id = None  # Set when session is recorded to DB
         self._background_tasks: set = set()  # Prevents GC of fire-and-forget tasks
 
         # Portfolio tracking for circuit breakers
@@ -103,6 +105,13 @@ class AkibaCryptoBot:
             # Initialize trade persistence and reload open positions
             await self.trade_store.initialize()
             self.active_trades = await self.trade_store.load_open_trades()
+
+            # Record this bot session in the database
+            strategy = self.strategy_manager.active_strategy or ""
+            trading_mode = "paper" if self.config["exchange"].get("sandbox", True) else "live"
+            self.session_id = await self.trade_store.start_session(
+                strategy=strategy, trading_mode=trading_mode
+            )
 
             # Re-sync risk manager with persisted trades so counters and
             # trailing stops are correct after a restart.
@@ -606,7 +615,7 @@ class AkibaCryptoBot:
 
             # Check if signal meets minimum strength
             if signal.strength < self.config.get("strategy_config", {}).get(
-                "min_signal_strength", 0.6
+                "min_signal_strength", 0.45
             ):
                 self.logger.debug(
                     f"Signal strength {signal.strength:.2f} below threshold for {symbol}"
@@ -695,6 +704,12 @@ class AkibaCryptoBot:
         for symbol in self.active_trades:
             await self._cancel_orders_for_symbol(symbol)
 
+        # End the current bot session
+        if self.session_id is not None:
+            await self.trade_store.end_session(
+                self.session_id, exit_reason="clean_shutdown"
+            )
+
         # Close trade persistence DB
         await self.trade_store.close()
 
@@ -735,11 +750,7 @@ class AkibaCryptoBot:
     # Methods for Telegram bot integration
     def get_status_info(self) -> Dict:
         """Get bot status information for Telegram commands"""
-        uptime = (
-            datetime.now() - self.last_update
-            if hasattr(self, "start_time")
-            else timedelta(0)
-        )
+        uptime = datetime.now() - self.start_time
         return {
             "active_trades": len(self.active_trades),
             "daily_pnl": 0.0,  # Calculate actual PnL if needed

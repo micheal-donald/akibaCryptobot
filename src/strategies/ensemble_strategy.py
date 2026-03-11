@@ -72,8 +72,8 @@ class EnsembleStrategy(BaseStrategy):
 
         # Voting thresholds
         self.min_consensus = ensemble_config.get(
-            "min_consensus", 0.5
-        )  # Min weighted vote to trigger
+            "min_consensus", 0.3
+        )  # Min weighted vote to trigger (0.3 allows momentum-only signals)
         self.min_strategies_agree = ensemble_config.get(
             "min_strategies_agree", 1
         )  # Min strategies that must agree

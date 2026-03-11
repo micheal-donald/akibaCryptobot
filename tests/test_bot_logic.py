@@ -51,6 +51,8 @@ def bot(mock_config):
         bot.telegram = None
         bot.active_trades = {}
         bot.is_running = False
+        bot.start_time = datetime.now()
+        bot.session_id = None
         bot.last_update = datetime.now()
         bot._background_tasks = set()
         bot.portfolio_value_history = []

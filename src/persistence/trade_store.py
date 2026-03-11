@@ -35,6 +35,18 @@ CREATE TABLE IF NOT EXISTS trades (
 )
 """
 
+CREATE_SESSIONS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS bot_sessions (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    start_time      TEXT    NOT NULL,
+    end_time        TEXT,
+    uptime_seconds  REAL,
+    exit_reason     TEXT    DEFAULT 'unknown',
+    strategy        TEXT,
+    trading_mode    TEXT
+)
+"""
+
 
 class TradeStore:
     """Thin async wrapper around an SQLite database for trade persistence."""
@@ -53,6 +65,7 @@ class TradeStore:
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
         await self._db.execute(CREATE_TABLE_SQL)
+        await self._db.execute(CREATE_SESSIONS_TABLE_SQL)
         await self._db.commit()
         logger.info(f"TradeStore initialised → {self.db_path}")
 
@@ -167,3 +180,74 @@ class TradeStore:
             (new_stop, symbol),
         )
         await self._db.commit()
+
+    # ------------------------------------------------------------------
+    # Bot sessions
+    # ------------------------------------------------------------------
+
+    async def start_session(
+        self, strategy: str = "", trading_mode: str = ""
+    ) -> int:
+        """Record a new bot session. Returns the session row id."""
+        cursor = await self._db.execute(
+            """
+            INSERT INTO bot_sessions (start_time, strategy, trading_mode)
+            VALUES (?, ?, ?)
+            """,
+            (datetime.now().isoformat(), strategy, trading_mode),
+        )
+        await self._db.commit()
+        session_id = cursor.lastrowid
+        logger.info(f"Bot session #{session_id} started")
+        return session_id
+
+    async def end_session(
+        self,
+        session_id: int,
+        exit_reason: str = "clean_shutdown",
+    ):
+        """Mark a session as ended and record its uptime."""
+        now = datetime.now()
+        # Fetch start_time to compute duration
+        cursor = await self._db.execute(
+            "SELECT start_time FROM bot_sessions WHERE id = ?", (session_id,)
+        )
+        row = await cursor.fetchone()
+        uptime_seconds = 0.0
+        if row and row["start_time"]:
+            start_dt = datetime.fromisoformat(row["start_time"])
+            uptime_seconds = (now - start_dt).total_seconds()
+
+        await self._db.execute(
+            """
+            UPDATE bot_sessions
+               SET end_time       = ?,
+                   uptime_seconds = ?,
+                   exit_reason    = ?
+             WHERE id = ?
+            """,
+            (now.isoformat(), uptime_seconds, exit_reason, session_id),
+        )
+        await self._db.commit()
+        hours, remainder = divmod(uptime_seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
+        logger.info(
+            f"Bot session #{session_id} ended: "
+            f"{int(hours)}h {int(minutes)}m {int(secs)}s ({exit_reason})"
+        )
+
+    async def get_total_uptime(self) -> float:
+        """Return cumulative uptime in seconds across all sessions."""
+        cursor = await self._db.execute(
+            "SELECT COALESCE(SUM(uptime_seconds), 0) as total FROM bot_sessions"
+        )
+        row = await cursor.fetchone()
+        return float(row["total"]) if row else 0.0
+
+    async def get_session_count(self) -> int:
+        """Return the total number of recorded sessions (restarts)."""
+        cursor = await self._db.execute(
+            "SELECT COUNT(*) as cnt FROM bot_sessions"
+        )
+        row = await cursor.fetchone()
+        return int(row["cnt"]) if row else 0
