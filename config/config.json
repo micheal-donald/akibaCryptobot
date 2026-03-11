@@ -30,7 +30,8 @@
     "take_profit_percent": 0.04,
     "trailing_stop": true,
     "trailing_stop_positive": 0.01,
-    "cooldown_candles": 5
+    "cooldown_candles": 5,
+    "max_spread_percent": 0.5
   },
   "backtesting": {
     "timerange": "20230101-20231231",

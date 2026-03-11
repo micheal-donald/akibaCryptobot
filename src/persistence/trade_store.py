@@ -113,7 +113,7 @@ class TradeStore:
                 trade.get("take_profit"),
                 trade.get("timestamp", datetime.now().isoformat()),
                 trade.get("order_id"),
-                trade.get("fees", 0.0),
+                trade.get("entry_fee", trade.get("fees", 0.0)),
                 trade.get("trailing_stop_price"),
             ),
         )

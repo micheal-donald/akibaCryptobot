@@ -149,18 +149,12 @@ class BaseFreqAIStrategy(BaseStrategy):
         """
         Generate features for model prediction
         """
-        # Convert to the format expected by FreqAI
         dataframe = ohlcv_data.copy()
-        dataframe.rename(
-            columns={
-                "open": "open",
-                "high": "high",
-                "low": "low",
-                "close": "close",
-                "volume": "volume",
-            },
-            inplace=True,
-        )
+
+        # Ensure a 'date' column exists for time-based feature engineering.
+        # get_ohlcv() sets timestamp as the index; expose it as a column too.
+        if "date" not in dataframe.columns:
+            dataframe["date"] = dataframe.index
 
         # Add technical indicators
         dataframe = self.calculate_indicators(dataframe)
@@ -277,18 +271,11 @@ class BaseFreqAIStrategy(BaseStrategy):
         """
         Prepare data for model training
         """
-        # Convert to the format expected by FreqAI
         dataframe = ohlcv_data.copy()
-        dataframe.rename(
-            columns={
-                "open": "open",
-                "high": "high",
-                "low": "low",
-                "close": "close",
-                "volume": "volume",
-            },
-            inplace=True,
-        )
+
+        # Ensure a 'date' column exists for time-based feature engineering.
+        if "date" not in dataframe.columns:
+            dataframe["date"] = dataframe.index
 
         # Add technical indicators
         dataframe = self.calculate_indicators(dataframe)

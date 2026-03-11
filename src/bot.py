@@ -102,6 +102,26 @@ class AkibaCryptoBot:
             await self.trade_store.initialize()
             self.active_trades = await self.trade_store.load_open_trades()
 
+            # Re-sync risk manager with persisted trades so counters and
+            # trailing stops are correct after a restart.
+            for symbol, trade in self.active_trades.items():
+                self.risk_manager.add_position(
+                    symbol=symbol,
+                    side=trade["side"],
+                    amount=trade["amount"],
+                    entry_price=trade["entry_price"],
+                    stop_loss=trade.get("stop_loss", 0),
+                    take_profit=trade.get("take_profit", 0),
+                    order_id=trade.get("order_id", ""),
+                )
+                # Restore trailing stop if it was previously ratcheted
+                if trade.get("trailing_stop_price") and symbol in self.risk_manager.positions:
+                    self.risk_manager.positions[symbol]["trailing_stop_price"] = trade["trailing_stop_price"]
+            if self.active_trades:
+                self.logger.info(
+                    f"Risk manager re-synced with {len(self.active_trades)} persisted trade(s)"
+                )
+
             # Initialize exchange connection
             await self.exchange.get_balance()
             self.logger.info("Successfully connected to exchange")
@@ -337,17 +357,15 @@ class AkibaCryptoBot:
 
                 # Close the position
                 side = "sell" if trade["side"] == "buy" else "buy"
+                ticker = await self.data_exchange.get_ticker(symbol)
+                exit_price = ticker["last"]
                 order = await self.exchange.place_market_order(
-                    symbol, side, trade["amount"]
+                    symbol, side, trade["amount"], price=exit_price
                 )
 
                 # Extract exit fee and compute net PnL
                 exit_fee_info = order.get("fee", {})
                 exit_fee_cost = exit_fee_info.get("cost", 0.0) if exit_fee_info else 0.0
-
-                # Get exit price from ticker
-                ticker = await self.data_exchange.get_ticker(symbol)
-                exit_price = ticker["last"]
 
                 entry_fee = trade.get("entry_fee", 0.0)
                 total_fees = entry_fee + exit_fee_cost
@@ -479,6 +497,39 @@ class AkibaCryptoBot:
             usdt_balance, signal.strength, current_price, signal.stop_loss
         )
 
+    async def _check_spread(self, symbol: str) -> bool:
+        """Return True if bid-ask spread is acceptable, False if too wide.
+
+        Fails open: if the order book is unavailable, the trade is allowed.
+        """
+        try:
+            max_spread_pct = self.config.get("risk_management", {}).get(
+                "max_spread_percent", 0.5
+            )
+            orderbook = await self.data_exchange.get_market_depth(symbol, limit=5)
+
+            best_bid = orderbook["bids"][0][0] if orderbook.get("bids") else None
+            best_ask = orderbook["asks"][0][0] if orderbook.get("asks") else None
+
+            if best_bid is None or best_ask is None or best_bid <= 0:
+                self.logger.warning(
+                    f"No orderbook data for {symbol}, skipping spread check"
+                )
+                return True  # fail open
+
+            spread_pct = ((best_ask - best_bid) / best_bid) * 100
+
+            if spread_pct > max_spread_pct:
+                self.logger.info(
+                    f"Skipping {symbol}: spread {spread_pct:.3f}% > max {max_spread_pct}%"
+                )
+                return False
+
+            return True
+        except Exception as e:
+            self.logger.error(f"Error checking spread for {symbol}: {e}")
+            return True  # fail open — don't block trading on order book errors
+
     async def _process_pair(self, pair: str):
         """Evaluate a single pair and place a trade if conditions are met."""
         try:
@@ -494,6 +545,10 @@ class AkibaCryptoBot:
 
             ohlcv_data, current_price = await self._get_market_snapshot(pair)
             if ohlcv_data is None:
+                return
+
+            # Check bid-ask spread — skip illiquid pairs
+            if not await self._check_spread(pair):
                 return
 
             signal = await self.strategy_manager.generate_signal(
@@ -616,17 +671,8 @@ class AkibaCryptoBot:
         self.logger.info("Cleaning up resources...")
 
         # Cancel open orders for all active trades (best-effort, errors are logged)
-        for symbol in list(self.active_trades.keys()):
-            try:
-                open_orders = await self.exchange.get_open_orders(symbol)
-                for order in open_orders:
-                    try:
-                        await self.exchange.cancel_order(order["id"], symbol)
-                        self.logger.info(f"Cancelled order {order['id']} for {symbol} on shutdown")
-                    except Exception as e:
-                        self.logger.error(f"Failed to cancel order {order['id']} for {symbol}: {e}")
-            except Exception as e:
-                self.logger.error(f"Failed to fetch open orders for {symbol} during cleanup: {e}")
+        for symbol in self.active_trades:
+            await self._cancel_orders_for_symbol(symbol)
 
         # Close trade persistence DB
         await self.trade_store.close()
@@ -645,6 +691,19 @@ class AkibaCryptoBot:
                     await self.telegram.application.shutdown()
             except Exception as e:
                 self.logger.error(f"Error stopping Telegram bot: {e}")
+
+    async def _cancel_orders_for_symbol(self, symbol: str):
+        """Cancel all open orders for a symbol. Best-effort — errors are logged."""
+        try:
+            open_orders = await self.exchange.get_open_orders(symbol)
+            for order in open_orders:
+                try:
+                    await self.exchange.cancel_order(order["id"], symbol)
+                    self.logger.info(f"Cancelled order {order['id']} for {symbol} on shutdown")
+                except Exception as e:
+                    self.logger.error(f"Failed to cancel order {order['id']} for {symbol}: {e}")
+        except Exception as e:
+            self.logger.error(f"Failed to fetch open orders for {symbol} during cleanup: {e}")
 
 
     # Methods for Telegram bot integration
