@@ -554,9 +554,7 @@ class TelegramNotifier:
 
                 await update.message.reply_text(message)
             except Exception as e:
-                await update.message.reply_text(
-                    f"❌ Error generating heatmap: {str(e)}"
-                )
+                await update.message.reply_text(f"❌ Error generating heatmap: {str(e)}")
         else:
             await update.message.reply_text("❌ Advanced risk manager not available")
 

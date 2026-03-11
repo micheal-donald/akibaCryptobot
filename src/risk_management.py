@@ -258,7 +258,8 @@ class RiskManager:
         ):
             return True, "stop_loss"
         if trailing_stop and (
-            (is_long and price <= trailing_stop) or (not is_long and price >= trailing_stop)
+            (is_long and price <= trailing_stop)
+            or (not is_long and price >= trailing_stop)
         ):
             return True, "trailing_stop"
         if take_profit and (

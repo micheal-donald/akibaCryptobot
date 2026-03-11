@@ -313,7 +313,9 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
             if trained_at_str:
                 self.model_trained_at = datetime.fromisoformat(trained_at_str)
                 max_age_hours = self.freqai_config.get("model_expiry_hours", 48)
-                age_hours = (datetime.now() - self.model_trained_at).total_seconds() / 3600
+                age_hours = (
+                    datetime.now() - self.model_trained_at
+                ).total_seconds() / 3600
                 if age_hours > max_age_hours:
                     logger.warning(
                         f"Model from {filepath} is {age_hours:.1f}h old "

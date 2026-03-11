@@ -71,7 +71,9 @@ class AkibaCryptoBot:
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self._cached_balance = None  # Refreshed once per trading cycle
-        self.pair_cooldowns: Dict[str, datetime] = {}  # symbol -> cooldown-expiry datetime
+        self.pair_cooldowns: Dict[
+            str, datetime
+        ] = {}  # symbol -> cooldown-expiry datetime
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -115,8 +117,13 @@ class AkibaCryptoBot:
                     order_id=trade.get("order_id", ""),
                 )
                 # Restore trailing stop if it was previously ratcheted
-                if trade.get("trailing_stop_price") and symbol in self.risk_manager.positions:
-                    self.risk_manager.positions[symbol]["trailing_stop_price"] = trade["trailing_stop_price"]
+                if (
+                    trade.get("trailing_stop_price")
+                    and symbol in self.risk_manager.positions
+                ):
+                    self.risk_manager.positions[symbol]["trailing_stop_price"] = trade[
+                        "trailing_stop_price"
+                    ]
             if self.active_trades:
                 self.logger.info(
                     f"Risk manager re-synced with {len(self.active_trades)} persisted trade(s)"
@@ -287,15 +294,23 @@ class AkibaCryptoBot:
 
                     # Update trailing stop if enabled
                     if self.risk_manager.trailing_stop:
-                        new_trailing = self.risk_manager.update_trailing_stop(symbol, current_price)
+                        new_trailing = self.risk_manager.update_trailing_stop(
+                            symbol, current_price
+                        )
                         if new_trailing and symbol in self.active_trades:
                             # Update the stop_loss in active_trades to the trailing value
-                            trailing_stop_price = self.risk_manager.positions.get(symbol, {}).get("trailing_stop_price")
+                            trailing_stop_price = self.risk_manager.positions.get(
+                                symbol, {}
+                            ).get("trailing_stop_price")
                             if trailing_stop_price:
-                                self.active_trades[symbol]["stop_loss"] = trailing_stop_price
+                                self.active_trades[symbol][
+                                    "stop_loss"
+                                ] = trailing_stop_price
                                 # Persist to DB if trade_store exists
-                                if hasattr(self, 'trade_store'):
-                                    await self.trade_store.update_trailing_stop(symbol, trailing_stop_price)
+                                if hasattr(self, "trade_store"):
+                                    await self.trade_store.update_trailing_stop(
+                                        symbol, trailing_stop_price
+                                    )
 
                     # Get OHLCV data for exit signal analysis
                     ohlcv_data = await self.data_exchange.get_ohlcv(
@@ -400,7 +415,9 @@ class AkibaCryptoBot:
                 # Unregister from risk manager
                 closed_info = self.risk_manager.remove_position(symbol, exit_price)
                 if closed_info:
-                    self.logger.info(f"Trade PnL for {symbol}: {closed_info.get('pnl', 0):.6f}")
+                    self.logger.info(
+                        f"Trade PnL for {symbol}: {closed_info.get('pnl', 0):.6f}"
+                    )
 
                 # Enforce cooldown after stop-loss exits to prevent immediate re-entry
                 if reason in ("stop_loss", "trailing_stop"):
@@ -409,7 +426,9 @@ class AkibaCryptoBot:
                     )
                     timeframe = self.config["trading"]["timeframes"]["primary"]
                     candle_minutes = self._timeframe_to_minutes(timeframe)
-                    cooldown_delta = timedelta(minutes=candle_minutes * cooldown_candles)
+                    cooldown_delta = timedelta(
+                        minutes=candle_minutes * cooldown_candles
+                    )
                     self.pair_cooldowns[symbol] = datetime.now() + cooldown_delta
                     self.logger.info(
                         f"Cooldown set for {symbol}: {cooldown_candles} candles ({cooldown_delta})"
@@ -541,7 +560,9 @@ class AkibaCryptoBot:
                     )
                     return
                 else:
-                    del self.pair_cooldowns[pair]  # Cooldown expired, allow trading again
+                    del self.pair_cooldowns[
+                        pair
+                    ]  # Cooldown expired, allow trading again
 
             ohlcv_data, current_price = await self._get_market_snapshot(pair)
             if ohlcv_data is None:
@@ -641,8 +662,8 @@ class AkibaCryptoBot:
                 "take_profit": take_profit,
                 "timestamp": datetime.now().isoformat(),
                 "order_id": order["id"],
-                "entry_fee": entry_fee,     # actual fee paid on entry
-                "exit_fee": 0.0,            # filled on exit
+                "entry_fee": entry_fee,  # actual fee paid on entry
+                "exit_fee": 0.0,  # filled on exit
             }
             db_id = await self.trade_store.insert_trade(trade_dict)
             trade_dict["db_id"] = db_id
@@ -699,12 +720,17 @@ class AkibaCryptoBot:
             for order in open_orders:
                 try:
                     await self.exchange.cancel_order(order["id"], symbol)
-                    self.logger.info(f"Cancelled order {order['id']} for {symbol} on shutdown")
+                    self.logger.info(
+                        f"Cancelled order {order['id']} for {symbol} on shutdown"
+                    )
                 except Exception as e:
-                    self.logger.error(f"Failed to cancel order {order['id']} for {symbol}: {e}")
+                    self.logger.error(
+                        f"Failed to cancel order {order['id']} for {symbol}: {e}"
+                    )
         except Exception as e:
-            self.logger.error(f"Failed to fetch open orders for {symbol} during cleanup: {e}")
-
+            self.logger.error(
+                f"Failed to fetch open orders for {symbol} during cleanup: {e}"
+            )
 
     # Methods for Telegram bot integration
     def get_status_info(self) -> Dict:

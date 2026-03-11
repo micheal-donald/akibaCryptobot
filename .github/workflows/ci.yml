@@ -21,9 +21,7 @@ jobs:
           cache: 'pip'
       
       - name: Install dependencies
-        run: |
-          pip install black flake8 mypy
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
       
       - name: Check formatting with Black
         run: black --check --diff src/ tests/

@@ -36,8 +36,9 @@ def mock_config():
 
 @pytest.fixture
 def bot(mock_config):
-    with patch.object(AkibaCryptoBot, "load_config", return_value=mock_config), \
-         patch.object(AkibaCryptoBot, "_load_strategies"):
+    with patch.object(
+        AkibaCryptoBot, "load_config", return_value=mock_config
+    ), patch.object(AkibaCryptoBot, "_load_strategies"):
         bot = AkibaCryptoBot.__new__(AkibaCryptoBot)
         bot.config = mock_config
         bot.logger = MagicMock()
