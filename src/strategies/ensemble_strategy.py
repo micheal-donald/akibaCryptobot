@@ -70,7 +70,9 @@ class EnsembleStrategy(BaseStrategy):
 
         # FreqAI ML strategy (60% weight)
         freqai_weight = ensemble_config.get("freqai_weight", 0.6)
-        self.freqai = MLFreqAIStrategy(config) # FreqAI needs full config for its sub-keys
+        self.freqai = MLFreqAIStrategy(
+            config
+        )  # FreqAI needs full config for its sub-keys
         self.strategies.append((self.freqai, freqai_weight, "freqai"))
 
         # Voting thresholds
