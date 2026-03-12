@@ -91,6 +91,25 @@ class TradeStore:
             self._db = None
             logger.info("TradeStore closed")
 
+    def _parse_timestamp(self, ts) -> Optional[datetime]:
+        """Robustly parse a timestamp that could be an ISO string or a Unix integer."""
+        if ts is None:
+            return None
+        if isinstance(ts, str):
+            # Try Unix epoch first (in case it's string-encoded int)
+            try:
+                return datetime.fromtimestamp(int(ts))
+            except (ValueError, TypeError):
+                # Fallback to ISO parsing
+                try:
+                    return datetime.fromisoformat(ts)
+                except ValueError:
+                    logger.error(f"Failed to parse timestamp: {ts}")
+                    return datetime.now()
+        elif isinstance(ts, (int, float)):
+            return datetime.fromtimestamp(ts)
+        return datetime.now()
+
     # ------------------------------------------------------------------
     # Reads
     # ------------------------------------------------------------------
@@ -110,7 +129,7 @@ class TradeStore:
                 "entry_price": row["entry_price"],
                 "stop_loss": row["stop_loss"],
                 "take_profit": row["take_profit"],
-                "timestamp": datetime.fromtimestamp(row["timestamp"]),
+                "timestamp": self._parse_timestamp(row["timestamp"]),
                 "order_id": row["order_id"],
                 "status": row["status"],
                 "fees": row["fees"],
@@ -134,9 +153,9 @@ class TradeStore:
                     "amount": row["amount"],
                     "entry_price": row["entry_price"],
                     "exit_price": row["exit_price"],
-                    "timestamp": datetime.fromtimestamp(row["timestamp"]),
+                    "timestamp": self._parse_timestamp(row["timestamp"]),
                     "exit_timestamp": (
-                        datetime.fromtimestamp(row["exit_timestamp"])
+                        self._parse_timestamp(row["exit_timestamp"])
                         if row["exit_timestamp"]
                         else None
                     ),
@@ -157,7 +176,7 @@ class TradeStore:
 
         return [
             {
-                "timestamp": datetime.fromtimestamp(r["timestamp"]),
+                "timestamp": self._parse_timestamp(r["timestamp"]),
                 "total_value": r["total_value"],
             }
             for r in reversed(rows)
@@ -283,8 +302,8 @@ class TradeStore:
         row = await cursor.fetchone()
         uptime_seconds = 0.0
         if row and row["start_time"]:
-            start_dt = datetime.fromtimestamp(row["start_time"])
-            uptime_seconds = (datetime.fromtimestamp(now_ts) - start_dt).total_seconds()
+            start_dt = self._parse_timestamp(row["start_time"])
+            uptime_seconds = (self._parse_timestamp(now_ts) - start_dt).total_seconds()
 
         await self._db.execute(
             """
