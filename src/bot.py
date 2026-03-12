@@ -17,6 +17,7 @@ from notifications.telegram_bot import TelegramNotifier
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.base_strategy import StrategyManager
 from persistence.trade_store import TradeStore
+from performance.metrics_tracker import PerformanceMetricsTracker
 
 
 class AkibaCryptoBot:
@@ -60,6 +61,12 @@ class AkibaCryptoBot:
         db_path = self.config.get("persistence", {}).get("db_path", "data/trades.db")
         self.trade_store = TradeStore(db_path)
         self.active_trades: Dict[str, Dict] = {}
+
+        # Performance tracking (powers /api/metrics and UI dashboard)
+        initial_balance = self.config.get("trading", {}).get("initial_balance", 10000.0)
+        self.performance_tracker = PerformanceMetricsTracker(
+            initial_balance=initial_balance
+        )
 
         self.is_running = False
         self.start_time = datetime.now()
@@ -138,6 +145,16 @@ class AkibaCryptoBot:
             if self.active_trades:
                 self.logger.info(
                     f"Risk manager re-synced with {len(self.active_trades)} persisted trade(s)"
+                )
+
+            # Seed performance tracker with persisted open trades
+            for symbol, trade in self.active_trades.items():
+                self.performance_tracker.record_trade_entry(
+                    symbol=symbol,
+                    side=trade["side"],
+                    amount=trade["amount"],
+                    entry_price=trade["entry_price"],
+                    strategy=self.strategy_manager.active_strategy or "unknown",
                 )
 
             # Initialize exchange connection
@@ -412,6 +429,14 @@ class AkibaCryptoBot:
                     symbol, exit_price, reason, net_pnl, total_fees
                 )
 
+                # Record in performance tracker
+                self.performance_tracker.record_trade_exit(
+                    symbol=symbol,
+                    exit_price=exit_price,
+                    exit_reason=reason,
+                    fees=total_fees,
+                )
+
                 if self.telegram:
                     await self.telegram.send_message(
                         f"📊 Closed {symbol} position\n"
@@ -679,6 +704,15 @@ class AkibaCryptoBot:
             db_id = await self.trade_store.insert_trade(trade_dict)
             trade_dict["db_id"] = db_id
             self.active_trades[symbol] = trade_dict
+
+            # Record in performance tracker
+            self.performance_tracker.record_trade_entry(
+                symbol=symbol,
+                side=side,
+                amount=amount,
+                entry_price=entry_price,
+                strategy=self.strategy_manager.active_strategy or "unknown",
+            )
 
             self.logger.info(f"Placed {side} order for {amount} {symbol}")
 

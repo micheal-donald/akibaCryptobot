@@ -29,10 +29,10 @@ async def get_equity_curve(bot=Depends(get_bot)):
         return {
             "data": [
                 {
-                    "timestamp": point["timestamp"].isoformat(),
-                    "balance": point["balance"],
+                    "timestamp": ts.isoformat(),
+                    "balance": balance,
                 }
-                for point in curve
+                for ts, balance in curve
             ]
         }
 
