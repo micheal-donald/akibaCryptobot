@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 import numpy as np
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, AsyncMock
 import sys
 import os
 
@@ -31,17 +31,17 @@ def sample_ohlcv_data():
 class TestBinanceConnector:
     """Test cases for BinanceConnector class"""
 
-    @patch("ccxt.binance")
+    @patch("ccxt.async_support.binance")
     def test_binance_connector_initialization(self, mock_binance):
         """Test BinanceConnector initialization"""
-        mock_exchange = Mock()
+        mock_exchange = AsyncMock()
         mock_binance.return_value = mock_exchange
 
         connector = BinanceConnector(
             api_key="test_api_key", secret_key="test_api_secret", sandbox=True
         )
 
-        # Check that ccxt.binance was called with correct parameters
+        # Check that ccxt.async_support.binance was called with correct parameters
         mock_binance.assert_called_once_with(
             {
                 "apiKey": "test_api_key",
@@ -61,10 +61,10 @@ class TestBinanceConnector:
         assert connector.sandbox
 
     @pytest.mark.asyncio
-    @patch("ccxt.binance")
+    @patch("ccxt.async_support.binance")
     async def test_fetch_ohlcv(self, mock_binance, sample_ohlcv_data):
         """Test fetching OHLCV data"""
-        mock_exchange = Mock()
+        mock_exchange = AsyncMock()
         mock_binance.return_value = mock_exchange
 
         # Mock the fetch_ohlcv method to return sample data
@@ -88,10 +88,10 @@ class TestBinanceConnector:
         assert len(ohlcv_data) == 3
 
     @pytest.mark.asyncio
-    @patch("ccxt.binance")
+    @patch("ccxt.async_support.binance")
     async def test_create_market_order(self, mock_binance):
         """Test creating market order"""
-        mock_exchange = Mock()
+        mock_exchange = AsyncMock()
         mock_exchange.markets = {}
         mock_binance.return_value = mock_exchange
 
@@ -124,10 +124,10 @@ class TestBinanceConnector:
         assert result == mock_response
 
     @pytest.mark.asyncio
-    @patch("ccxt.binance")
+    @patch("ccxt.async_support.binance")
     async def test_create_limit_order(self, mock_binance):
         """Test creating limit order"""
-        mock_exchange = Mock()
+        mock_exchange = AsyncMock()
         mock_exchange.markets = {}
         mock_binance.return_value = mock_exchange
 
@@ -160,10 +160,10 @@ class TestBinanceConnector:
         assert result == mock_response
 
     @pytest.mark.asyncio
-    @patch("ccxt.binanceusdm")
+    @patch("ccxt.async_support.binanceusdm")
     async def test_fetch_positions(self, mock_binanceusdm):
         """Test fetching futures positions"""
-        mock_exchange = Mock()
+        mock_exchange = AsyncMock()
         mock_binanceusdm.return_value = mock_exchange
 
         # Mock the fetch_positions method to return sample data
@@ -197,10 +197,10 @@ class TestBinanceConnector:
         assert positions[0]["symbol"] == "BTC/USDT"
 
     @pytest.mark.asyncio
-    @patch("ccxt.binance")
+    @patch("ccxt.async_support.binance")
     async def test_cancel_order(self, mock_binance):
         """Test canceling order"""
-        mock_exchange = Mock()
+        mock_exchange = AsyncMock()
         mock_binance.return_value = mock_exchange
 
         # Mock the cancel_order method to return sample response
@@ -243,10 +243,10 @@ class TestBinanceConnector:
                 },
             },
         }
-        mock_exchange.amount_to_precision = lambda sym, amt: (
+        connector.exchange = mock_exchange
+        connector.exchange.amount_to_precision = lambda sym, amt: (
             f"{amt:.{mock_exchange.markets[sym]['precision']['amount']}f}"
         )
-        connector.exchange = mock_exchange
         connector._markets_loaded = True
 
         # Valid order
@@ -268,10 +268,10 @@ class TestBinanceConnector:
         assert amt == pytest.approx(100.0)
 
     @pytest.mark.asyncio
-    @patch("ccxt.binance")
+    @patch("ccxt.async_support.binance")
     async def test_place_market_order_rejected(self, mock_binance):
         """Test market order is rejected if validation fails"""
-        mock_exchange = Mock()
+        mock_exchange = AsyncMock()
         mock_exchange.markets = {}
         mock_binance.return_value = mock_exchange
 
