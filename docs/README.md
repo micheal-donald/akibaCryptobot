@@ -15,6 +15,7 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [API Reference](API_REFERENCE.md) | REST endpoints, WebSocket streams, request/response formats |
 | [Telegram Commands](TELEGRAM_COMMANDS.md) | Bot commands, setup guide, automatic notifications |
 | [Backtesting](BACKTESTING.md) | Backtest engine, walk-forward analysis, interpreting results |
+| [Reconciliation](ARCHITECTURE.md#reconciliation) | How the bot stays in sync with actual exchange balances |
 | [Deployment](DEPLOYMENT.md) | Local dev, Docker, CI/CD pipeline, cloud deployment |
 
 ---

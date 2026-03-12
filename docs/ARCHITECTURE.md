@@ -1,6 +1,6 @@
 # AkibaCryptoBot — System Architecture
 
-AkibaCryptoBot is an automated cryptocurrency trading engine built in Python. It connects to Binance (spot and futures), analyses the market with pluggable strategies (technical-analysis **and** machine-learning), enforces multi-layer risk controls, and exposes a FastAPI REST/WebSocket API plus a Telegram bot for monitoring and control.
+AkibaCryptoBot is an automated, **fully asynchronous** cryptocurrency trading engine built in Python using `asyncio`. It connects to Binance (spot and futures) via CCXT's async support, analyses the market with pluggable strategies (technical-analysis **and** machine-learning), enforces multi-layer risk controls, maintains database-exchange consistency via a dedicated reconciliation layer, and exposes a FastAPI REST/WebSocket API plus a Telegram bot for monitoring and control.
 
 ---
 
@@ -97,8 +97,9 @@ flowchart TB
 | **Risk Manager** | `src/risk_management.py` | Position sizing, stop loss, trailing stops, daily limits |
 | **Advanced Risk** | `src/advanced_risk_management.py` | ATR/Kelly sizing, correlation analysis, portfolio heatmap |
 | **Config Validator** | `src/config_validator.py` | Validates all config sections at startup |
-| **Trade Store** | `src/persistence/trade_store.py` | Async SQLite persistence for open/closed trades |
+| **Trade Store** | `src/persistence/trade_store.py` | Async SQLite persistence for trades (Unix timestamps) |
 | **Performance Tracker** | `src/performance/metrics_tracker.py` | Sharpe, Sortino, drawdown, profit factor, equity curve |
+| **Reconciliation Manager** | `src/monitoring/reconciliation.py` | Syncs DB state with exchange balances to find orphaned/lost trades |
 | **FastAPI App** | `src/api/app.py` | Application factory with lifespan-managed bot |
 | **API Routes** | `src/api/routes/` | REST endpoints: status, account, trading, performance, risk, strategy, model |
 | **WebSocket** | `src/api/websockets.py` | Real-time streaming endpoint |
@@ -130,7 +131,11 @@ Each iteration of the trading loop in `AkibaCryptoBot.trading_cycle()` performs 
        ├─ Check stop-loss / take-profit triggers
        └─ Close position if exit condition met
 
-4. SCAN FOR OPPORTUNITIES  (OpportunityScanner)
+4. RECONCILIATION  (ReconciliationManager)
+   └─ Periodic check (~1 hour) to ensure DB trades match actual exchange balances
+   └─ Report orphaned assets or lost trades via Telegram
+
+5. SCAN FOR OPPORTUNITIES  (OpportunityScanner)
    └─ For each configured pair (up to max_open_trades):
        ├─ Fetch market snapshot (OHLCV + price)
        ├─ Generate signal via active strategy
@@ -139,7 +144,7 @@ Each iteration of the trading loop in `AkibaCryptoBot.trading_cycle()` performs 
        ├─ Calculate position size (risk-adjusted)
        └─ Place trade if all checks pass
 
-5. SLEEP
+6. SLEEP
    └─ Wait for the configured interval before next cycle
 ```
 

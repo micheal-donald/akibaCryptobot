@@ -169,7 +169,7 @@ Lint & Format → Test → Smoke Test
 **Triggers:** Push to `master` (after CI passes)
 
 ```
-Build Docker → Push to GHCR → SSH to EC2 → Pull & Restart → Notify Telegram
+Sync Files via Rsync → Rebuild .env → Restart Systemd → Notify Telegram
 ```
 
 ### 3. `train.yml` — Model Training
@@ -180,46 +180,31 @@ Handles FreqAI model re-training on schedule or manual trigger.
 
 | Secret | Description |
 |---|---|
-| `EC2_HOST` | EC2 public IP or DNS |
-| `SSH_PRIVATE_KEY` | SSH private key for EC2 |
+| `SERVER_IP` | Vultr VPS IP |
+| `SSH_PRIVATE_KEY` | SSH private key for root access |
 | `BINANCE_API_KEY` | Binance API key |
 | `BINANCE_SECRET_KEY` | Binance secret key |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID |
-| `TRADING_MODE` | `paper` or `live` |
+| `VULTR_API_KEY` | Vultr API key |
 
 ---
 
-## Cloud Deployment (EC2)
-
-### First-Time Setup
+### Vultr Bare-Metal Setup
+The bot runs as a systemd service (`akibabot.service`) on a Vultr Ubuntu instance.
 
 ```bash
-# 1. Provision infrastructure
-cd terraform
-terraform init
-terraform apply
-# Note the public_ip from output
+# SSH into the instance
+ssh root@<SERVER_IP>
 
-# 2. SSH into the instance
-ssh -i ~/.ssh/akibabot-key.pem ubuntu@<public_ip>
-
-# 3. Run the setup script
-curl -sSL https://raw.githubusercontent.com/YOUR_REPO/master/scripts/setup-ec2.sh | bash
-
-# 4. Add GitHub Secrets to your repository
-
-# 5. Push to master to trigger deployment
-git push origin master
+# Logs and Status
+systemctl status akibabot.service
+tail -f /opt/akibabot/logs/akiba_crypto_bot.log
 ```
 
-### Manual Deployment
-
+### Manual Restart
 ```bash
-ssh -i ~/.ssh/akibabot-key.pem ubuntu@<ec2_ip>
-cd /opt/akibabot
-docker-compose pull
-docker-compose up -d
+ssh root@<SERVER_IP> "systemctl restart akibabot"
 ```
 
 ---

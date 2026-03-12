@@ -101,6 +101,7 @@ AkibaCryptoBot is configured via two JSON files and environment variables.
 |---|---|---|---|
 | `volatility_threshold` | float | `3.0` | Halt trading if volatility exceeds this multiple of normal |
 | `drawdown_threshold` | float | `0.20` | Halt trading if portfolio drawdown exceeds 20% |
+| `reconciliation_interval_minutes` | int | `60` | Frequency of DB-Exchange audits |
 
 ### `notifications`
 

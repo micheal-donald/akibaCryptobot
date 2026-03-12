@@ -14,7 +14,8 @@ AkibaCryptoBot is a state-of-the-art **High-Frequency Trading (HFT)** engine opt
 - **Ensemble Decision Engine**: Weighted consensus voting between traditional Momentum TA (40%) and FreqAI ML (60%).
 - **Optimized ML Core**: Upgraded FreqAI integration using **LightGBM** for 10x faster training and sub-millisecond predictions.
 - **Futures Support**: Advanced control for USDT-M Futures including isolated margin and custom leverage (up to 3x recommended).
-- **Tokyo Edge Deployment**: Automated Terraform IaC for deployment to AWS Tokyo (ap-northeast-1) for minimal latency to Binance servers.
+- **Fully Asynchronous Execution**: Non-blocking `asyncio` engine handling data, strategies, and orders concurrently.
+- **Vultr Bare-Metal Deployment**: Optimized for direct execution on high-performance VPS for minimal latency.
 
 ---
 
@@ -65,21 +66,12 @@ python start_bot.py --strategy ensemble --testnet
 
 ---
 
-## 🏗 Deployment (CI/CD)
+The bot is optimized for high-performance VPS environments. We use **GitHub Actions** for automated deployment.
 
-The bot is designed to run in a low-latency environment. We use **Terraform** for infrastructure and **GitHub Actions** for automated deployment.
-
-### 1. Provision Infrastructure (AWS Tokyo)
-```bash
-cd terraform
-terraform init
-terraform apply
-```
-
-### 2. Automated Deployment
+### 1. Automated Deployment
 This repo includes a full CI/CD pipeline:
 - **CI**: Runs linting, type checks, and unit tests on every push.
-- **CD**: Automatically builds a Docker image, pushes to GHCR, and deploys to your AWS EC2 instance.
+- **CD**: Automatically syncs code via `rsync` to your Vultr VPS and restarts the `akibabot.service`.
 
 For detailed steps, see [**Deployment Guide**](docs/DEPLOYMENT.md).
 
@@ -99,7 +91,7 @@ For detailed steps, see [**Deployment Guide**](docs/DEPLOYMENT.md).
 
 ```text
 ├── .github/workflows/   # CI/CD Pipelines (Test & Deploy)
-├── terraform/           # Infrastructure as Code (AWS Tokyo)
+├── scripts/             # Deployment and utility scripts
 ├── src/
 │   ├── exchange/        # WebSocket Manager & Binance Client
 │   ├── strategies/      # HFT & Ensemble Logic

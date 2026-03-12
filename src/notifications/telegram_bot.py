@@ -157,6 +157,7 @@ class TelegramNotifier:
         application.add_handler(CommandHandler("risk", self.cmd_risk))
         application.add_handler(CommandHandler("correlations", self.cmd_correlations))
         application.add_handler(CommandHandler("heatmap", self.cmd_heatmap))
+        application.add_handler(CommandHandler("reconcile", self.cmd_reconcile))
 
         self.application = application
 
@@ -178,6 +179,7 @@ class TelegramNotifier:
             "/heatmap - Portfolio risk heatmap\n"
             "/stop - Stop trading\n"
             "/resume - Resume trading\n"
+            "/reconcile - Manual balance audit\n"
             "/help - Show this help\n"
             "/config - Bot configuration"
         )
@@ -267,6 +269,8 @@ class TelegramNotifier:
             "/resume - Resume trading\n\n"
             "⚙️ Configuration:\n"
             "/config - Show bot configuration\n\n"
+            "🛠 Tools:\n"
+            "/reconcile - Audit DB vs Exchange\n\n"
             "❓ Help:\n"
             "/help - Show this help message\n"
             "/start - Restart bot welcome"
@@ -293,6 +297,38 @@ class TelegramNotifier:
             message = "❌ Bot instance not available"
 
         await update.message.reply_text(message)
+
+    async def cmd_reconcile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /reconcile command - manually trigger audit"""
+        if hasattr(self, "bot_instance") and hasattr(
+            self.bot_instance, "reconciliation"
+        ):
+            await update.message.reply_text(
+                "🔍 Starting manual reconciliation audit..."
+            )
+            try:
+                discrepancies = await self.bot_instance.reconciliation.reconcile()
+                orphans = len(discrepancies.get("orphans", []))
+                lost = len(discrepancies.get("lost_trades", []))
+                mismatches = len(discrepancies.get("mismatches", []))
+
+                if orphans == 0 and lost == 0 and mismatches == 0:
+                    await update.message.reply_text(
+                        "✅ Reconciliation complete: Local DB matches Exchange state."
+                    )
+                else:
+                    msg = (
+                        "⚖️ Reconciliation Results:\n"
+                        f"• Orphans: {orphans}\n"
+                        f"• Lost Trades: {lost}\n"
+                        f"• Mismatches: {mismatches}\n\n"
+                        "Check bot logs for specific details."
+                    )
+                    await update.message.reply_text(msg)
+            except Exception as e:
+                await update.message.reply_text(f"❌ Reconciliation failed: {str(e)}")
+        else:
+            await update.message.reply_text("❌ Reconciliation manager not available")
 
     async def start_webhook(self, webhook_url: str, port: int = 8443):
         """Start webhook for receiving Telegram updates"""

@@ -37,6 +37,7 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 | `/help` | List all available commands |
 | `/status` | Bot status — uptime, strategy, active trades, running state |
 | `/config` | Current configuration summary |
+| `/reconcile` | Manual balance audit vs Exchange |
 
 ### Trading
 

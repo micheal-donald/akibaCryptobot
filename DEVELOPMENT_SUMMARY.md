@@ -1,9 +1,24 @@
 # akibaCryptobot Development Summary
 
 ## Security Fixes
-- Removed sensitive .env files from git history using git filter-branch
-- Updated .gitignore to prevent accidental commit of sensitive files
-- Verified that .env files are no longer in the repository history
+- Removed sensitive .env files from git history using git filter-branch.
+- Updated .gitignore to prevent accidental commit of sensitive files.
+- Verified that .env files are no longer in the repository history.
+
+## Core Engine Refactor (Asyncio)
+- **Full Async Refactor**: Rebuilt the core trading engine (`bot.py`) using `asyncio` for high-concurrency trading.
+- **Async Exchange Connector**: Refactored `BinanceClient` to use `ccxt.async_support`, ensuring non-blocking API calls.
+- **Asynchronous Tests**: Updated the entire test suite to use `pytest-asyncio` and `AsyncMock`.
+
+## Reconciliation & Monitoring
+- **Reconciliation Engine**: Implemented `ReconciliationManager` to periodically audit the internal database against the live exchange balance.
+- **Discrepancy Detection**: The bot now detects and reports "orphaned assets" (untracked coins on exchange) and "lost trades" (DB records missing corresponding coins).
+- **Telegram Heartbeat**: Added automated reconciliation reports to Telegram.
+
+## Database Optimization
+- **Schema Migration**: Migrated all timestamps from ISO strings to **Unix Integer Timestamps** for faster range queries and smaller storage.
+- **Backward Compatibility**: Added robust timestamp parsing (`_parse_timestamp`) to handle legacy string data without crashing.
+- **Indexing**: Added specialized database indices to optimize time-series queries (PnL calculation, equity curve rendering).
 
 ## Test Suite Implementation
 - Created comprehensive test suite for all major components:

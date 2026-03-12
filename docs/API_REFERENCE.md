@@ -12,6 +12,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 |---|---|---|
 | `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
 | `GET` | `/api/status` | Bot status: uptime, active trades, circuit breaker state, strategy, trading mode |
+| `GET` | `/api/reconcile` | Manually triggers a reconciliation check between DB and Exchange |
 
 **Example response** (`GET /api/status`):
 ```json
