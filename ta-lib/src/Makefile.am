@@ -3,7 +3,7 @@ SUBDIRS = ta_abstract ta_common ta_func
 
 lib_LTLIBRARIES = libta_lib.la
 
-libta_lib_la_SOURCES = 
+libta_lib_la_SOURCES =
 
 libta_lib_la_LIBADD = \
   ta_abstract/libta_abstract.la \

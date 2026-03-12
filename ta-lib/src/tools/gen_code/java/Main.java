@@ -46,13 +46,13 @@
 
 /* Description:
  *       Perform text processing to the generated TA-Lib code.
- *       
+ *
  *       Action Performed:
  *          - Do proper indentation of the Core.java file.
  *
- *       This Java command line utility is expected to be 
+ *       This Java command line utility is expected to be
  *       called only by the gen_code tool.
- *       
+ *
  * Note: All directory in this code is relative to the 'bin' directory.
  *       ta-lib/c/bin must be your working directory when launching this
  *       utility, which is the also the expected directory when launching
@@ -64,21 +64,21 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 
-class Main 
+class Main
 {
    public static void main(String[] args) {
        try {
          String inFile = "..\\temp\\CoreJavaUnformated.tmp";
-	 String outFile = "..\\temp\\CoreJavaPretty.tmp"; 
+	 String outFile = "..\\temp\\CoreJavaPretty.tmp";
          new PrettyCode(inFile,outFile).process().close();
          if( PrettyCode.verify(inFile,outFile) ){
-	    /* Create a file when all done. The "caller" gen_code will 
+	    /* Create a file when all done. The "caller" gen_code will
 	     * look for that file to confirm success.
 	     */
             PrintWriter out = new PrintWriter("..\\temp\\java_success");
 	    out.print("OK");
-	    out.close();            
-         }         
+	    out.close();
+         }
       } catch (FileNotFoundException e) {
          e.printStackTrace();
       } catch (IOException e) {

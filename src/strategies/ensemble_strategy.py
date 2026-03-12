@@ -257,9 +257,11 @@ class EnsembleStrategy(BaseStrategy):
             # Exit if majority agrees
             if exit_weight >= 0.5 or exit_count >= len(self.strategies) / 2:
                 return TradingSignal(
-                    signal_type=SignalType.SELL
-                    if position.get("side") == "buy"
-                    else SignalType.BUY,
+                    signal_type=(
+                        SignalType.SELL
+                        if position.get("side") == "buy"
+                        else SignalType.BUY
+                    ),
                     strength=exit_weight,
                     price=current_price,
                     timestamp=datetime.now(),

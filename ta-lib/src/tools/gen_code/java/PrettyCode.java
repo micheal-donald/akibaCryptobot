@@ -59,20 +59,20 @@ public class PrettyCode {
    int level;
    BufferedReader in;
    PrintWriter    out;
-   
+
    String indentString = "   ";
-   
+
    boolean insideOfComment;
-   
+
    boolean unfinishedStatement;
-   
+
    String lineBuffer;
-   
+
    public PrettyCode(String inFileName, String outFileName) throws FileNotFoundException{
       this.in  = new BufferedReader(new FileReader(inFileName));
       this.out = new PrintWriter(outFileName);
    }
-   
+
    public PrettyCode process() throws IOException{
       while( (lineBuffer=in.readLine())!=null ){
          processLine(lineBuffer);
@@ -82,13 +82,13 @@ public class PrettyCode {
       out.flush();
       return this;
    }
-   
+
    public PrettyCode close() throws IOException{
       in.close();
       out.close();
       return this;
    }
-   
+
    void processLine(String buffer){
       if( level > 0 ){
          buffer=buffer.trim();
@@ -102,7 +102,7 @@ public class PrettyCode {
          while((buffer=processBuffer(buffer))!=null);
       }
    }
-   
+
    String processBuffer(String buffer){
       if( buffer == null ){ return null; }
       if( buffer.startsWith("/*")){
@@ -122,11 +122,11 @@ public class PrettyCode {
          }else{
             out.print(buffer.substring(0,i+1));
             return buffer.substring(i+1);
-         }         
+         }
       }else{
          for(int i=0;i<buffer.length();i++){
             char c = buffer.charAt(i);
-            char cc = (i == (buffer.length()-1))? 0:buffer.charAt(i+1);            
+            char cc = (i == (buffer.length()-1))? 0:buffer.charAt(i+1);
             if( c == '{' ){
                unfinishedStatement=false;
                level++;
@@ -136,7 +136,7 @@ public class PrettyCode {
                unfinishedStatement=false;
                level--;
                out.print(buffer.substring(0, i+1));
-               return substring(buffer, i+1);         
+               return substring(buffer, i+1);
             }else if( c == '"'){
                out.print(buffer.substring(0, i));
                return substring(buffer, i);
@@ -147,7 +147,7 @@ public class PrettyCode {
                out.print(buffer.substring(0, i));
                return substring(buffer, i);
             }else if( c == ' ' ){
-               
+
             }else if( c == ';' ){
                unfinishedStatement=false;
             }else if( c == ')' && cc == ',' ){
@@ -173,7 +173,7 @@ public class PrettyCode {
       }
       return null;
    }
-   
+
    void appendIndents(String buf){
       int n=level;
       if( unfinishedStatement ){
@@ -186,16 +186,16 @@ public class PrettyCode {
       }
       for(int i=0;i<n;i++){ out.print(indentString); }
    }
-   
+
    void error(String msg){
       System.err.println("ERROR one line ["+line+"] : "+msg);
    }
-   
+
    String substring(String s, int i){
       if( i>(s.length()-1)){return "";}
       return s.substring(i);
    }
-   
+
    public static boolean verify(String fileName1, String fileName2) throws IOException{
       BufferedReader f1 = new BufferedReader(new FileReader(fileName1));
       BufferedReader f2 = new BufferedReader(new FileReader(fileName2));
@@ -216,9 +216,9 @@ public class PrettyCode {
       }
       if( (buf2 = f2.readLine()) != null ){
          System.err.println(fileName1+" is shorter than "+fileName2);
-         return false;         
+         return false;
       }
       return true;
-   }   
+   }
 }
 

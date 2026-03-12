@@ -217,7 +217,7 @@ clean-noinstPROGRAMS:
 	  echo " rm -f $$p $$f"; \
 	  rm -f $$p $$f ; \
 	done
-gen_code$(EXEEXT): $(gen_code_OBJECTS) $(gen_code_DEPENDENCIES) 
+gen_code$(EXEEXT): $(gen_code_OBJECTS) $(gen_code_DEPENDENCIES)
 	@rm -f gen_code$(EXEEXT)
 	$(gen_code_LINK) $(gen_code_OBJECTS) $(gen_code_LDADD) $(LIBS)
 

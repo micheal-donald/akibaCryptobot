@@ -133,7 +133,7 @@ CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
 CPP = gcc -E
-CPPFLAGS = 
+CPPFLAGS =
 CXX = g++
 CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
@@ -142,25 +142,25 @@ CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
 ECHO = echo
-ECHO_C = 
+ECHO_C =
 ECHO_N = -n
-ECHO_T = 
+ECHO_T =
 EGREP = /usr/bin/grep -E
-EXEEXT = 
-F77 = 
-FFLAGS = 
+EXEEXT =
+F77 =
+FFLAGS =
 GREP = /usr/bin/grep
 INSTALL = /usr/bin/install -c
 INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-LDFLAGS = 
-LIBOBJS = 
-LIBS = -lpthread -ldl 
+LDFLAGS =
+LIBOBJS =
+LIBS = -lpthread -ldl
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LN_S = ln -s
-LTLIBOBJS = 
+LTLIBOBJS =
 MAKEINFO = ${SHELL} /home/lekim/Projects/akibaCryptobot/ta-lib/missing --run makeinfo
 MKDIR_P = /usr/bin/mkdir -p
 OBJEXT = o
@@ -171,9 +171,9 @@ PACKAGE_STRING = ta-lib 0.4.0
 PACKAGE_TARNAME = ta-lib
 PACKAGE_VERSION = 0.4.0
 PATH_SEPARATOR = :
-POW_LIB = 
+POW_LIB =
 RANLIB = ranlib
-SET_MAKE = 
+SET_MAKE =
 SHELL = /bin/bash
 STRIP = strip
 TALIB_LIBRARY_VERSION = 0:0:0
@@ -184,15 +184,15 @@ abs_top_builddir = /home/lekim/Projects/akibaCryptobot/ta-lib
 abs_top_srcdir = /home/lekim/Projects/akibaCryptobot/ta-lib
 ac_ct_CC = gcc
 ac_ct_CXX = g++
-ac_ct_F77 = 
+ac_ct_F77 =
 am__include = include
 am__leading_dot = .
-am__quote = 
+am__quote =
 am__tar = ${AMTAR} chof - "$$tardir"
 am__untar = ${AMTAR} xf -
 bindir = ${exec_prefix}/bin
 build = x86_64-unknown-linux-gnu
-build_alias = 
+build_alias =
 build_cpu = x86_64
 build_os = linux-gnu
 build_vendor = unknown
@@ -203,7 +203,7 @@ docdir = ${datarootdir}/doc/${PACKAGE_TARNAME}
 dvidir = ${docdir}
 exec_prefix = ${prefix}
 host = x86_64-unknown-linux-gnu
-host_alias = 
+host_alias =
 host_cpu = x86_64
 host_os = linux-gnu
 host_vendor = unknown
@@ -226,7 +226,7 @@ sbindir = ${exec_prefix}/sbin
 sharedstatedir = ${prefix}/com
 srcdir = .
 sysconfdir = ${prefix}/etc
-target_alias = 
+target_alias =
 top_builddir = ../..
 top_srcdir = ../..
 noinst_LTLIBRARIES = libta_func.la
@@ -439,7 +439,7 @@ clean-noinstLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libta_func.la: $(libta_func_la_OBJECTS) $(libta_func_la_DEPENDENCIES) 
+libta_func.la: $(libta_func_la_OBJECTS) $(libta_func_la_DEPENDENCIES)
 	$(libta_func_la_LINK)  $(libta_func_la_OBJECTS) $(libta_func_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:

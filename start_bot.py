@@ -102,7 +102,9 @@ def main():
     logger.info(f"Configuration file: {args.config}")
     logger.info(f"Strategy override: {args.strategy}")
     logger.info(f"Testnet mode: {args.testnet}")
-    logger.info(f"API mode: {'disabled' if args.no_api else f'http://{args.host}:{args.port}'}")
+    logger.info(
+        f"API mode: {'disabled' if args.no_api else f'http://{args.host}:{args.port}'}"
+    )
 
     if args.no_api:
         # Legacy mode: run the bot directly without the API server

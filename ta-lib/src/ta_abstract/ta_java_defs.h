@@ -37,7 +37,7 @@
  * If you are not re-generating the java code (which is most
  * likely the case), just ignore this file.
  */
- 
+
 #define TA_ACOS_Lookback acosLookback
 #define TA_ACOS acos
 #define TA_AD_Lookback adLookback

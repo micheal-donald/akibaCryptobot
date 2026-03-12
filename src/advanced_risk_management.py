@@ -231,9 +231,9 @@ class AdvancedRiskManager:
             position_size=final_position_size,
             risk_amount=risk_amount,
             atr=atr,
-            kelly_fraction=kelly_size / atr_position_size
-            if atr_position_size > 0
-            else 0,
+            kelly_fraction=(
+                kelly_size / atr_position_size if atr_position_size > 0 else 0
+            ),
             adjusted_size=final_position_size,
         )
 

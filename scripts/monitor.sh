@@ -29,10 +29,10 @@ send_telegram() {
 if ! systemctl is-active --quiet "$SERVICE_NAME"; then
     echo "$(date): WARNING - $SERVICE_NAME is not running. Attempting restart." >> "$LOG_FILE"
     send_telegram "🚨 *AkibaBot Watchdog Alert* 🚨%0A%0AThe systemd service \`$SERVICE_NAME\` has crashed or stopped. Attempting automatic restart now."
-    
+
     systemctl restart "$SERVICE_NAME"
     sleep 5
-    
+
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         send_telegram "✅ *Watchdog Recovery Successful*%0A%0ABot is back online."
     else
@@ -48,7 +48,7 @@ BOT_PID=$(systemctl show -p MainPID "$SERVICE_NAME" | cut -d= -f2)
 if [ "$BOT_PID" -gt 0 ]; then
     # Get memory usage in MB (Resident Set Size)
     MEM_USAGE=$(ps -o rss= -p "$BOT_PID" | awk '{print int($1/1024)}')
-    
+
     if [ "$MEM_USAGE" -gt "$MAX_MEM_MB" ]; then
         echo "$(date): WARNING - Memory usage ($MEM_USAGE MB) exceeded limit ($MAX_MEM_MB MB). Restarting." >> "$LOG_FILE"
         send_telegram "⚠️ *AkibaBot Memory Alert*%0A%0ABot memory usage (\`${MEM_USAGE} MB\`) exceeded safety limit (\`${MAX_MEM_MB} MB\`). Preemptive restart initiated to prevent OOM crash."

@@ -146,9 +146,9 @@ class BaseStrategy(ABC):
         # Check stop loss
         if pnl_percent <= -self.stop_loss_percent:
             return TradingSignal(
-                signal_type=SignalType.CLOSE_LONG
-                if side == "buy"
-                else SignalType.CLOSE_SHORT,
+                signal_type=(
+                    SignalType.CLOSE_LONG if side == "buy" else SignalType.CLOSE_SHORT
+                ),
                 strength=1.0,
                 price=current_price,
                 timestamp=datetime.now(),
@@ -158,9 +158,9 @@ class BaseStrategy(ABC):
         # Check take profit
         if pnl_percent >= self.take_profit_percent:
             return TradingSignal(
-                signal_type=SignalType.CLOSE_LONG
-                if side == "buy"
-                else SignalType.CLOSE_SHORT,
+                signal_type=(
+                    SignalType.CLOSE_LONG if side == "buy" else SignalType.CLOSE_SHORT
+                ),
                 strength=1.0,
                 price=current_price,
                 timestamp=datetime.now(),

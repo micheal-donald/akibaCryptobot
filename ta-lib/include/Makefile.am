@@ -8,4 +8,4 @@ libta_include_HEADERS = ta_abstract.h
 	ta_libc.h \
 	ta_common.h \
 	ta_func.h \
-	func_list.txt 
+	func_list.txt

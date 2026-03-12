@@ -192,7 +192,7 @@ top_srcdir = @top_srcdir@
 AUTOMAKE_OPTIONS = foreign 1.4
 SUBDIRS = ta_abstract ta_common ta_func
 lib_LTLIBRARIES = libta_lib.la
-libta_lib_la_SOURCES = 
+libta_lib_la_SOURCES =
 libta_lib_la_LIBADD = \
   ta_abstract/libta_abstract.la \
   ta_func/libta_func.la \
@@ -258,7 +258,7 @@ clean-libLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libta_lib.la: $(libta_lib_la_OBJECTS) $(libta_lib_la_DEPENDENCIES) 
+libta_lib.la: $(libta_lib_la_OBJECTS) $(libta_lib_la_DEPENDENCIES)
 	$(libta_lib_la_LINK) -rpath $(libdir) $(libta_lib_la_OBJECTS) $(libta_lib_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:

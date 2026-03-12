@@ -439,7 +439,7 @@ clean-noinstLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libta_func.la: $(libta_func_la_OBJECTS) $(libta_func_la_DEPENDENCIES) 
+libta_func.la: $(libta_func_la_OBJECTS) $(libta_func_la_DEPENDENCIES)
 	$(libta_func_la_LINK)  $(libta_func_la_OBJECTS) $(libta_func_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:

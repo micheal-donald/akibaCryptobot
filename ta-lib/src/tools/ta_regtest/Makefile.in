@@ -266,7 +266,7 @@ clean-noinstPROGRAMS:
 	  echo " rm -f $$p $$f"; \
 	  rm -f $$p $$f ; \
 	done
-ta_regtest$(EXEEXT): $(ta_regtest_OBJECTS) $(ta_regtest_DEPENDENCIES) 
+ta_regtest$(EXEEXT): $(ta_regtest_OBJECTS) $(ta_regtest_DEPENDENCIES)
 	@rm -f ta_regtest$(EXEEXT)
 	$(ta_regtest_LINK) $(ta_regtest_OBJECTS) $(ta_regtest_LDADD) $(LIBS)
 

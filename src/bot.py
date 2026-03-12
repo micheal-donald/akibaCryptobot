@@ -80,9 +80,9 @@ class AkibaCryptoBot:
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self._cached_balance = None  # Refreshed once per trading cycle
-        self.pair_cooldowns: Dict[
-            str, datetime
-        ] = {}  # symbol -> cooldown-expiry datetime
+        self.pair_cooldowns: Dict[str, datetime] = (
+            {}
+        )  # symbol -> cooldown-expiry datetime
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -146,6 +146,10 @@ class AkibaCryptoBot:
                 self.logger.info(
                     f"Risk manager re-synced with {len(self.active_trades)} persisted trade(s)"
                 )
+
+            # Hydrate performance tracker with historical closed trades
+            closed_trades = await self.trade_store.load_closed_trades()
+            self.performance_tracker.hydrate_from_db(closed_trades)
 
             # Seed performance tracker with persisted open trades
             for symbol, trade in self.active_trades.items():
@@ -816,9 +820,9 @@ class AkibaCryptoBot:
     def get_config_info(self) -> Dict:
         """Get configuration info for Telegram commands"""
         return {
-            "trading_mode": "paper"
-            if self.config["exchange"].get("sandbox", True)
-            else "live",
+            "trading_mode": (
+                "paper" if self.config["exchange"].get("sandbox", True) else "live"
+            ),
             "max_position_size": self.config["risk_management"].get(
                 "max_position_size", 0.05
             ),

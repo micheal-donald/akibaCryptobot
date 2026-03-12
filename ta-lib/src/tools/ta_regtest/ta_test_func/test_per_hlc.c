@@ -43,19 +43,19 @@
  *  MMDDYY BY   Description
  *  -------------------------------------------------------------------
  *  112400 MF   First version.
- *  061904 MF   Add test to detect cummulative errors in CCI algorithm 
+ *  061904 MF   Add test to detect cummulative errors in CCI algorithm
  *              when some values were close to zero (epsilon).
  *  021106 MF   Add tests for ULTOSC.
  *  042206 MF   Add tests for NATR
- *              
+ *
  */
 
 /* Description:
  *
  *     Test functions which have the following
- *     characterisic: 
+ *     characterisic:
  *      - the input is high,low and close.
- *     
+ *
  */
 
 /**** Headers ****/
@@ -95,7 +95,7 @@ typedef struct
    TA_Integer optInTimePeriod1;
    TA_Integer optInTimePeriod2;
    TA_Integer optInTimePeriod3;
-   
+
    TA_RetCode expectedRetCode;
 
    TA_Integer oneOfTheExpectedOutRealIndex0;
@@ -160,7 +160,7 @@ static TA_Test tableTest[] =
    /* The following two should always be identical. */
    { 0, TA_CCI_TEST, 186,187,  2, 0, 0, TA_SUCCESS,   1, 0.0, 186,  2 },
    { 0, TA_CCI_TEST, 187,187,  2, 0, 0, TA_SUCCESS,   0, 0.0, 187,  1 },
- 
+
    /* Test period 2, 5 and 11 */
    { 0, TA_CCI_TEST, 0, 251,  2, 0, 0, TA_SUCCESS,  0, 66.666, 1,  252-1 },
    { 1, TA_CCI_TEST, 0, 251,  5, 0, 0, TA_SUCCESS,  0, 18.857, 4,  252-4 },
@@ -225,7 +225,7 @@ ErrorNumber test_func_per_hlc( TA_History *history )
    TA_SetUnstablePeriod( TA_FUNC_UNST_ALL, 0 );
 
    /* All test succeed. */
-   return TA_TEST_PASS; 
+   return TA_TEST_PASS;
 }
 
 /**** Local functions definitions.     ****/
@@ -245,10 +245,10 @@ static TA_RetCode rangeTestFunction( TA_Integer    startIdx,
 
    (void)outputNb;
    (void)outputBufferInt;
-  
+
    *isOutputInteger = 0;
 
-   testParam = (TA_RangeTestParam *)opaqueData;   
+   testParam = (TA_RangeTestParam *)opaqueData;
 
    switch( testParam->test->theFunction )
    {
@@ -391,12 +391,12 @@ static ErrorNumber do_test( const TA_History *history,
    setInputBuffer( 0, history->high,  history->nbBars );
    setInputBuffer( 1, history->low,   history->nbBars );
    setInputBuffer( 2, history->close, history->nbBars );
-      
+
    /* Make a simple first call. */
    retCode = do_call( test,
                       gBuffer[0].in,
                       gBuffer[1].in,
-                      gBuffer[2].in,                  
+                      gBuffer[2].in,
                       &outBegIdx,
                       &outNbElement,
                       gBuffer[0].out0 );
@@ -422,7 +422,7 @@ static ErrorNumber do_test( const TA_History *history,
    retCode = do_call( test,
                       gBuffer[0].in,
                       gBuffer[1].in,
-                      gBuffer[2].in,                  
+                      gBuffer[2].in,
                       &outBegIdx,
                       &outNbElement,
                       gBuffer[0].in );
@@ -453,7 +453,7 @@ static ErrorNumber do_test( const TA_History *history,
    retCode = do_call( test,
                       gBuffer[0].in,
                       gBuffer[1].in,
-                      gBuffer[2].in,                  
+                      gBuffer[2].in,
                       &outBegIdx,
                       &outNbElement,
                       gBuffer[1].in );
@@ -484,7 +484,7 @@ static ErrorNumber do_test( const TA_History *history,
    retCode = do_call( test,
                       gBuffer[0].in,
                       gBuffer[1].in,
-                      gBuffer[2].in,                  
+                      gBuffer[2].in,
                       &outBegIdx,
                       &outNbElement,
                       gBuffer[2].in );
@@ -522,12 +522,12 @@ static ErrorNumber do_test( const TA_History *history,
       switch( test->theFunction )
       {
       case TA_NATR_TEST:
-         errNb = doRangeTest( rangeTestFunction, 
+         errNb = doRangeTest( rangeTestFunction,
                               TA_FUNC_UNST_NATR,
                               (void *)&testParam, 1, 0 );
          break;
       default:
-         errNb = doRangeTest( rangeTestFunction, 
+         errNb = doRangeTest( rangeTestFunction,
                               TA_FUNC_UNST_NONE,
                               (void *)&testParam, 1, 0 );
          break;

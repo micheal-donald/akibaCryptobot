@@ -11,7 +11,7 @@ V0.3 (January 2007)
   - XML interface description (See TA_FunctionDescription).
   - Volume amd open interest now of double type.
   - Add: BETA, MINMAX, MINMAXINDEX, MININDEX, MAXINDEX.
-  - New RPM, Debian, JAR and unmanaged library with VS2005. 
+  - New RPM, Debian, JAR and unmanaged library with VS2005.
   - Fix #1526632,1544555
 
 V0.2 (June 2006)
@@ -19,16 +19,16 @@ V0.2 (June 2006)
   - New ULTOSC and NATR functions.
   - Major clean-up. Removal of TA-PM and TA-Data.
   - Fix #1434450
-  
+
 V0.1.5 (January 2006)
   - Java ports of all TA functions.
   - New BOP, CMO and Hikkake functions.
-  - .NET assembly now verifiable.  
+  - .NET assembly now verifiable.
   - Support for end-of-period.
   - Portable random generator.
   - Fix #1117656,1117866,1199526,1200995,1229243,1238365,1241498
   - Fix #1293953,1359452,1365319,1367155,1367269
-  
+
 V0.1.4 (April 2005)
   - 64 bits support.
   - Partial Python support.
@@ -108,7 +108,7 @@ V0.0.2 (October 2001)
 
 V0.0.1 (September 2001)
   - Alpha Release on Windows.
-  - Include ta_yahoo.exe demo application.  
+  - Include ta_yahoo.exe demo application.
 
 Info:  http://ta-lib.org
 Forum: http://tadoc.org/forum

@@ -9,4 +9,3 @@ pic_object='.libs/ta_CDLLONGLINE.o'
 
 # Name of the non-PIC object.
 non_pic_object='ta_CDLLONGLINE.o'
-

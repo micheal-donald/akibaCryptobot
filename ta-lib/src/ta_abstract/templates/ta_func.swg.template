@@ -37,7 +37,7 @@
  * If you are not re-building an interface with SWIG (which is most
  * likely the case), just ignore this file.
  */
- 
+
 %%%GENCODE%%%
 
 /***************

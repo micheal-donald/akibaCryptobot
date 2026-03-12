@@ -20,13 +20,13 @@ This interface is the command dashboard for **akibaCryptobot**, an automated cry
 ## Aesthetic Preset — "Modern Matrix"
 
 - **Identity:** A modern, sleek interpretation of the classic *Matrix* aesthetic. It is NOT a raw terminal emulator. It is a highly functional, widget-based modern dashboard that uses the color palette, typography, and atmospheric elements of a cyber/hacker interface.
-- **Palette:** 
+- **Palette:**
   - Absolute Black `#000000` (Background)
   - Deep Matrix Green `#06120E` (Card/Surface Backgrounds)
   - Dark Green Border `#0A291A` (Card Borders)
   - Neon Green `#00FF41` (Primary Accents, Active Stats, Buttons)
   - Dim Green `#008F11` (Secondary Text, Table Headers)
-- **Typography:** 
+- **Typography:**
   - Headings/Numbers: Modern geometric sans-serif (e.g., `Inter` or `Space Grotesk`).
   - Data/Monospace: `Fira Code` or `VT323` for monetary values, logs, and codes.
 - **Image Mood:** Data-driven. Minimalist glowing charts, structured grid layouts, and stark contrasts. Overlays of subtle digital rain.
@@ -62,7 +62,7 @@ This interface is the command dashboard for **akibaCryptobot**, an automated cry
 A modern CSS Grid layout displaying critical data in structured cards.
 
 1. **Top Row (Metric Cards):**
-   - 4 horizontal cards showing vital stats: 
+   - 4 horizontal cards showing vital stats:
      - **Total PnL:** (Large neon green number).
      - **Active Positions:** (e.g., "3 Pairs").
      - **24h Volume:** (Monospace format).

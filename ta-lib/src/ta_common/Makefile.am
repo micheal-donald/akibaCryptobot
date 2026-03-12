@@ -4,7 +4,7 @@ AM_CPPFLAGS = -I../ta_common/
 
 libta_common_la_SOURCES = ta_global.c \
 	ta_retcode.c \
-	ta_version.c 
+	ta_version.c
 
 libta_common_la_LDFLAGS = -version-info $(TALIB_LIBRARY_VERSION)
 

@@ -31,7 +31,7 @@ ErrorNumber allocLib( void );
 void reportError( const char *str, TA_RetCode retCode );
 
 /* Global Temporary Used by the ta_func_xxx function. */
- 
+
 
 typedef struct
 {
@@ -75,7 +75,7 @@ void setInputBufferValue( unsigned int i, const TA_Real data, unsigned int nbEle
 ErrorNumber checkForNAN( const TA_Real *buffer,
                          unsigned int nbElement );
 
-/* Check that the 'data' is equal to the provided 
+/* Check that the 'data' is equal to the provided
  * originalInput.
  *
  * The data must be one of the 'gBuffer[n].buffer'.
@@ -132,14 +132,14 @@ ErrorNumber checkExpectedValue( const TA_Real *data,
 /* A systematic test can be done for most of the possible
  * range that a TA function can be called with. This test
  * is common to all TA function and can be easily done
- * with a RangeTestFunction. 
+ * with a RangeTestFunction.
  *
  * The RangeTestFunction is making abstraction of the
  * TA function (handles the inputs, the parameters etc...)
  * The RangeTestFunction must call the TA function for
  * the requested startIdx/endIdx range and put the output
  * in the provided buffer.
- * 
+ *
  * The RangeTestFunction must also set the outBegIdx and
  * outNbElement for verification.
  *
@@ -176,7 +176,7 @@ typedef TA_RetCode (*RangeTestFunction)( TA_Integer    startIdx,
  * have an unstable period, the comparison is
  * done using a tolerance algorithm (see test_util.c).
  *
- * Comparison can be ignored by specifiying 
+ * Comparison can be ignored by specifiying
  * an integerTolerance == TA_DO_NOT_COMPARE
  *
  * Even without comparison, a lot of coherency

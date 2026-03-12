@@ -81,24 +81,24 @@ resource "vultr_instance" "trading_bot" {
   user_data = <<-EOF
     #!/bin/bash
     set -e
-    
+
     # Update system
     apt-get update
     apt-get upgrade -y
-    
+
     # Install Python, Git, Docker
     apt-get install -y python3 python3-pip python3-venv git docker.io
     systemctl enable docker
     systemctl start docker
-    
+
     # Create bot user
     useradd -m -s /bin/bash botuser
     usermod -aG docker botuser
-    
+
     # Create app directory
     mkdir -p /opt/akibabot
     chown botuser:botuser /opt/akibabot
-    
+
     echo "Initial setup complete. Deploy your bot to /opt/akibabot"
   EOF
 }

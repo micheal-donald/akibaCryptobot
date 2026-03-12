@@ -58,22 +58,22 @@ After, run `terraform init` to install the provider.
 
 #### Manual Installation
 If you don't have internet access on the target machine or prefer to install
-the provider locally follow the steps for the relevant operating system and architecture. 
+the provider locally follow the steps for the relevant operating system and architecture.
 
 1) [Download](https://github.com/vultr/terraform-provider-vultr/releases) and
 extract the binary for your system and architecture
 
 2) Make the local plugins directory:
 
-On linux 
+On linux
 ``` sh
-export VERSION=2.22.1 OS=linux ARCH=amd64 
+export VERSION=2.22.1 OS=linux ARCH=amd64
 mkdir -p ~/.terraform.d/plugins/local/vultr/vultr/${VERSION}/${OS}_${ARCH}/'
 ```
 
 On mac
 ``` sh
-export VERSION=2.22.1 OS=darwin ARCH=arm64 
+export VERSION=2.22.1 OS=darwin ARCH=arm64
 mkdir -p ~/.terraform.d/plugins/local/vultr/vultr/${VERSION}/${OS}_${ARCH}/'
 ```
 
@@ -98,7 +98,7 @@ provider "vultr" {
 }
 ```
 
-5) Test everything by running `terraform init` in that same directory. 
+5) Test everything by running `terraform init` in that same directory.
 
 Developing the Provider
 ---------------------------

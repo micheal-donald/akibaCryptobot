@@ -11,14 +11,14 @@ jobs:
     name: Deploy to Vultr (bare-metal)
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get short SHA
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-      
+
       - name: Setup SSH Key
         run: |
           mkdir -p ~/.ssh
@@ -60,18 +60,18 @@ jobs:
             VULTR_API_KEY=${VULTR_API_KEY}
             LOG_LEVEL=INFO
             EOF
-            
+
             # Install any new dependencies
             source venv/bin/activate
             pip install -r requirements.txt
-            
+
             # Restart the bot service
             systemctl restart akibabot.service
-            
+
             # Check status (first 5 seconds of logs to verify it loaded)
             sleep 5
             systemctl status akibabot.service --no-pager
-            
+
       - name: Notify Telegram (Deployment Success)
         if: success()
         uses: appleboy/telegram-action@master
@@ -80,12 +80,12 @@ jobs:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
             🚀 *AkibaCryptoBot Deployment*
-            
+
             Status: ✅ Success (Bare-Metal)
             Commit: `${{ steps.sha.outputs.short }}`
             Branch: `master`
             Host: `${{ secrets.SERVER_IP }}`
-            
+
             Bot has been restarted via systemd.
 
       - name: Notify Telegram (Deployment Failed)
@@ -96,8 +96,8 @@ jobs:
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           message: |
             🚨 *AkibaCryptoBot CI/CD Failed*
-            
+
             Status: ❌ Failed to deploy to `${{ secrets.SERVER_IP }}`
             Commit: `${{ steps.sha.outputs.short }}`
-            
+
             Check the GitHub Actions log for details.

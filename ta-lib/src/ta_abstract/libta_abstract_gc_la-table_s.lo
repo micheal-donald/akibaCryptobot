@@ -9,4 +9,3 @@ pic_object='.libs/libta_abstract_gc_la-table_s.o'
 
 # Name of the non-PIC object.
 non_pic_object='libta_abstract_gc_la-table_s.o'
-

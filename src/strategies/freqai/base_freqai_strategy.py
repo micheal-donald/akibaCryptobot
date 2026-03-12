@@ -131,9 +131,7 @@ class BaseFreqAIStrategy(BaseStrategy):
 
             # Get model prediction
             prediction = self._get_model_prediction(features_df)
-            logger.debug(
-                f"FreqAI prediction for {symbol}: {prediction}"
-            )
+            logger.debug(f"FreqAI prediction for {symbol}: {prediction}")
 
             # Convert prediction to trading signal
             signal = self._prediction_to_signal(prediction, current_price)

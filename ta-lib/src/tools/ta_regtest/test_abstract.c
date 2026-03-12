@@ -54,7 +54,7 @@
  *         Regression testing of the functionality provided
  *         by the ta_abstract module.
  *
- *         Also perform call to all functions for the purpose 
+ *         Also perform call to all functions for the purpose
  *         of profiling (doExtensiveProfiling option).
  */
 
@@ -91,7 +91,7 @@ extern int insufficientClockPrecision;
 /* None */
 
 /**** Local declarations.              ****/
-typedef enum 
+typedef enum
 {
 	PROFILING_10000,
 	PROFILING_8000,
@@ -137,19 +137,19 @@ ErrorNumber test_abstract( void )
    const char *xmlArray;
 
    printf( "Testing Abstract interface\n" );
-   
+
    retValue = allocLib();
    if( retValue != TA_TEST_PASS )
-      return retValue;    
+      return retValue;
 
    /* Verify TA_GetLookback. */
    retCode = TA_GetFuncHandle( "STOCH", &handle );
    if( retCode != TA_SUCCESS )
    {
       printf( "Can't get the function handle [%d]\n", retCode );
-      return TA_ABS_TST_FAIL_GETFUNCHANDLE;   
+      return TA_ABS_TST_FAIL_GETFUNCHANDLE;
    }
-                             
+
    retCode = TA_ParamHolderAlloc( handle, &paramHolder );
    if( retCode != TA_SUCCESS )
    {
@@ -163,7 +163,7 @@ ErrorNumber test_abstract( void )
       printf( "testLookback() failed [%d]\n", retValue );
       TA_ParamHolderFree( paramHolder );
       return retValue;
-   }      
+   }
 
    retCode = TA_ParamHolderFree( paramHolder );
    if( retCode != TA_SUCCESS )
@@ -191,7 +191,7 @@ ErrorNumber test_abstract( void )
    retValue = freeLib();
    if( retValue != TA_TEST_PASS )
       return retValue;
-   
+
    /* Verify that the TA_FunctionDescription is null terminated
     * and as at least 500 characters (less is guaranteed bad...)
     */
@@ -202,7 +202,7 @@ ErrorNumber test_abstract( void )
          break;
    }
 
-   if( i < 500) 
+   if( i < 500)
    {
       printf( "TA_FunctionDescriptionXML failed. Size too small.\n" );
       return TA_ABS_TST_FAIL_FUNCTION_DESC_SMALL;
@@ -292,7 +292,7 @@ static ErrorNumber testLookback( TA_ParamHolder *paramHolder )
      printf( "TA_GetLookback failed [%d != 7]\n", lookback );
      return TA_ABS_TST_FAIL_GETLOOKBACK_2;
   }
-  
+
   return TA_TEST_PASS;
 }
 
@@ -313,12 +313,12 @@ static void testDefault( const TA_FuncInfo *funcInfo, void *opaqueData )
 	} \
 }
    /* Do not test value outside the ]0..1[ domain for the "Math" groups. */
-   if( (strlen(funcInfo->group) < 4) || 
-	   !((tolower(funcInfo->group[0]) == 'm') && 
+   if( (strlen(funcInfo->group) < 4) ||
+	   !((tolower(funcInfo->group[0]) == 'm') &&
 	     (tolower(funcInfo->group[1]) == 'a') &&
 	     (tolower(funcInfo->group[2]) == 't') &&
 	     (tolower(funcInfo->group[3]) == 'h')))
-   {	   
+   {
       CALL( inputNegData );
       CALL( inputZeroData );
       CALL( inputRandFltEpsilon );
@@ -368,9 +368,9 @@ static ErrorNumber callWithDefaults( const char *funcName, const double *input, 
    if( retCode != TA_SUCCESS )
    {
       printf( "Can't get the function handle [%d]\n", retCode );
-      return TA_ABS_TST_FAIL_GETFUNCHANDLE;   
+      return TA_ABS_TST_FAIL_GETFUNCHANDLE;
    }
-                             
+
    retCode = TA_ParamHolderAlloc( handle, &paramHolder );
    if( retCode != TA_SUCCESS )
    {
@@ -408,7 +408,7 @@ static ErrorNumber callWithDefaults( const char *funcName, const double *input, 
 	  switch(outputInfo->type)
 	  {
 	  case TA_Output_Real:
-	     TA_SetOutputParamRealPtr(paramHolder,i,&output[i][0]);         
+	     TA_SetOutputParamRealPtr(paramHolder,i,&output[i][0]);
          for( j=0; j < 2000; j++ )
             output[i][j] = TA_REAL_MIN;
 		 break;
@@ -427,7 +427,7 @@ static ErrorNumber callWithDefaults( const char *funcName, const double *input, 
       printf( "TA_CallFunc() failed zero data test [%d]\n", retCode );
       TA_ParamHolderFree( paramHolder );
       return TA_ABS_TST_FAIL_CALLFUNC_1;
-   }      
+   }
 
    /* Verify consistency with Lookback */
    retCode = TA_GetLookback( paramHolder, &lookback );
@@ -437,20 +437,20 @@ static ErrorNumber callWithDefaults( const char *funcName, const double *input, 
       TA_ParamHolderFree( paramHolder );
       return TA_ABS_TST_FAIL_CALLFUNC_2;
    }
-   
+
    if( outBegIdx != lookback )
    {
       printf( "TA_GetLookback() != outBegIdx [%d != %d]\n", lookback, outBegIdx );
       TA_ParamHolderFree( paramHolder );
       return TA_ABS_TST_FAIL_CALLFUNC_3;
-   }                       
+   }
 
-   /* TODO Add back nan/inf tests. 
+   /* TODO Add back nan/inf tests.
    for( i=0; i < funcInfo->nbOutput; i++ )
    {
 	  switch(outputInfo->type)
 	  {
-	  case TA_Output_Real:	     
+	  case TA_Output_Real:
 		for( j=0; j < outNbElement; j++ )
 		{
 			if( trio_isnan(output[i][j]) ||
@@ -461,7 +461,7 @@ static ErrorNumber callWithDefaults( const char *funcName, const double *input, 
 			}
 		}
 		break;
-	  case TA_Output_Integer:	     
+	  case TA_Output_Integer:
 		break;
 	  }
    }*/
@@ -519,7 +519,7 @@ static ErrorNumber test_default_calls(void)
    {
       /* Make 100% sure input range is ]0..1[ */
 	  tempDouble = (double)rand() / ((double)(RAND_MAX)+(double)(1));
-      while( (tempDouble <= 0.0) || (tempDouble >= 1.0) ) 
+      while( (tempDouble <= 0.0) || (tempDouble >= 1.0) )
 	  {
 		  tempDouble = (double)rand() / ((double)(RAND_MAX)+(double)(1));
 	  }
@@ -552,7 +552,7 @@ static ErrorNumber test_default_calls(void)
    {
 		   printf( "[PROFILING END]\n" );
    }
-   
+
 
    return errNumber;
 }
@@ -566,7 +566,7 @@ static ErrorNumber callAndProfile( const char *funcName, ProfilingType type )
    const TA_OutputParameterInfo *outputInfo;
 
    TA_RetCode retCode;
-   int h, i, j, k;   
+   int h, i, j, k;
    int outBegIdx, outNbElement;
 
    /* Variables to control iteration and corresponding input size */
@@ -642,9 +642,9 @@ static ErrorNumber callAndProfile( const char *funcName, ProfilingType type )
    if( retCode != TA_SUCCESS )
    {
       printf( "Can't get the function handle [%d]\n", retCode );
-      return TA_ABS_TST_FAIL_GETFUNCHANDLE;   
+      return TA_ABS_TST_FAIL_GETFUNCHANDLE;
    }
-                             
+
    retCode = TA_ParamHolderAlloc( handle, &paramHolder );
    if( retCode != TA_SUCCESS )
    {
@@ -660,7 +660,7 @@ static ErrorNumber callAndProfile( const char *funcName, ProfilingType type )
 	  switch(outputInfo->type)
 	  {
 	  case TA_Output_Real:
-	     TA_SetOutputParamRealPtr(paramHolder,i,&output[i][0]);         
+	     TA_SetOutputParamRealPtr(paramHolder,i,&output[i][0]);
          for( j=0; j < 2000; j++ )
             output[i][j] = TA_REAL_MIN;
 		 break;
@@ -732,7 +732,7 @@ static ErrorNumber callAndProfile( const char *funcName, ProfilingType type )
 			   return TA_ABS_TST_FAIL_CALLFUNC_1;
 		   }
 		   else
-		   {	   
+		   {
 			   if( clockDelta > worstProfiledCall )
 			      worstProfiledCall = clockDelta;
 			   timeInProfiledCall += clockDelta;

@@ -39,7 +39,7 @@
  */
 
 package com.tictactec.ta.lib;
- 
+
 import com.tictactec.ta.lib.MAType;
 import com.tictactec.ta.lib.MInteger;
 import com.tictactec.ta.lib.RetCode;

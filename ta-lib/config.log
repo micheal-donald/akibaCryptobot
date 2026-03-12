@@ -89,7 +89,7 @@ Target: x86_64-linux-gnu
 Configured with: ../src/configure -v --with-pkgversion='Ubuntu 11.4.0-1ubuntu1~22.04' --with-bugurl=file:///usr/share/doc/gcc-11/README.Bugs --enable-languages=c,ada,c++,go,brig,d,fortran,objc,obj-c++,m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-11 --program-prefix=x86_64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-vtable-verify --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --disable-werror --enable-cet --with-arch-32=i686 --with-abi=m64 --with-multilib-list=m32,m64,mx32 --enable-multilib --with-tune=generic --enable-offload-targets=nvptx-none=/build/gcc-11-XeT9lY/gcc-11-11.4.0/debian/tmp-nvptx/usr,amdgcn-amdhsa=/build/gcc-11-XeT9lY/gcc-11-11.4.0/debian/tmp-gcn/usr --without-cuda-driver --enable-checking=release --build=x86_64-linux-gnu --host=x86_64-linux-gnu --target=x86_64-linux-gnu --with-build-config=bootstrap-lto-lean --enable-link-serialization=2
 Thread model: posix
 Supported LTO compression algorithms: zlib zstd
-gcc version 11.4.0 (Ubuntu 11.4.0-1ubuntu1~22.04) 
+gcc version 11.4.0 (Ubuntu 11.4.0-1ubuntu1~22.04)
 configure:2759: $? = 0
 configure:2766: gcc -V >&5
 gcc: error: unrecognized command-line option '-V'
@@ -109,7 +109,7 @@ configure:2916: result: no
 configure:2919: checking for suffix of executables
 configure:2926: gcc -o conftest    conftest.c  >&5
 configure:2929: $? = 0
-configure:2953: result: 
+configure:2953: result:
 configure:2959: checking for suffix of object files
 configure:2985: gcc -c   conftest.c >&5
 configure:2988: $? = 0
@@ -269,7 +269,7 @@ Target: x86_64-linux-gnu
 Configured with: ../src/configure -v --with-pkgversion='Ubuntu 11.4.0-1ubuntu1~22.04' --with-bugurl=file:///usr/share/doc/gcc-11/README.Bugs --enable-languages=c,ada,c++,go,brig,d,fortran,objc,obj-c++,m2 --prefix=/usr --with-gcc-major-version-only --program-suffix=-11 --program-prefix=x86_64-linux-gnu- --enable-shared --enable-linker-build-id --libexecdir=/usr/lib --without-included-gettext --enable-threads=posix --libdir=/usr/lib --enable-nls --enable-bootstrap --enable-clocale=gnu --enable-libstdcxx-debug --enable-libstdcxx-time=yes --with-default-libstdcxx-abi=new --enable-gnu-unique-object --disable-vtable-verify --enable-plugin --enable-default-pie --with-system-zlib --enable-libphobos-checking=release --with-target-system-zlib=auto --enable-objc-gc=auto --enable-multiarch --disable-werror --enable-cet --with-arch-32=i686 --with-abi=m64 --with-multilib-list=m32,m64,mx32 --enable-multilib --with-tune=generic --enable-offload-targets=nvptx-none=/build/gcc-11-XeT9lY/gcc-11-11.4.0/debian/tmp-nvptx/usr,amdgcn-amdhsa=/build/gcc-11-XeT9lY/gcc-11-11.4.0/debian/tmp-gcn/usr --without-cuda-driver --enable-checking=release --build=x86_64-linux-gnu --host=x86_64-linux-gnu --target=x86_64-linux-gnu --with-build-config=bootstrap-lto-lean --enable-link-serialization=2
 Thread model: posix
 Supported LTO compression algorithms: zlib zstd
-gcc version 11.4.0 (Ubuntu 11.4.0-1ubuntu1~22.04) 
+gcc version 11.4.0 (Ubuntu 11.4.0-1ubuntu1~22.04)
 configure:5245: $? = 0
 configure:5252: g++ -V >&5
 g++: error: unrecognized command-line option '-V'
@@ -417,7 +417,7 @@ configure: failed program was:
 | #ifndef __GNUC__
 |        choke me
 | #endif
-| 
+|
 |       end
 configure:6005: result: no
 configure:6011: checking whether  accepts -g
@@ -426,7 +426,7 @@ configure:6028:  -c -g conftest.f >&5
 configure:6034: $? = 127
 configure: failed program was:
 |       program main
-| 
+|
 |       end
 configure:6050: result: no
 configure:6080: checking the maximum length of command line arguments
@@ -659,7 +659,7 @@ configure: failed program was:
 | /* end confdefs.h.  */
 | #include <sys/types.h>
 | #include <signal.h>
-| 
+|
 | int
 | main ()
 | {
@@ -749,20 +749,20 @@ configure: failed program was:
 | /* Define _doprnt to an innocuous variant, in case <limits.h> declares _doprnt.
 |    For example, HP-UX 11i <limits.h> declares gettimeofday.  */
 | #define _doprnt innocuous__doprnt
-| 
+|
 | /* System header to define __stub macros and hopefully few prototypes,
 |     which can conflict with char _doprnt (); below.
 |     Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
 |     <limits.h> exists even on freestanding compilers.  */
-| 
+|
 | #ifdef __STDC__
 | # include <limits.h>
 | #else
 | # include <assert.h>
 | #endif
-| 
+|
 | #undef _doprnt
-| 
+|
 | /* Override any GCC internal prototype to avoid an error.
 |    Use char because int might match the return type of a GCC
 |    builtin and then its argument prototype would still apply.  */
@@ -776,7 +776,7 @@ configure: failed program was:
 | #if defined __stub__doprnt || defined __stub____doprnt
 | choke me
 | #endif
-| 
+|
 | int
 | main ()
 | {
@@ -840,20 +840,20 @@ configure: failed program was:
 | /* Define floor to an innocuous variant, in case <limits.h> declares floor.
 |    For example, HP-UX 11i <limits.h> declares gettimeofday.  */
 | #define floor innocuous_floor
-| 
+|
 | /* System header to define __stub macros and hopefully few prototypes,
 |     which can conflict with char floor (); below.
 |     Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
 |     <limits.h> exists even on freestanding compilers.  */
-| 
+|
 | #ifdef __STDC__
 | # include <limits.h>
 | #else
 | # include <assert.h>
 | #endif
-| 
+|
 | #undef floor
-| 
+|
 | /* Override any GCC internal prototype to avoid an error.
 |    Use char because int might match the return type of a GCC
 |    builtin and then its argument prototype would still apply.  */
@@ -867,7 +867,7 @@ configure: failed program was:
 | #if defined __stub_floor || defined __stub___floor
 | choke me
 | #endif
-| 
+|
 | int
 | main ()
 | {
@@ -982,20 +982,20 @@ configure: failed program was:
 | /* Define pow to an innocuous variant, in case <limits.h> declares pow.
 |    For example, HP-UX 11i <limits.h> declares gettimeofday.  */
 | #define pow innocuous_pow
-| 
+|
 | /* System header to define __stub macros and hopefully few prototypes,
 |     which can conflict with char pow (); below.
 |     Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
 |     <limits.h> exists even on freestanding compilers.  */
-| 
+|
 | #ifdef __STDC__
 | # include <limits.h>
 | #else
 | # include <assert.h>
 | #endif
-| 
+|
 | #undef pow
-| 
+|
 | /* Override any GCC internal prototype to avoid an error.
 |    Use char because int might match the return type of a GCC
 |    builtin and then its argument prototype would still apply.  */
@@ -1009,7 +1009,7 @@ configure: failed program was:
 | #if defined __stub_pow || defined __stub___pow
 | choke me
 | #endif
-| 
+|
 | int
 | main ()
 | {
@@ -1079,20 +1079,20 @@ configure: failed program was:
 | /* Define sqrt to an innocuous variant, in case <limits.h> declares sqrt.
 |    For example, HP-UX 11i <limits.h> declares gettimeofday.  */
 | #define sqrt innocuous_sqrt
-| 
+|
 | /* System header to define __stub macros and hopefully few prototypes,
 |     which can conflict with char sqrt (); below.
 |     Prefer <limits.h> to <assert.h> if __STDC__ is defined, since
 |     <limits.h> exists even on freestanding compilers.  */
-| 
+|
 | #ifdef __STDC__
 | # include <limits.h>
 | #else
 | # include <assert.h>
 | #endif
-| 
+|
 | #undef sqrt
-| 
+|
 | /* Override any GCC internal prototype to avoid an error.
 |    Use char because int might match the return type of a GCC
 |    builtin and then its argument prototype would still apply.  */
@@ -1106,7 +1106,7 @@ configure: failed program was:
 | #if defined __stub_sqrt || defined __stub___sqrt
 | choke me
 | #endif
-| 
+|
 | int
 | main ()
 | {
@@ -1180,11 +1180,11 @@ configure:20909: creating ./config.status
 This file was extended by ta-lib config.status 0.4.0, which was
 generated by GNU Autoconf 2.61.  Invocation command line was
 
-  CONFIG_FILES    = 
-  CONFIG_HEADERS  = 
-  CONFIG_LINKS    = 
-  CONFIG_COMMANDS = 
-  $ ./config.status 
+  CONFIG_FILES    =
+  CONFIG_HEADERS  =
+  CONFIG_LINKS    =
+  CONFIG_COMMANDS =
+  $ ./config.status
 
 on LEKIM
 

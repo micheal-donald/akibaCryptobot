@@ -319,9 +319,7 @@ class TelegramNotifier:
                 pnl_emoji = (
                     "📈"
                     if metrics["total_pnl"] > 0
-                    else "📉"
-                    if metrics["total_pnl"] < 0
-                    else "➖"
+                    else "📉" if metrics["total_pnl"] < 0 else "➖"
                 )
 
                 message = (
@@ -554,7 +552,9 @@ class TelegramNotifier:
 
                 await update.message.reply_text(message)
             except Exception as e:
-                await update.message.reply_text(f"❌ Error generating heatmap: {str(e)}")
+                await update.message.reply_text(
+                    f"❌ Error generating heatmap: {str(e)}"
+                )
         else:
             await update.message.reply_text("❌ Advanced risk manager not available")
 

@@ -447,11 +447,10 @@ class PerformanceMetricsTracker:
             "max_drawdown_duration_hours": self.max_drawdown_duration.total_seconds()
             / 3600,
             "current_drawdown_percent": (
-                (self.peak_balance - self.current_balance) / self.peak_balance
-            )
-            * 100
-            if self.peak_balance > 0
-            else 0,
+                ((self.peak_balance - self.current_balance) / self.peak_balance) * 100
+                if self.peak_balance > 0
+                else 0
+            ),
             # Open positions
             "open_trades_count": len(self.open_trades),
             # Timestamp
@@ -615,6 +614,85 @@ Generated: {metrics["calculated_at"]}
 ╚══════════════════════════════════════════════════════════════╝
 """
         return report.strip()
+
+    def hydrate_from_db(self, closed_trades: List[Dict]):
+        """
+        Replay historical closed trades from the database into the tracker
+        so that metrics survive bot restarts.
+
+        Args:
+            closed_trades: List of dicts from TradeStore.load_closed_trades()
+        """
+        for t in closed_trades:
+            entry_price = t["entry_price"]
+            exit_price = t["exit_price"]
+            amount = t["amount"]
+            side = t["side"]
+            pnl = t.get("pnl", 0.0) or 0.0
+            fees = t.get("fees", 0.0) or 0.0
+
+            # Parse timestamps
+            entry_time = datetime.fromisoformat(t["timestamp"])
+            exit_time = (
+                datetime.fromisoformat(t["exit_timestamp"])
+                if t.get("exit_timestamp")
+                else entry_time
+            )
+
+            # Compute pnl_percent
+            if entry_price and entry_price > 0:
+                if side == "buy":
+                    pnl_percent = ((exit_price - entry_price) / entry_price) * 100
+                else:
+                    pnl_percent = ((entry_price - exit_price) / entry_price) * 100
+            else:
+                pnl_percent = 0.0
+
+            trade = Trade(
+                symbol=t["symbol"],
+                side=side,
+                entry_price=entry_price,
+                exit_price=exit_price,
+                amount=amount,
+                entry_time=entry_time,
+                exit_time=exit_time,
+                pnl=pnl,
+                pnl_percent=pnl_percent,
+                exit_reason=t.get("exit_reason", "unknown"),
+                strategy="ensemble",
+                fees=fees,
+            )
+
+            self.trades.append(trade)
+            self.strategy_performance[trade.strategy].append(trade)
+
+            # Update balance and drawdown
+            self.current_balance += pnl
+            self.equity_curve.append((exit_time, self.current_balance))
+
+            # Track daily balance for Sharpe/Sortino
+            day = exit_time.date()
+            prev_balance = self.daily_balance.get(day)
+            self.daily_balance[day] = self.current_balance
+
+            if prev_balance is None:
+                # Check previous day
+                yesterday = day - timedelta(days=1)
+                if yesterday in self.daily_balance:
+                    prev = self.daily_balance[yesterday]
+                    self.daily_returns.append((self.current_balance - prev) / prev)
+
+            self._update_drawdown()
+
+        # Invalidate cache
+        self._metrics_cache = None
+
+        if closed_trades:
+            logger.info(
+                f"Hydrated {len(closed_trades)} historical trade(s): "
+                f"balance=${self.current_balance:.2f}, "
+                f"max_dd={self.max_drawdown * 100:.2f}%"
+            )
 
     def reset(self):
         """Reset all metrics and trade history"""

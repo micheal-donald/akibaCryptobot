@@ -10,7 +10,7 @@ End-to-end autonomous cryptocurrency trading bot with high performance and relia
 - **Testing**: 100% test coverage with pytest + code quality checks
 - **Security**: Environment variables only (.env) - no hardcoded secrets
 - **Deployment**: Containerized with Docker
-- **Performance Targets**: 
+- **Performance Targets**:
   - Profit factor ≥ 1.2
   - Max drawdown ≤ 15%
 - **Task limit**: 2 hours per micro-task

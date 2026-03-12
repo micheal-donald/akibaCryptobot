@@ -231,7 +231,7 @@ include/ta_config.h: include/stamp-h1
 include/stamp-h1: $(top_srcdir)/include/ta_config.h.in $(top_builddir)/config.status
 	@rm -f include/stamp-h1
 	cd $(top_builddir) && $(SHELL) ./config.status include/ta_config.h
-$(top_srcdir)/include/ta_config.h.in:  $(am__configure_deps) 
+$(top_srcdir)/include/ta_config.h.in:  $(am__configure_deps)
 	cd $(top_srcdir) && $(AUTOHEADER)
 	rm -f include/stamp-h1
 	touch $@

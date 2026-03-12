@@ -133,7 +133,7 @@ int main( int argc, char **argv )
       return TA_REGTEST_BAD_USER_PARAM;
    }
 
-   /* Some tests are using randomness. */ 
+   /* Some tests are using randomness. */
    srand( (unsigned)time( NULL ) );
 
    /* Test utility like List/Stack/Dictionary/Memory Allocation etc... */
@@ -165,7 +165,7 @@ int main( int argc, char **argv )
       }
       else if( nbProfiledCall > 0 )
       {
-         printf( "\nNumber profiled function call       = %d function calls", nbProfiledCall );	  
+         printf( "\nNumber profiled function call       = %d function calls", nbProfiledCall );
 
 #ifdef WIN32
          QueryPerformanceFrequency(&QPFrequency);
@@ -178,8 +178,8 @@ int main( int argc, char **argv )
          printf( "\nTotal execution time                = %g milliseconds", timeInProfiledCall/freq/1000.0 );
          printf( "\nWorst single function call          = %g milliseconds", worstProfiledCall/freq/1000.0 );
          printf( "\nAverage execution time per function = %g microseconds\n", (timeInProfiledCall/freq/1000000.0)/((double)nbProfiledCall) );
-#endif	  
-      }   
+#endif
+      }
       printf( "\n* All tests succeeded. Enjoy the library. *\n" );
    }
 
@@ -249,7 +249,7 @@ static ErrorNumber testTAFunction_ALL( void )
       printf( "done.\n" ); \
       fflush(stdout); \
       }
-   DO_TEST( test_func_1in_1out, "MATH,VECTOR,DCPERIOD/PHASE,TRENDLINE/MODE" );   
+   DO_TEST( test_func_1in_1out, "MATH,VECTOR,DCPERIOD/PHASE,TRENDLINE/MODE" );
    DO_TEST( test_func_ma,       "All Moving Averages" );
    DO_TEST( test_func_per_hl,   "AROON,CORREL,BETA" );
    DO_TEST( test_func_per_hlc,  "CCI,WILLR,ULTOSC,NATR" );
@@ -261,7 +261,7 @@ static ErrorNumber testTAFunction_ALL( void )
    DO_TEST( test_func_sar,      "SAR,SAREXT" );
    DO_TEST( test_func_stoch,    "STOCH,STOCHF,STOCHRSI" );
    DO_TEST( test_func_per_hlcv, "MFI,AD,ADOSC" );
-   DO_TEST( test_func_1in_2out, "PHASOR,SINE" );   
+   DO_TEST( test_func_1in_2out, "PHASOR,SINE" );
    DO_TEST( test_func_per_ema,  "TRIX" );
    DO_TEST( test_func_macd,     "MACD,MACDFIX,MACDEXT" );
    DO_TEST( test_func_mom_roc,  "MOM,ROC,ROCP,ROCR,ROCR100" );

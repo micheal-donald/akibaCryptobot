@@ -403,11 +403,11 @@
 * Update govultr to v3.3.3 [PR 417](https://github.com/vultr/terraform-provider-vultr/pull/417)
 
 ## [v2.16.4](https://github.com/vultr/terraform-provider-vultr/compare/v2.16.3...v2.16.4) (2023-10-16)
-### Documentation 
+### Documentation
 * kubernetes: fix typo in VKE plan example [PR 412](https://github.com/vultr/terraform-provider-vultr/pull/412)
 
 ## [v2.16.3](https://github.com/vultr/terraform-provider-vultr/compare/v2.16.2...v2.16.3) (2023-10-13)
-### Documentation 
+### Documentation
 * Update a few of the resource documentation pages [PR 409](https://github.com/vultr/terraform-provider-vultr/pull/409)
 
 ### Dependencies

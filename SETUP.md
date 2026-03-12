@@ -29,7 +29,7 @@ Edit `.env` with your credentials:
 BINANCE_API_KEY=your_binance_api_key_here
 BINANCE_SECRET_KEY=your_binance_secret_key_here
 
-# Optional - Telegram Bot Configuration  
+# Optional - Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 TELEGRAM_CHAT_ID=your_telegram_chat_id_here
 
@@ -42,7 +42,7 @@ LOG_LEVEL=INFO
 
 1. Go to [Binance API Management](https://www.binance.com/en/my/settings/api-management)
 2. Create a new API key
-3. **Enable "Spot & Margin Trading"** 
+3. **Enable "Spot & Margin Trading"**
 4. **Restrict to trusted IPs** (recommended)
 5. Copy API Key and Secret Key to `.env`
 
@@ -105,7 +105,7 @@ tail -f logs/akiba_crypto_bot.log
 # Trade logs
 tail -f logs/trades.log
 
-# Error logs  
+# Error logs
 tail -f logs/errors.log
 ```
 
@@ -161,7 +161,7 @@ tail -f logs/errors.log
 ### Log Locations
 
 - Main bot logs: `logs/akiba_crypto_bot.log`
-- Trade logs: `logs/trades.log`  
+- Trade logs: `logs/trades.log`
 - Error logs: `logs/errors.log`
 - Performance logs: `logs/performance.log`
 

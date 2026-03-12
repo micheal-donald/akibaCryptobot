@@ -8,7 +8,7 @@ open positions survive bot restarts and crashes.
 import os
 import logging
 from datetime import datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 import aiosqlite
 
@@ -102,6 +102,31 @@ class TradeStore:
                 "trailing_stop_price": row["trailing_stop_price"],
             }
         logger.info(f"Loaded {len(trades)} open trade(s) from database")
+        return trades
+
+    async def load_closed_trades(self) -> List[Dict]:
+        """Return all closed trades ordered by exit time."""
+        cursor = await self._db.execute(
+            "SELECT * FROM trades WHERE status = 'closed' ORDER BY exit_timestamp ASC"
+        )
+        rows = await cursor.fetchall()
+        trades = []
+        for row in rows:
+            trades.append(
+                {
+                    "symbol": row["symbol"],
+                    "side": row["side"],
+                    "amount": row["amount"],
+                    "entry_price": row["entry_price"],
+                    "exit_price": row["exit_price"],
+                    "timestamp": row["timestamp"],
+                    "exit_timestamp": row["exit_timestamp"],
+                    "exit_reason": row["exit_reason"],
+                    "pnl": row["pnl"],
+                    "fees": row["fees"] or 0.0,
+                }
+            )
+        logger.info(f"Loaded {len(trades)} closed trade(s) from database")
         return trades
 
     # ------------------------------------------------------------------

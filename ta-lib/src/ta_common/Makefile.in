@@ -187,7 +187,7 @@ noinst_LTLIBRARIES = libta_common.la
 AM_CPPFLAGS = -I../ta_common/
 libta_common_la_SOURCES = ta_global.c \
 	ta_retcode.c \
-	ta_version.c 
+	ta_version.c
 
 libta_common_la_LDFLAGS = -version-info $(TALIB_LIBRARY_VERSION)
 libta_commondir = $(includedir)/ta-lib/
@@ -237,7 +237,7 @@ clean-noinstLTLIBRARIES:
 	  echo "rm -f \"$${dir}/so_locations\""; \
 	  rm -f "$${dir}/so_locations"; \
 	done
-libta_common.la: $(libta_common_la_OBJECTS) $(libta_common_la_DEPENDENCIES) 
+libta_common.la: $(libta_common_la_OBJECTS) $(libta_common_la_DEPENDENCIES)
 	$(libta_common_la_LINK)  $(libta_common_la_OBJECTS) $(libta_common_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:

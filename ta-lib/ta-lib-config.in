@@ -17,7 +17,7 @@ while test $# -gt 0; do
       echo -I@includedir@/ta-lib @DEFS@
       ;;
     --libs)
-      echo -L@libdir@ @LIBS@ 
+      echo -L@libdir@ @LIBS@
       ;;
     *)
       echo "${usage}" 1>&2
