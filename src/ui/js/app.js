@@ -157,7 +157,10 @@ async function fetchTrades() {
         const res = await fetch(`${API_BASE}/trades`);
         const data = await res.json();
         const count = data.count || 0;
-        const trades = data.trades || [];
+        let trades = data.trades || [];
+        if (!Array.isArray(trades)) {
+            trades = Object.values(trades);
+        }
 
         // Update card
         dom.activePositions.innerHTML = `${count} <span class="text-sm text-gray-500 font-sans font-normal">Pair${count !== 1 ? 's' : ''}</span>`;
