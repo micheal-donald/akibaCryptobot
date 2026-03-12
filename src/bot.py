@@ -151,6 +151,12 @@ class AkibaCryptoBot:
             closed_trades = await self.trade_store.load_closed_trades()
             self.performance_tracker.hydrate_from_db(closed_trades)
 
+            # Hydrate equity curve from persistent snapshots
+            portfolio_history = await self.trade_store.load_portfolio_history(
+                limit=5000
+            )
+            self.performance_tracker.hydrate_equity_curve(portfolio_history)
+
             # Seed performance tracker with persisted open trades
             for symbol, trade in self.active_trades.items():
                 self.performance_tracker.record_trade_entry(
@@ -302,6 +308,12 @@ class AkibaCryptoBot:
             self.portfolio_value_history.append(total_value)
             if len(self.portfolio_value_history) > 1000:
                 self.portfolio_value_history.pop(0)
+
+            # Update performance tracker's live equity curve
+            self.performance_tracker.update_equity_curve(total_value)
+
+            # Persist snapshot to database
+            await self.trade_store.insert_portfolio_snapshot(total_value)
 
         except Exception as e:
             self.logger.error(f"Error updating portfolio value: {e}")

@@ -47,6 +47,13 @@ CREATE TABLE IF NOT EXISTS bot_sessions (
 )
 """
 
+CREATE_PORTFOLIO_HISTORY_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS portfolio_history (
+    timestamp       TEXT    PRIMARY KEY,
+    total_value     REAL    NOT NULL
+)
+"""
+
 
 class TradeStore:
     """Thin async wrapper around an SQLite database for trade persistence."""
@@ -66,6 +73,7 @@ class TradeStore:
         self._db.row_factory = aiosqlite.Row
         await self._db.execute(CREATE_TABLE_SQL)
         await self._db.execute(CREATE_SESSIONS_TABLE_SQL)
+        await self._db.execute(CREATE_PORTFOLIO_HISTORY_TABLE_SQL)
         await self._db.commit()
         logger.info(f"TradeStore initialised → {self.db_path}")
 
@@ -129,6 +137,18 @@ class TradeStore:
         logger.info(f"Loaded {len(trades)} closed trade(s) from database")
         return trades
 
+    async def load_portfolio_history(self, limit: int = 1000) -> List[Dict]:
+        """Return the latest portfolio snapshots."""
+        cursor = await self._db.execute(
+            "SELECT * FROM portfolio_history ORDER BY timestamp DESC LIMIT ?", (limit,)
+        )
+        rows = await cursor.fetchall()
+        # Return in ascending order for the chart
+        return [
+            {"timestamp": r["timestamp"], "total_value": r["total_value"]}
+            for r in reversed(rows)
+        ]
+
     # ------------------------------------------------------------------
     # Writes
     # ------------------------------------------------------------------
@@ -159,6 +179,15 @@ class TradeStore:
         row_id = cursor.lastrowid
         logger.info(f"Persisted trade #{row_id} for {trade['symbol']}")
         return row_id
+
+    async def insert_portfolio_snapshot(self, total_value: float):
+        """Insert a new portfolio value snapshot."""
+        now = datetime.now()
+        await self._db.execute(
+            "INSERT OR REPLACE INTO portfolio_history (timestamp, total_value) VALUES (?, ?)",
+            (now.isoformat(), total_value),
+        )
+        await self._db.commit()
 
     async def update_trade_exit(
         self,

@@ -170,8 +170,9 @@ class PerformanceMetricsTracker:
         )
 
         # Update local session balance
+        # Update local session balance
         self.current_balance += pnl
-        self._update_equity_curve()
+        self.update_equity_curve()
 
         # Track trade in memory for 'recent activity' feed
         self.trades.append(trade)
@@ -179,7 +180,7 @@ class PerformanceMetricsTracker:
             self.trades.pop(0)
 
         self.strategy_performance[trade.strategy].append(trade)
-        self._update_drawdown()
+        self.update_drawdown()
 
         # Invalidate cache to force re-query from DB next time get_metrics_summary is called
         self._metrics_cache = None
@@ -199,30 +200,35 @@ class PerformanceMetricsTracker:
         """
         old_balance = self.current_balance
         self.current_balance = new_balance
-        self._update_equity_curve()
-        self._update_drawdown()
+        self.update_equity_curve()
+        self.update_drawdown()
 
         logger.info(f"Balance updated: ${old_balance:.2f} -> ${new_balance:.2f}")
 
-    def _update_equity_curve(self):
-        """Update equity curve with current balance"""
+    def update_equity_curve(self, val: Optional[float] = None):
+        """Update equity curve with current balance or provided equity value"""
         now = datetime.now()
-        self.equity_curve.append((now, self.current_balance))
+        balance_to_record = val if val is not None else self.current_balance
+
+        # Ensure we don't add redundant points if nothing changed (optional optimization)
+        if self.equity_curve and self.equity_curve[-1][1] == balance_to_record:
+            if (now - self.equity_curve[-1][0]).total_seconds() < 300:  # 5 min
+                return
+
+        self.equity_curve.append((now, balance_to_record))
 
         # Update daily balance
         today = now.date()
-        self.daily_balance[today] = self.current_balance
+        self.daily_balance[today] = balance_to_record
 
         # Calculate daily return if we have previous day's balance
         yesterday = today - timedelta(days=1)
         if yesterday in self.daily_balance:
             yesterday_balance = self.daily_balance[yesterday]
-            daily_return = (
-                self.current_balance - yesterday_balance
-            ) / yesterday_balance
+            daily_return = (balance_to_record - yesterday_balance) / yesterday_balance
             self.daily_returns.append(daily_return)
 
-    def _update_drawdown(self):
+    def update_drawdown(self):
         """Update drawdown metrics"""
         # Update peak
         if self.current_balance > self.peak_balance:
@@ -660,6 +666,29 @@ Generated: {metrics["calculated_at"]}
         Args:
             closed_trades: List of dicts from TradeStore.load_closed_trades()
         """
+        # Clear current in-memory data to avoid duplicates or messy curves
+        self.current_balance = self.initial_balance
+        self.equity_curve = []
+        self.daily_balance = {}
+        self.daily_returns = []
+        self.trades = []
+        self.peak_balance = self.initial_balance
+        self.max_drawdown = 0.0
+
+        if not closed_trades:
+            # Anchor the start if no trades exist
+            self.equity_curve.append((datetime.now(), self.initial_balance))
+            return
+
+        # Add initial anchor point based on first trade's entry
+        try:
+            first_entry = datetime.fromisoformat(closed_trades[0]["timestamp"])
+            self.equity_curve.append(
+                (first_entry - timedelta(minutes=1), self.initial_balance)
+            )
+        except (ValueError, KeyError):
+            pass
+
         for t in closed_trades:
             entry_price = t["entry_price"]
             exit_price = t["exit_price"]
@@ -669,12 +698,15 @@ Generated: {metrics["calculated_at"]}
             fees = t.get("fees", 0.0) or 0.0
 
             # Parse timestamps
-            entry_time = datetime.fromisoformat(t["timestamp"])
-            exit_time = (
-                datetime.fromisoformat(t["exit_timestamp"])
-                if t.get("exit_timestamp")
-                else entry_time
-            )
+            try:
+                entry_time = datetime.fromisoformat(t["timestamp"])
+                exit_time = (
+                    datetime.fromisoformat(t["exit_timestamp"])
+                    if t.get("exit_timestamp")
+                    else entry_time
+                )
+            except (ValueError, KeyError):
+                continue
 
             # Compute pnl_percent
             if entry_price and entry_price > 0:
@@ -709,17 +741,16 @@ Generated: {metrics["calculated_at"]}
 
             # Track daily balance for Sharpe/Sortino
             day = exit_time.date()
-            prev_balance = self.daily_balance.get(day)
             self.daily_balance[day] = self.current_balance
 
-            if prev_balance is None:
-                # Check previous day
-                yesterday = day - timedelta(days=1)
-                if yesterday in self.daily_balance:
-                    prev = self.daily_balance[yesterday]
-                    self.daily_returns.append((self.current_balance - prev) / prev)
-
-            self._update_drawdown()
+            # Peak tracking for Drawdown reconstruction
+            if self.current_balance > self.peak_balance:
+                self.peak_balance = self.current_balance
+            else:
+                drawdown = (
+                    self.peak_balance - self.current_balance
+                ) / self.peak_balance
+                self.max_drawdown = max(self.max_drawdown, drawdown)
 
         # Invalidate cache
         self._metrics_cache = None
@@ -730,6 +761,41 @@ Generated: {metrics["calculated_at"]}
                 f"balance=${self.current_balance:.2f}, "
                 f"max_dd={self.max_drawdown * 100:.2f}%"
             )
+
+    def hydrate_equity_curve(self, history: List[Dict]):
+        """Hydrate the equity curve from persistent history snapshots."""
+        if not history:
+            return
+
+        for point in history:
+            try:
+                ts = datetime.fromisoformat(point["timestamp"])
+                val = point["total_value"]
+
+                # Check if this timestamp already exists in the curve (approx)
+                # to avoid doubling up points from both trades and snapshots
+                exists = any(
+                    abs((ts - cts).total_seconds()) < 10 for cts, _ in self.equity_curve
+                )
+                if not exists:
+                    self.equity_curve.append((ts, val))
+
+                self.current_balance = val
+                self.daily_balance[ts.date()] = val
+
+                # Update peak/drawdown
+                if val > self.peak_balance:
+                    self.peak_balance = val
+                else:
+                    dd = (self.peak_balance - val) / self.peak_balance
+                    self.max_drawdown = max(self.max_drawdown, dd)
+
+            except (ValueError, KeyError):
+                continue
+
+        # Sort curve by time
+        self.equity_curve.sort(key=lambda x: x[0])
+        self._metrics_cache = None
 
     def reset(self):
         """Reset all metrics and trade history"""
