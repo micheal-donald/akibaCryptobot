@@ -70,12 +70,8 @@ class AkibaCryptoBot:
         self.trade_store = TradeStore(db_path)
         self.active_trades: Dict[str, Dict] = {}
 
-        initial_balance = self.config.get("backtesting", {}).get(
-            "initial_balance", 10000.0
-        )
-        self.performance_tracker = PerformanceMetricsTracker(
-            initial_balance=initial_balance
-        )
+        # Created in start() once we have the real wallet balance
+        self.performance_tracker = None
 
         # Monitoring
         self.reconciliation = ReconciliationManager(self)
@@ -160,6 +156,17 @@ class AkibaCryptoBot:
                     f"Risk manager re-synced with {len(self.active_trades)} persisted trade(s)"
                 )
 
+            # Initialize exchange connection
+            balance = await self.exchange.get_balance()
+            self.logger.info("Successfully connected to exchange")
+
+            # Create performance tracker with real wallet balance
+            usdt_info = balance.get("USDT", {})
+            initial_balance = usdt_info.get("free", 0) + usdt_info.get("used", 0)
+            self.performance_tracker = PerformanceMetricsTracker(
+                initial_balance=initial_balance
+            )
+
             # Hydrate performance tracker with historical closed trades
             closed_trades = await self.trade_store.load_closed_trades()
             self.performance_tracker.hydrate_from_db(closed_trades)
@@ -179,10 +186,6 @@ class AkibaCryptoBot:
                     entry_price=trade["entry_price"],
                     strategy=self.strategy_manager.active_strategy or "unknown",
                 )
-
-            # Initialize exchange connection
-            await self.exchange.get_balance()
-            self.logger.info("Successfully connected to exchange")
 
             # Verify production data feed when running in dual-client mode
             if self.data_exchange is not self.exchange:
