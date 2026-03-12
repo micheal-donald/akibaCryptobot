@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from typing import Dict
+from typing import Dict, List
 from datetime import datetime, timedelta
 import signal
 from dotenv import load_dotenv
