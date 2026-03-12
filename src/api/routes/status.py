@@ -2,7 +2,7 @@
 Status & Health endpoints
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from api.dependencies import get_bot
 
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.get("/health")
 async def health_check():
     """Liveness probe — always returns OK if the server is up."""
-    return {"status": "ok", "timestamp": datetime.utcnow().isoformat()}
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/status")
@@ -26,3 +26,9 @@ async def get_status(bot=Depends(get_bot)):
         "paper" if bot.config["exchange"].get("sandbox", True) else "live"
     )
     return status_info
+
+
+@router.get("/reconcile")
+async def reconcile_status(bot=Depends(get_bot)):
+    """Manually trigger and return a reconciliation check between DB and Exchange."""
+    return await bot.reconciliation.reconcile()

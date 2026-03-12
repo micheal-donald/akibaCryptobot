@@ -1,4 +1,4 @@
-import ccxt
+import ccxt.async_support as ccxt
 import os
 from typing import Dict, List, Optional, Callable
 import pandas as pd
@@ -70,7 +70,7 @@ class BinanceClient:
 
     async def get_balance(self) -> Dict:
         try:
-            balance = self.exchange.fetch_balance()
+            balance = await self.exchange.fetch_balance()
             return balance
         except Exception as e:
             logger.error(f"Error fetching balance: {e}")
@@ -78,7 +78,7 @@ class BinanceClient:
 
     async def get_ticker(self, symbol: str) -> Dict:
         try:
-            ticker = self.exchange.fetch_ticker(symbol)
+            ticker = await self.exchange.fetch_ticker(symbol)
             return ticker
         except Exception as e:
             logger.error(f"Error fetching ticker for {symbol}: {e}")
@@ -88,7 +88,7 @@ class BinanceClient:
         self, symbol: str, timeframe: str = "1h", limit: int = 100
     ) -> pd.DataFrame:
         try:
-            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            ohlcv = await self.exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
             df = pd.DataFrame(
                 ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"]
             )
@@ -101,7 +101,7 @@ class BinanceClient:
 
     async def ensure_markets_loaded(self):
         if not self._markets_loaded:
-            self.exchange.load_markets()
+            await self.exchange.load_markets()
             self._markets_loaded = True
             logger.info(f"Loaded {len(self.exchange.markets)} markets")
 
@@ -149,7 +149,7 @@ class BinanceClient:
                         "reason": "Fails min notional or amount limit",
                     }
 
-            order = self.exchange.create_market_order(symbol, side, amount)
+            order = await self.exchange.create_market_order(symbol, side, amount)
             logger.info(f"Market order placed: {side} {amount} {symbol}")
             return order
         except Exception as e:
@@ -169,7 +169,7 @@ class BinanceClient:
                     "reason": "Fails min notional or amount limit",
                 }
 
-            order = self.exchange.create_limit_order(symbol, side, amount, price)
+            order = await self.exchange.create_limit_order(symbol, side, amount, price)
             logger.info(f"Limit order placed: {side} {amount} {symbol} at {price}")
             return order
         except Exception as e:
@@ -178,7 +178,7 @@ class BinanceClient:
 
     async def cancel_order(self, order_id: str, symbol: str) -> Dict:
         try:
-            result = self.exchange.cancel_order(order_id, symbol)
+            result = await self.exchange.cancel_order(order_id, symbol)
             logger.info(f"Order {order_id} cancelled for {symbol}")
             return result
         except Exception as e:
@@ -187,7 +187,7 @@ class BinanceClient:
 
     async def get_open_orders(self, symbol: str = None) -> List[Dict]:
         try:
-            orders = self.exchange.fetch_open_orders(symbol)
+            orders = await self.exchange.fetch_open_orders(symbol)
             return orders
         except Exception as e:
             logger.error(f"Error fetching open orders: {e}")
@@ -195,7 +195,7 @@ class BinanceClient:
 
     async def get_order_status(self, order_id: str, symbol: str) -> Dict:
         try:
-            order = self.exchange.fetch_order(order_id, symbol)
+            order = await self.exchange.fetch_order(order_id, symbol)
             return order
         except Exception as e:
             logger.error(f"Error fetching order status: {e}")
@@ -203,7 +203,7 @@ class BinanceClient:
 
     async def get_trading_fees(self, symbol: str = None) -> Dict:
         try:
-            fees = self.exchange.fetch_trading_fees()
+            fees = await self.exchange.fetch_trading_fees()
             if symbol:
                 return fees.get(symbol, {})
             return fees
@@ -227,7 +227,7 @@ class BinanceClient:
 
     async def get_market_depth(self, symbol: str, limit: int = 100) -> Dict:
         try:
-            orderbook = self.exchange.fetch_order_book(symbol, limit)
+            orderbook = await self.exchange.fetch_order_book(symbol, limit)
             return orderbook
         except Exception as e:
             logger.error(f"Error fetching market depth for {symbol}: {e}")
@@ -321,7 +321,7 @@ class BinanceClient:
             raise ValueError("set_leverage only available for futures markets")
 
         try:
-            result = self.exchange.set_leverage(leverage, symbol)
+            result = await self.exchange.set_leverage(leverage, symbol)
             logger.info(f"Set leverage to {leverage}x for {symbol}")
             return result
         except Exception as e:
@@ -334,7 +334,7 @@ class BinanceClient:
             raise ValueError("set_margin_mode only available for futures markets")
 
         try:
-            result = self.exchange.set_margin_mode(margin_type, symbol)
+            result = await self.exchange.set_margin_mode(margin_type, symbol)
             logger.info(f"Set margin mode to {margin_type} for {symbol}")
             return result
         except Exception as e:
@@ -347,7 +347,7 @@ class BinanceClient:
             raise ValueError("get_futures_positions only available for futures markets")
 
         try:
-            positions = self.exchange.fetch_positions(
+            positions = await self.exchange.fetch_positions(
                 symbols=[symbol] if symbol else None
             )
             # Filter for non-zero positions
@@ -362,7 +362,7 @@ class BinanceClient:
             raise ValueError("get_funding_rate only available for futures markets")
 
         try:
-            funding = self.exchange.fetch_funding_rate(symbol)
+            funding = await self.exchange.fetch_funding_rate(symbol)
             return funding
         except Exception as e:
             logger.error(f"Error fetching funding rate for {symbol}: {e}")

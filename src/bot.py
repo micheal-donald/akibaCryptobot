@@ -18,6 +18,7 @@ from strategies.momentum_strategy import MomentumStrategy
 from strategies.base_strategy import StrategyManager
 from persistence.trade_store import TradeStore
 from performance.metrics_tracker import PerformanceMetricsTracker
+from monitoring.reconciliation import ReconciliationManager
 
 
 class AkibaCryptoBot:
@@ -62,11 +63,12 @@ class AkibaCryptoBot:
         self.trade_store = TradeStore(db_path)
         self.active_trades: Dict[str, Dict] = {}
 
-        # Performance tracking (powers /api/metrics and UI dashboard)
-        initial_balance = self.config.get("trading", {}).get("initial_balance", 10000.0)
         self.performance_tracker = PerformanceMetricsTracker(
             initial_balance=initial_balance
         )
+
+        # Monitoring
+        self.reconciliation = ReconciliationManager(self)
 
         self.is_running = False
         self.start_time = datetime.now()
@@ -178,6 +180,9 @@ class AkibaCryptoBot:
                     "Successfully connected to production Binance for market data"
                 )
 
+            # Perform initial reconciliation check
+            await self.reconciliation.reconcile()
+
             if self.telegram:
                 await self.telegram.send_message(
                     "🤖 AkibaCryptoBot started successfully!"
@@ -194,9 +199,16 @@ class AkibaCryptoBot:
                         task.add_done_callback(self._background_tasks.discard)
 
             # Main trading loop
+            cycle_count = 0
             while self.is_running:
                 try:
                     await self.trading_cycle()
+                    cycle_count += 1
+
+                    # Run reconciliation every 60 cycles (~1 hour)
+                    if cycle_count % 60 == 0:
+                        await self.reconciliation.reconcile()
+
                     await asyncio.sleep(60)  # Run every minute
                 except Exception as e:
                     self.logger.error(f"Error in trading cycle: {e}")
