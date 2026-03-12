@@ -15,7 +15,9 @@ async def get_metrics(bot=Depends(get_bot)):
     Sharpe ratio, Sortino ratio, profit factor, win rate, max drawdown, etc.
     """
     if hasattr(bot, "performance_tracker") and bot.performance_tracker:
-        return bot.performance_tracker.get_metrics_summary()
+        return await bot.performance_tracker.get_metrics_summary(
+            trade_store=bot.trade_store
+        )
 
     # Fallback: return strategy-level performance from strategy manager
     return bot.strategy_manager.get_all_performance()

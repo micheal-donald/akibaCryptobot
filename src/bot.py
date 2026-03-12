@@ -80,9 +80,9 @@ class AkibaCryptoBot:
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self._cached_balance = None  # Refreshed once per trading cycle
-        self.pair_cooldowns: Dict[
-            str, datetime
-        ] = {}  # symbol -> cooldown-expiry datetime
+        self.pair_cooldowns: Dict[str, datetime] = (
+            {}
+        )  # symbol -> cooldown-expiry datetime
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -433,12 +433,13 @@ class AkibaCryptoBot:
                     symbol, exit_price, reason, net_pnl, total_fees
                 )
 
-                # Record in performance tracker
-                self.performance_tracker.record_trade_exit(
+                # Record in performance tracker (async to support cache invalidation/refresh)
+                await self.performance_tracker.record_trade_exit(
                     symbol=symbol,
                     exit_price=exit_price,
                     exit_reason=reason,
                     fees=total_fees,
+                    trade_store=self.trade_store,
                 )
 
                 if self.telegram:

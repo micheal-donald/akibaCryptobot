@@ -122,24 +122,17 @@ class PerformanceMetricsTracker:
 
         logger.info(f"Recorded trade entry: {symbol} {side} {amount} @ {entry_price}")
 
-    def record_trade_exit(
+    async def record_trade_exit(
         self,
         symbol: str,
         exit_price: float,
         exit_reason: str = "unknown",
         fees: float = 0.0,
+        trade_store=None,
     ) -> Optional[Trade]:
         """
-        Record trade exit and calculate PnL
-
-        Args:
-            symbol: Trading pair
-            exit_price: Exit price
-            exit_reason: Reason for exit (stop_loss, take_profit, strategy_exit, etc.)
-            fees: Total trading fees
-
-        Returns:
-            Completed Trade object or None if no open trade found
+        Record trade exit and calculate PnL.
+        If trade_store is provided, it triggers a refresh of stats from SQL.
         """
         if symbol not in self.open_trades:
             logger.warning(f"No open trade found for {symbol}")
@@ -147,7 +140,7 @@ class PerformanceMetricsTracker:
 
         entry_trade = self.open_trades.pop(symbol)
 
-        # Calculate PnL
+        # Calculate PnL locally for the immediate return object
         side = entry_trade["side"]
         amount = entry_trade["amount"]
         entry_price = entry_trade["entry_price"]
@@ -176,18 +169,19 @@ class PerformanceMetricsTracker:
             metadata=entry_trade["metadata"],
         )
 
-        # Update balance
+        # Update local session balance
         self.current_balance += pnl
         self._update_equity_curve()
 
-        # Track trade
+        # Track trade in memory for 'recent activity' feed
         self.trades.append(trade)
-        self.strategy_performance[trade.strategy].append(trade)
+        if len(self.trades) > 100:
+            self.trades.pop(0)
 
-        # Update drawdown tracking
+        self.strategy_performance[trade.strategy].append(trade)
         self._update_drawdown()
 
-        # Invalidate cache
+        # Invalidate cache to force re-query from DB next time get_metrics_summary is called
         self._metrics_cache = None
 
         logger.info(
@@ -396,52 +390,102 @@ class PerformanceMetricsTracker:
 
         return float(avg_win), float(avg_loss), float(win_loss_ratio)
 
-    def get_metrics_summary(self, use_cache: bool = True) -> Dict:
+    async def get_metrics_summary(
+        self, trade_store=None, use_cache: bool = True
+    ) -> Dict:
         """
-        Get comprehensive metrics summary
-
-        Args:
-            use_cache: Use cached metrics if available
-
-        Returns:
-            Dictionary with all performance metrics
+        Get metrics summary, optionally hitting TradeStore (SQLite) for historical stats.
         """
-        # Check cache
-        if use_cache and self._metrics_cache and self._cache_timestamp:
-            if datetime.now() - self._cache_timestamp < timedelta(
-                seconds=self._cache_ttl
+        now = datetime.now()
+        if use_cache and self._metrics_cache:
+            if (
+                self._cache_timestamp
+                and (now - self._cache_timestamp).total_seconds() < self._cache_ttl
             ):
                 return self._metrics_cache
 
-        # Calculate metrics
-        total_return = (
-            (self.current_balance - self.initial_balance) / self.initial_balance
-        ) * 100
-        total_pnl = self.current_balance - self.initial_balance
+        # If we have a trade_store, pull "ground truth" aggregate stats from SQLite
+        if trade_store:
+            try:
+                stats = await trade_store.get_aggregate_stats()
+                db_pnl = stats["total_pnl"]
+                win_count = stats["win_count"]
+                loss_count = stats["loss_count"]
+                total_trades = stats["total_trades"]
 
+                win_rate = (win_count / total_trades * 100) if total_trades > 0 else 0.0
+                total_return = (db_pnl / self.initial_balance) * 100
+
+                # Risk Metrics
+                profit_factor = (
+                    (stats["gross_profit"] / stats["gross_loss"])
+                    if stats["gross_loss"] > 0
+                    else (float("inf") if stats["gross_profit"] > 0 else 0.0)
+                )
+                expectancy = (db_pnl / total_trades) if total_trades > 0 else 0.0
+
+                metrics = {
+                    "initial_balance": self.initial_balance,
+                    "current_balance": self.initial_balance + db_pnl,
+                    "total_pnl": db_pnl,
+                    "total_return_percent": total_return,
+                    "total_trades": total_trades,
+                    "winning_trades": win_count,
+                    "losing_trades": loss_count,
+                    "win_rate": win_rate,
+                    "sharpe_ratio": self.calculate_sharpe_ratio(),
+                    "sortino_ratio": self.calculate_sortino_ratio(),
+                    "profit_factor": profit_factor,
+                    "expectancy": expectancy,
+                    "average_win": stats["avg_win"],
+                    "average_loss": stats["avg_loss"],
+                    "win_loss_ratio": (
+                        (stats["avg_win"] / stats["avg_loss"])
+                        if stats["avg_loss"] > 0
+                        else 0.0
+                    ),
+                    "max_drawdown_percent": self.max_drawdown * 100,
+                    "max_drawdown_amount": self.peak_balance * self.max_drawdown,
+                    "max_drawdown_duration_hours": self.max_drawdown_duration.total_seconds()
+                    / 3600,
+                    "current_drawdown_percent": (
+                        ((self.peak_balance - self.current_balance) / self.peak_balance)
+                        * 100
+                        if self.peak_balance > 0
+                        else 0
+                    ),
+                    "open_trades_count": len(self.open_trades),
+                    "calculated_at": now.isoformat(),
+                    "source": "database",
+                }
+
+                self._metrics_cache = metrics
+                self._cache_timestamp = now
+                return metrics
+            except Exception as e:
+                logger.error(f"Failed to fetch SQL metrics: {e}")
+
+        # Fallback to local memory-only tracking
+        total_pnl = self.current_balance - self.initial_balance
+        total_return = (total_pnl / self.initial_balance) * 100
         avg_win, avg_loss, win_loss_ratio = self.calculate_average_win_loss_ratio()
 
         metrics = {
-            # Balance metrics
             "initial_balance": self.initial_balance,
             "current_balance": self.current_balance,
             "total_pnl": total_pnl,
             "total_return_percent": total_return,
-            # Trade statistics
             "total_trades": len(self.trades),
             "winning_trades": sum(1 for t in self.trades if t.is_winner),
             "losing_trades": sum(1 for t in self.trades if not t.is_winner),
             "win_rate": self.calculate_win_rate(),
-            # Risk-adjusted metrics
             "sharpe_ratio": self.calculate_sharpe_ratio(),
             "sortino_ratio": self.calculate_sortino_ratio(),
             "profit_factor": self.calculate_profit_factor(),
             "expectancy": self.calculate_expectancy(),
-            # Win/Loss analysis
             "average_win": avg_win,
             "average_loss": avg_loss,
             "win_loss_ratio": win_loss_ratio,
-            # Drawdown metrics
             "max_drawdown_percent": self.max_drawdown * 100,
             "max_drawdown_amount": self.peak_balance * self.max_drawdown,
             "max_drawdown_duration_hours": self.max_drawdown_duration.total_seconds()
@@ -451,16 +495,12 @@ class PerformanceMetricsTracker:
                 if self.peak_balance > 0
                 else 0
             ),
-            # Open positions
             "open_trades_count": len(self.open_trades),
-            # Timestamp
-            "calculated_at": datetime.now().isoformat(),
+            "calculated_at": now.isoformat(),
+            "source": "memory",
         }
-
-        # Cache results
         self._metrics_cache = metrics
-        self._cache_timestamp = datetime.now()
-
+        self._cache_timestamp = now
         return metrics
 
     def get_strategy_performance(self, strategy_name: str) -> Dict:
@@ -560,21 +600,18 @@ class PerformanceMetricsTracker:
 
         return pd.DataFrame(trade_dicts)
 
-    def generate_performance_report(self) -> str:
+    async def generate_performance_report(self, trade_store=None) -> str:
         """
         Generate a formatted text performance report
-
-        Returns:
-            Formatted performance report string
         """
-        metrics = self.get_metrics_summary()
+        metrics = await self.get_metrics_summary(trade_store=trade_store)
 
         report = f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║           AKIBA CRYPTO BOT - PERFORMANCE REPORT              ║
 ╚══════════════════════════════════════════════════════════════╝
 
-📊 BALANCE & RETURNS
+📊 BALANCE & RETURNS ({metrics.get("source", "unknown")})
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Initial Balance:      ${metrics["initial_balance"]:,.2f}
   Current Balance:      ${metrics["current_balance"]:,.2f}
@@ -603,7 +640,7 @@ class PerformanceMetricsTracker:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Max Drawdown:         {metrics["max_drawdown_percent"]:.2f}%
   Max DD Amount:        ${metrics["max_drawdown_amount"]:.2f}
-  Max DD Duration:      {metrics["max_drawdown_duration_hours"]:.1f} hours
+  Max DD Duration:      {metrics.get("max_drawdown_duration_hours", 0):.1f} hours
   Current Drawdown:     {metrics["current_drawdown_percent"]:.2f}%
 
 📂 CURRENT STATUS

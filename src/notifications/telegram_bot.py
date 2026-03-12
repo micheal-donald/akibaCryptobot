@@ -314,14 +314,16 @@ class TelegramNotifier:
             self.bot_instance, "performance_tracker"
         ):
             try:
-                metrics = self.bot_instance.performance_tracker.get_metrics_summary()
+                metrics = (
+                    await self.bot_instance.performance_tracker.get_metrics_summary(
+                        trade_store=self.bot_instance.trade_store
+                    )
+                )
 
                 pnl_emoji = (
                     "📈"
                     if metrics["total_pnl"] > 0
-                    else "📉"
-                    if metrics["total_pnl"] < 0
-                    else "➖"
+                    else "📉" if metrics["total_pnl"] < 0 else "➖"
                 )
 
                 message = (
@@ -346,7 +348,11 @@ class TelegramNotifier:
             self.bot_instance, "performance_tracker"
         ):
             try:
-                metrics = self.bot_instance.performance_tracker.get_metrics_summary()
+                metrics = (
+                    await self.bot_instance.performance_tracker.get_metrics_summary(
+                        trade_store=self.bot_instance.trade_store
+                    )
+                )
 
                 message = (
                     f"📊 Detailed Performance Metrics\n\n"
@@ -385,8 +391,8 @@ class TelegramNotifier:
             self.bot_instance, "performance_tracker"
         ):
             try:
-                report = (
-                    self.bot_instance.performance_tracker.generate_performance_report()
+                report = await self.bot_instance.performance_tracker.generate_performance_report(
+                    trade_store=self.bot_instance.trade_store
                 )
 
                 # Telegram has 4096 character limit, so we might need to split
@@ -554,7 +560,9 @@ class TelegramNotifier:
 
                 await update.message.reply_text(message)
             except Exception as e:
-                await update.message.reply_text(f"❌ Error generating heatmap: {str(e)}")
+                await update.message.reply_text(
+                    f"❌ Error generating heatmap: {str(e)}"
+                )
         else:
             await update.message.reply_text("❌ Advanced risk manager not available")
 

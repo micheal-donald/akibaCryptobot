@@ -272,3 +272,31 @@ class TradeStore:
         cursor = await self._db.execute("SELECT COUNT(*) as cnt FROM bot_sessions")
         row = await cursor.fetchone()
         return int(row["cnt"]) if row else 0
+
+    async def get_aggregate_stats(self) -> Dict:
+        """Return aggregate PnL and win/loss counts from all closed trades."""
+        query = """
+            SELECT
+                COUNT(*) as total_count,
+                SUM(pnl) as total_pnl,
+                COUNT(CASE WHEN pnl > 0 THEN 1 END) as win_count,
+                COUNT(CASE WHEN pnl <= 0 THEN 1 END) as loss_count,
+                SUM(CASE WHEN pnl > 0 THEN pnl ELSE 0 END) as gross_profit,
+                SUM(CASE WHEN pnl < 0 THEN pnl ELSE 0 END) as gross_loss,
+                AVG(CASE WHEN pnl > 0 THEN pnl END) as avg_win,
+                AVG(CASE WHEN pnl < 0 THEN pnl END) as avg_loss
+            FROM trades
+            WHERE status = 'closed'
+        """
+        cursor = await self._db.execute(query)
+        row = await cursor.fetchone()
+        return {
+            "total_trades": row["total_count"] or 0,
+            "total_pnl": row["total_pnl"] or 0.0,
+            "win_count": row["win_count"] or 0,
+            "loss_count": row["loss_count"] or 0,
+            "gross_profit": row["gross_profit"] or 0.0,
+            "gross_loss": abs(row["gross_loss"] or 0.0),
+            "avg_win": row["avg_win"] or 0.0,
+            "avg_loss": abs(row["avg_loss"] or 0.0),
+        }
