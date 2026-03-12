@@ -110,11 +110,7 @@ class TradeStore:
                 "entry_price": row["entry_price"],
                 "stop_loss": row["stop_loss"],
                 "take_profit": row["take_profit"],
-                "timestamp": (
-                    datetime.fromtimestamp(row["timestamp"])
-                    if isinstance(row["timestamp"], (int, float))
-                    else datetime.fromisoformat(row["timestamp"])
-                ),
+                "timestamp": datetime.fromtimestamp(row["timestamp"]),
                 "order_id": row["order_id"],
                 "status": row["status"],
                 "fees": row["fees"],
@@ -131,20 +127,6 @@ class TradeStore:
         rows = await cursor.fetchall()
         trades = []
         for row in rows:
-            # Support both integer and ISO string (for migration)
-            ts = row["timestamp"]
-            ets = row["exit_timestamp"]
-            entry_dt = (
-                datetime.fromtimestamp(ts)
-                if isinstance(ts, (int, float))
-                else datetime.fromisoformat(ts)
-            )
-            exit_dt = (
-                datetime.fromtimestamp(ets)
-                if isinstance(ets, (int, float))
-                else (datetime.fromisoformat(ets) if ets else None)
-            )
-
             trades.append(
                 {
                     "symbol": row["symbol"],
@@ -152,8 +134,12 @@ class TradeStore:
                     "amount": row["amount"],
                     "entry_price": row["entry_price"],
                     "exit_price": row["exit_price"],
-                    "timestamp": entry_dt,
-                    "exit_timestamp": exit_dt,
+                    "timestamp": datetime.fromtimestamp(row["timestamp"]),
+                    "exit_timestamp": (
+                        datetime.fromtimestamp(row["exit_timestamp"])
+                        if row["exit_timestamp"]
+                        else None
+                    ),
                     "exit_reason": row["exit_reason"],
                     "pnl": row["pnl"],
                     "fees": row["fees"] or 0.0,
@@ -169,16 +155,11 @@ class TradeStore:
         )
         rows = await cursor.fetchall()
 
-        # Return in ascending order for the chart
-        def parse_ts(val):
-            return (
-                datetime.fromtimestamp(val)
-                if isinstance(val, (int, float))
-                else datetime.fromisoformat(val)
-            )
-
         return [
-            {"timestamp": parse_ts(r["timestamp"]), "total_value": r["total_value"]}
+            {
+                "timestamp": datetime.fromtimestamp(r["timestamp"]),
+                "total_value": r["total_value"],
+            }
             for r in reversed(rows)
         ]
 
@@ -188,14 +169,7 @@ class TradeStore:
 
     async def insert_trade(self, trade: Dict) -> int:
         """Insert a new open trade and return the row id."""
-        # Convert timestamp to integer for optimal storage
-        ts_val = trade.get("timestamp")
-        if isinstance(ts_val, str):
-            ts_int = int(datetime.fromisoformat(ts_val).timestamp())
-        elif isinstance(ts_val, datetime):
-            ts_int = int(ts_val.timestamp())
-        else:
-            ts_int = int(datetime.now().timestamp())
+        ts_int = int(datetime.now().timestamp())
 
         cursor = await self._db.execute(
             """
@@ -309,12 +283,7 @@ class TradeStore:
         row = await cursor.fetchone()
         uptime_seconds = 0.0
         if row and row["start_time"]:
-            st = row["start_time"]
-            start_dt = (
-                datetime.fromtimestamp(st)
-                if isinstance(st, (int, float))
-                else datetime.fromisoformat(st)
-            )
+            start_dt = datetime.fromtimestamp(row["start_time"])
             uptime_seconds = (datetime.fromtimestamp(now_ts) - start_dt).total_seconds()
 
         await self._db.execute(
