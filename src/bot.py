@@ -80,9 +80,9 @@ class AkibaCryptoBot:
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self._cached_balance = None  # Refreshed once per trading cycle
-        self.pair_cooldowns: Dict[str, datetime] = (
-            {}
-        )  # symbol -> cooldown-expiry datetime
+        self.pair_cooldowns: Dict[
+            str, datetime
+        ] = {}  # symbol -> cooldown-expiry datetime
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
