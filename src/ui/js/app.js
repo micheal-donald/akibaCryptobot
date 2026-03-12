@@ -155,9 +155,23 @@ async function fetchBalance() {
 async function fetchTrades() {
     try {
         const res = await fetch(`${API_BASE}/trades`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        const count = data.count || 0;
-        let trades = data.trades || [];
+
+        let trades = [];
+        let count = 0;
+
+        if (data && typeof data === 'object') {
+            if (data.trades !== undefined) {
+                trades = data.trades;
+                count = data.count !== undefined ? data.count : (Array.isArray(trades) ? trades.length : Object.keys(trades).length);
+            } else {
+                // Handle direct dict or array response
+                trades = data;
+                count = Array.isArray(trades) ? trades.length : Object.keys(trades).length;
+            }
+        }
+
         if (!Array.isArray(trades)) {
             trades = Object.values(trades);
         }
@@ -172,17 +186,23 @@ async function fetchTrades() {
         }
 
         dom.positionsTbody.innerHTML = trades.map(t => {
+            if (!t) return '';
+            const symbol = t.symbol || '—';
             const entryPrice = parseFloat(t.entry_price || 0);
-            const currentPrice = latestPrices[t.symbol] || entryPrice;
+            const currentPrice = latestPrices[symbol] || entryPrice;
             const pnlPct = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice * 100) : 0;
-            const isLong = (t.side || 'long').toLowerCase() === 'long' || (t.side || 'buy').toLowerCase() === 'buy';
+            const side = (t.side || 'long').toLowerCase();
+            const isLong = side === 'long' || side === 'buy';
             const effectivePnl = isLong ? pnlPct : -pnlPct;
             const amount = parseFloat(t.amount || 0);
-            const entryTime = t.entry_time ? new Date(t.entry_time).toLocaleTimeString() : '—';
+
+            // Map either entry_time or timestamp
+            const rawTime = t.entry_time || t.timestamp;
+            const entryTime = rawTime ? new Date(rawTime).toLocaleTimeString() : '—';
 
             return `
                 <tr class="border-b border-matrix-border/50 hover:bg-matrix-border/30 transition-colors">
-                    <td class="py-3 text-white font-bold">${t.symbol || '—'}</td>
+                    <td class="py-3 text-white font-bold">${symbol}</td>
                     <td class="py-3 ${isLong ? 'text-matrix-neon' : 'text-red-500'}">${isLong ? 'LONG' : 'SHORT'}</td>
                     <td class="py-3 text-gray-400">${amount > 0 ? amount.toFixed(6) : '—'}</td>
                     <td class="py-3 text-gray-400">$${entryPrice.toLocaleString()}</td>
@@ -193,6 +213,7 @@ async function fetchTrades() {
                 </tr>`;
         }).join('');
     } catch (e) {
+        console.error('Fetch trades error:', e);
         dom.positionsTbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-matrix-dim">Failed to load positions</td></tr>`;
     }
 }

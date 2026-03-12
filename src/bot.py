@@ -814,9 +814,9 @@ class AkibaCryptoBot:
             self.logger.error(f"Error getting balance: {e}")
             return {}
 
-    def get_active_trades(self) -> Dict:
-        """Get active trades for Telegram commands"""
-        return self.active_trades
+    def get_active_trades(self) -> List[Dict]:
+        """Get active trades for Telegram and API"""
+        return list(self.active_trades.values())
 
     def get_config_info(self) -> Dict:
         """Get configuration info for Telegram commands"""
