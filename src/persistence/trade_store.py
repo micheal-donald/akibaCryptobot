@@ -23,11 +23,11 @@ CREATE TABLE IF NOT EXISTS trades (
     entry_price     REAL    NOT NULL,
     stop_loss       REAL,
     take_profit     REAL,
-    timestamp       TEXT    NOT NULL,
+    timestamp       INTEGER NOT NULL,
     order_id        TEXT,
     status          TEXT    NOT NULL DEFAULT 'open',
     exit_price      REAL,
-    exit_timestamp  TEXT,
+    exit_timestamp  INTEGER,
     exit_reason     TEXT,
     pnl             REAL,
     fees            REAL    DEFAULT 0.0,
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS trades (
 CREATE_SESSIONS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS bot_sessions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    start_time      TEXT    NOT NULL,
-    end_time        TEXT,
+    start_time      INTEGER NOT NULL,
+    end_time        INTEGER,
     uptime_seconds  REAL,
     exit_reason     TEXT    DEFAULT 'unknown',
     strategy        TEXT,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS bot_sessions (
 
 CREATE_PORTFOLIO_HISTORY_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS portfolio_history (
-    timestamp       TEXT    PRIMARY KEY,
+    timestamp       INTEGER PRIMARY KEY,
     total_value     REAL    NOT NULL
 )
 """
@@ -74,6 +74,13 @@ class TradeStore:
         await self._db.execute(CREATE_TABLE_SQL)
         await self._db.execute(CREATE_SESSIONS_TABLE_SQL)
         await self._db.execute(CREATE_PORTFOLIO_HISTORY_TABLE_SQL)
+        # Time-series optimizations: indices for fast range scans and filtering
+        await self._db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trades_status_exit ON trades(status, exit_timestamp);"
+        )
+        await self._db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_trades_status_symbol ON trades(status, symbol);"
+        )
         await self._db.commit()
         logger.info(f"TradeStore initialised → {self.db_path}")
 
@@ -103,7 +110,11 @@ class TradeStore:
                 "entry_price": row["entry_price"],
                 "stop_loss": row["stop_loss"],
                 "take_profit": row["take_profit"],
-                "timestamp": row["timestamp"],
+                "timestamp": (
+                    datetime.fromtimestamp(row["timestamp"])
+                    if isinstance(row["timestamp"], (int, float))
+                    else datetime.fromisoformat(row["timestamp"])
+                ),
                 "order_id": row["order_id"],
                 "status": row["status"],
                 "fees": row["fees"],
@@ -120,6 +131,20 @@ class TradeStore:
         rows = await cursor.fetchall()
         trades = []
         for row in rows:
+            # Support both integer and ISO string (for migration)
+            ts = row["timestamp"]
+            ets = row["exit_timestamp"]
+            entry_dt = (
+                datetime.fromtimestamp(ts)
+                if isinstance(ts, (int, float))
+                else datetime.fromisoformat(ts)
+            )
+            exit_dt = (
+                datetime.fromtimestamp(ets)
+                if isinstance(ets, (int, float))
+                else (datetime.fromisoformat(ets) if ets else None)
+            )
+
             trades.append(
                 {
                     "symbol": row["symbol"],
@@ -127,8 +152,8 @@ class TradeStore:
                     "amount": row["amount"],
                     "entry_price": row["entry_price"],
                     "exit_price": row["exit_price"],
-                    "timestamp": row["timestamp"],
-                    "exit_timestamp": row["exit_timestamp"],
+                    "timestamp": entry_dt,
+                    "exit_timestamp": exit_dt,
                     "exit_reason": row["exit_reason"],
                     "pnl": row["pnl"],
                     "fees": row["fees"] or 0.0,
@@ -143,9 +168,17 @@ class TradeStore:
             "SELECT * FROM portfolio_history ORDER BY timestamp DESC LIMIT ?", (limit,)
         )
         rows = await cursor.fetchall()
+
         # Return in ascending order for the chart
+        def parse_ts(val):
+            return (
+                datetime.fromtimestamp(val)
+                if isinstance(val, (int, float))
+                else datetime.fromisoformat(val)
+            )
+
         return [
-            {"timestamp": r["timestamp"], "total_value": r["total_value"]}
+            {"timestamp": parse_ts(r["timestamp"]), "total_value": r["total_value"]}
             for r in reversed(rows)
         ]
 
@@ -155,6 +188,15 @@ class TradeStore:
 
     async def insert_trade(self, trade: Dict) -> int:
         """Insert a new open trade and return the row id."""
+        # Convert timestamp to integer for optimal storage
+        ts_val = trade.get("timestamp")
+        if isinstance(ts_val, str):
+            ts_int = int(datetime.fromisoformat(ts_val).timestamp())
+        elif isinstance(ts_val, datetime):
+            ts_int = int(ts_val.timestamp())
+        else:
+            ts_int = int(datetime.now().timestamp())
+
         cursor = await self._db.execute(
             """
             INSERT INTO trades
@@ -169,7 +211,7 @@ class TradeStore:
                 trade["entry_price"],
                 trade.get("stop_loss"),
                 trade.get("take_profit"),
-                trade.get("timestamp", datetime.now().isoformat()),
+                ts_int,
                 trade.get("order_id"),
                 trade.get("entry_fee", trade.get("fees", 0.0)),
                 trade.get("trailing_stop_price"),
@@ -182,10 +224,10 @@ class TradeStore:
 
     async def insert_portfolio_snapshot(self, total_value: float):
         """Insert a new portfolio value snapshot."""
-        now = datetime.now()
+        now_ts = int(datetime.now().timestamp())
         await self._db.execute(
             "INSERT OR REPLACE INTO portfolio_history (timestamp, total_value) VALUES (?, ?)",
-            (now.isoformat(), total_value),
+            (now_ts, total_value),
         )
         await self._db.commit()
 
@@ -211,7 +253,7 @@ class TradeStore:
             """,
             (
                 exit_price,
-                datetime.now().isoformat(),
+                int(datetime.now().timestamp()),
                 exit_reason,
                 pnl,
                 fees,
@@ -246,7 +288,7 @@ class TradeStore:
             INSERT INTO bot_sessions (start_time, strategy, trading_mode)
             VALUES (?, ?, ?)
             """,
-            (datetime.now().isoformat(), strategy, trading_mode),
+            (int(datetime.now().timestamp()), strategy, trading_mode),
         )
         await self._db.commit()
         session_id = cursor.lastrowid
@@ -259,7 +301,7 @@ class TradeStore:
         exit_reason: str = "clean_shutdown",
     ):
         """Mark a session as ended and record its uptime."""
-        now = datetime.now()
+        now_ts = int(datetime.now().timestamp())
         # Fetch start_time to compute duration
         cursor = await self._db.execute(
             "SELECT start_time FROM bot_sessions WHERE id = ?", (session_id,)
@@ -267,8 +309,13 @@ class TradeStore:
         row = await cursor.fetchone()
         uptime_seconds = 0.0
         if row and row["start_time"]:
-            start_dt = datetime.fromisoformat(row["start_time"])
-            uptime_seconds = (now - start_dt).total_seconds()
+            st = row["start_time"]
+            start_dt = (
+                datetime.fromtimestamp(st)
+                if isinstance(st, (int, float))
+                else datetime.fromisoformat(st)
+            )
+            uptime_seconds = (datetime.fromtimestamp(now_ts) - start_dt).total_seconds()
 
         await self._db.execute(
             """
@@ -278,7 +325,7 @@ class TradeStore:
                    exit_reason    = ?
              WHERE id = ?
             """,
-            (now.isoformat(), uptime_seconds, exit_reason, session_id),
+            (now_ts, uptime_seconds, exit_reason, session_id),
         )
         await self._db.commit()
         hours, remainder = divmod(uptime_seconds, 3600)

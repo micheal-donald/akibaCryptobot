@@ -682,11 +682,13 @@ Generated: {metrics["calculated_at"]}
 
         # Add initial anchor point based on first trade's entry
         try:
-            first_entry = datetime.fromisoformat(closed_trades[0]["timestamp"])
+            first_entry = closed_trades[0]["timestamp"]
+            if isinstance(first_entry, str):
+                first_entry = datetime.fromisoformat(first_entry)
             self.equity_curve.append(
                 (first_entry - timedelta(minutes=1), self.initial_balance)
             )
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError):
             pass
 
         for t in closed_trades:
@@ -699,13 +701,17 @@ Generated: {metrics["calculated_at"]}
 
             # Parse timestamps
             try:
-                entry_time = datetime.fromisoformat(t["timestamp"])
-                exit_time = (
-                    datetime.fromisoformat(t["exit_timestamp"])
-                    if t.get("exit_timestamp")
-                    else entry_time
-                )
-            except (ValueError, KeyError):
+                entry_time = t["timestamp"]
+                if isinstance(entry_time, str):
+                    entry_time = datetime.fromisoformat(entry_time)
+
+                exit_time = t.get("exit_timestamp")
+                if exit_time:
+                    if isinstance(exit_time, str):
+                        exit_time = datetime.fromisoformat(exit_time)
+                else:
+                    exit_time = entry_time
+            except (ValueError, KeyError, TypeError):
                 continue
 
             # Compute pnl_percent
@@ -769,7 +775,9 @@ Generated: {metrics["calculated_at"]}
 
         for point in history:
             try:
-                ts = datetime.fromisoformat(point["timestamp"])
+                ts = point["timestamp"]
+                if isinstance(ts, str):
+                    ts = datetime.fromisoformat(ts)
                 val = point["total_value"]
 
                 # Check if this timestamp already exists in the curve (approx)
