@@ -124,10 +124,11 @@ make install-dev
 
 ### Core Components
 
-1. **Main Bot (`src/bot.py`)** - The `AkibaCryptoBot` class orchestrates the entire trading system:
+1. **Main Bot (`src/bot.py`)** - The `AkibaCryptoBot` class orchestrates the trading system:
    - Manages the main trading cycle (runs every 60 seconds)
-   - Coordinates exchange interactions, strategy execution, and risk management
-   - Handles signal handlers for graceful shutdown (SIGINT/SIGTERM)
+   - Handles lifecycle (start/stop/cleanup), market data updates, circuit breakers
+   - Delegates position management to `PositionManager` (`src/trading/position_manager.py`)
+   - Delegates opportunity scanning and trade placement to `OpportunityScanner` (`src/trading/opportunity_scanner.py`)
    - Integrates with Telegram for notifications and remote commands
 
 2. **Startup Script (`start_bot.py`)** - Entry point with CLI argument parsing:
@@ -187,9 +188,9 @@ make install-dev
 
 The bot's main loop (`trading_cycle()` in bot.py) executes every 60 seconds:
 
-1. **Update Market Data** - Fetch latest prices for all configured pairs
-2. **Manage Positions** - Check existing trades for stop-loss/take-profit/exit conditions
-3. **Scan Opportunities** - For each pair:
+1. **Update Market Data** (`bot.py`) - Fetch latest prices for all configured pairs
+2. **Manage Positions** (`PositionManager`) - Check existing trades for stop-loss/take-profit/exit conditions
+3. **Scan Opportunities** (`OpportunityScanner`) - For each pair:
    - Skip if already in position or max trades reached
    - Fetch OHLCV data (200 candles for indicator calculation)
    - Call `strategy_manager.generate_signal()`

@@ -2,6 +2,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 from bot import AkibaCryptoBot
+from trading.position_manager import PositionManager
+from trading.opportunity_scanner import OpportunityScanner
 
 
 @pytest.fixture
@@ -56,6 +58,9 @@ def bot(mock_config):
         bot.circuit_breaker_reason = ""
         bot._cached_balance = None
         bot.pair_cooldowns = {}
+        bot.performance_tracker = MagicMock()
+        bot.position_manager = PositionManager(bot)
+        bot.opportunity_scanner = OpportunityScanner(bot)
         return bot
 
 

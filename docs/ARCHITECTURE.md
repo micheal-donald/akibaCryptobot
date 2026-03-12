@@ -13,11 +13,11 @@ flowchart TB
         WS["WebSocket Streams"]
     end
 
-    subgraph Core["Trading Engine (bot.py)"]
-        CYCLE["Trading Cycle Loop"]
-        MARKET["Market Data Update"]
-        SCAN["Signal Scanner"]
-        POS["Position Manager"]
+    subgraph Core["Trading Engine"]
+        CYCLE["Trading Cycle Loop (bot.py)"]
+        MARKET["Market Data Update (bot.py)"]
+        SCAN["OpportunityScanner"]
+        POS["PositionManager"]
         ORDER["Order Executor"]
     end
 
@@ -82,7 +82,9 @@ flowchart TB
 
 | Component | Directory / File | Purpose |
 |---|---|---|
-| **Trading Engine** | `src/bot.py` | Main `AkibaCryptoBot` class — orchestrates the trading cycle |
+| **Trading Engine** | `src/bot.py` | Main `AkibaCryptoBot` class — lifecycle, market data, circuit breakers |
+| **Position Manager** | `src/trading/position_manager.py` | Manages open positions: trailing stops, exit signals, closing trades |
+| **Opportunity Scanner** | `src/trading/opportunity_scanner.py` | Scans for new trades: signal validation, spread checks, order placement |
 | **Exchange Connector** | `src/exchange/binance_client.py` | Binance REST client via ccxt (spot + futures) |
 | **WebSocket Manager** | `src/exchange/websocket_manager.py` | Real-time data streaming with auto-reconnect |
 | **Strategy Framework** | `src/strategies/base_strategy.py` | `BaseStrategy` ABC + `StrategyManager` |
@@ -122,13 +124,13 @@ Each iteration of the trading loop in `AkibaCryptoBot.trading_cycle()` performs 
    └─ Record current portfolio value for drawdown tracking
    └─ Check circuit breakers (volatility spike, max drawdown)
 
-3. MANAGE EXISTING POSITIONS
+3. MANAGE EXISTING POSITIONS  (PositionManager)
    └─ For each open trade:
        ├─ Update trailing stop loss
        ├─ Check stop-loss / take-profit triggers
        └─ Close position if exit condition met
 
-4. SCAN FOR OPPORTUNITIES
+4. SCAN FOR OPPORTUNITIES  (OpportunityScanner)
    └─ For each configured pair (up to max_open_trades):
        ├─ Fetch market snapshot (OHLCV + price)
        ├─ Generate signal via active strategy
@@ -152,7 +154,10 @@ akibaCryptobot/
 │   ├── config.json            # Main configuration
 │   └── freqai_config.json     # ML model configuration
 ├── src/
-│   ├── bot.py                 # Trading engine
+│   ├── bot.py                 # Trading engine orchestrator
+│   ├── trading/
+│   │   ├── position_manager.py   # Open position management
+│   │   └── opportunity_scanner.py # New trade scanning + execution
 │   ├── risk_management.py     # Core risk controls
 │   ├── advanced_risk_management.py  # ATR/Kelly/correlation
 │   ├── config_validator.py    # Config validation
