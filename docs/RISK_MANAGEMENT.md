@@ -38,10 +38,15 @@ flowchart TB
         DD["Portfolio Drawdown"]
     end
 
+    subgraph Monitoring["Audit Layer"]
+        REC["Reconciliation (DB sync)"]
+    end
+
     PS --> Sizing
     VALIDATE --> Checks
     EXEC --> Exit
     Exit --> Circuit
+    Circuit --> Monitoring
 ```
 
 ---
@@ -188,6 +193,28 @@ If (peak_portfolio_value - current_value) / peak_portfolio_value > drawdown_thre
 4. Existing positions are **not** automatically closed (they still have stop losses)
 5. The Telegram bot and API report the circuit breaker state
 6. Manual intervention is needed to resume (or wait for conditions to normalize)
+
+---
+
+## Reconciliation Layer (Auditing)
+
+The `ReconciliationManager` acts as a final safety audit between the bot's internal database and the actual exchange state.
+
+### Why it exists
+In highly concurrent environments, it is possible for the local database to drift from reality (e.g., a process crashes before writing to disk, or an exchange order is partially filled but missed by a webhook).
+
+### How it works
+1. **Periodic Audit**: Every ~1 hour (configurable), the bot fetches the complete wallet state from Binance.
+2. **Comparison**: It compares each asset balance against the `active_trades` stored in SQLite.
+3. **Discrepancy Detection**:
+   - **Orphans**: Assets found on exchange with no active trade record in DB (often "dust" or manually placed trades).
+   - **Lost Trades**: Active trade record exists in DB but no corresponding balance exists on exchange.
+   - **Mismatches**: The amount in the DB deviates by >1% from the actual exchange balance.
+4. **Action**: Discrepancies are logged as WARNINGS and sent to Telegram.
+
+Manual reconciliation can be triggered via:
+- **Telegram:** `/reconcile`
+- **API:** `GET /api/reconcile`
 
 ---
 

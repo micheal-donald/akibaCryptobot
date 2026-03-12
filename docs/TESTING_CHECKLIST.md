@@ -520,18 +520,78 @@ Document any issues discovered during testing:
 
 ---
 
-## Sign-Off
+---
 
-- [ ] All critical tests passed
-- [ ] Known issues documented
-- [ ] Ready for production deployment (or specify remaining work)
+## 12. Asynchronous Concurrency Tests
 
-**Tested By:** _________________
-**Date:** _________________
-**Version:** _________________
+### Test 12.1: Concurrent Order Placement
+```bash
+# Verify that multiple positions can be handled without blocking
+python3 -m pytest tests/test_binance_connector.py -v
+```
+**Expected:**
+- [ ] Uses `AsyncMock` for all exchange calls
+- [ ] No `await` on non-coroutines
+- [ ] Orders are processed asynchronously
 
-**Notes:**
+### Test 12.2: WebSocket-REST Consistency
+```bash
+# Monitor logs for price updates from WS and REST
+tail -f logs/akiba_crypto_bot.log | grep -E "WebSocket|Updated"
+```
+**Expected:**
+- [ ] Prices update in real-time via WebSocket
+- [ ] Fallback to REST OHLCV works if WS disconnects
 
 ---
 
-**Last Updated:** 2025-10-02
+## 13. Database Schema & Migration Tests
+
+### Test 13.1: Legacy Timestamp Parsing
+```bash
+# Manually inject an ISO string timestamp into the DB
+sqlite3 data/trades.db "INSERT INTO trades (symbol, timestamp, status) VALUES ('BTC/USDT', '2024-01-01T12:00:00', 'open')"
+
+# Start bot
+python3 start_bot.py --testnet
+```
+**Expected:**
+- [ ] Bot starts without `'str' object cannot be interpreted as an integer` error
+- [ ] `_parse_timestamp` correctly converts the ISO string to a datetime object
+- [ ] Trade appears in `/trades` or `/api/trades`
+
+### Test 13.2: Integer Timestamp Integrity
+**Expected:**
+- [ ] New trades are stored as **integers** (Unix Epoch)
+- [ ] `sqlite3 data/trades.db "SELECT typeof(timestamp) FROM trades LIMIT 1"` returns `integer`
+
+---
+
+## 14. Reconciliation System Tests
+
+### Test 14.1: Orphaned Asset Detection
+1. Manually buy a small amount of a coin on Binance (outside the bot).
+2. Trigger reconciliation: `/reconcile` on Telegram.
+
+**Expected:**
+- [ ] Bot detects the asset
+- [ ] Telegram message: `🧐 ORPHAN ASSET: Found ... on exchange with no active DB record.`
+
+### Test 14.2: Lost Trade detection
+1. Create a manual "open trade" entry in `trades.db` for a symbol you don't own.
+2. Trigger reconciliation.
+
+**Expected:**
+- [ ] Bot detects the missing asset
+- [ ] Telegram message: `⚠️ LOST TRADE: ... (Expected X, Got 0.0)`
+
+---
+
+## Sign-Off (Updated)
+
+- [ ] All critical tests passed
+- [ ] Async refactor verified stable
+- [ ] DB backward compatibility verified
+- [ ] Ready for production deployment
+
+**Last Updated:** 2026-03-12

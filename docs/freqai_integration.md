@@ -113,6 +113,14 @@ strategy.save_model("models/my_model.joblib")
 strategy.load_model("models/my_model.joblib")
 ```
 
+## Model Lifecycle & Robust Loading
+
+The bot implements a **fail-safe** mechanism for FreqAI models:
+
+1. **Self-Healing Directory**: If the `models/` folder is missing, the bot creates it automatically at startup.
+2. **Missing Model Handling**: If a strategy is set to `freqai` but no `.joblib` model exists for a pair, the bot logs a WARNING and continues operating (falling back to other ensemble components) rather than crashing.
+3. **Staleness Tracking**: Models are verified by their internal `trained_at` timestamp. If they exceed `model_expiry_hours`, the bot will flag them in the API/Telegram `/status`.
+
 ## Testing
 
 Run FreqAI strategy tests with:
