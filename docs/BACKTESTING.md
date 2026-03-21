@@ -152,6 +152,46 @@ All `BacktestResult` metrics are computed for both in-sample and out-of-sample p
 
 ---
 
+## Hyperopt
+
+AkibaCryptoBot now includes a Freqtrade-inspired hyperopt workflow powered by `optuna`, but executed against the native `BacktestEngine` rather than Freqtrade itself.
+
+### Install
+
+```bash
+pip install -r requirements-hyperopt.txt
+```
+
+### Run
+
+```bash
+python scripts/run_hyperopt.py \
+  --strategy momentum \
+  --epochs 100 \
+  --spaces buy roi stoploss \
+  --loss ProfitDrawDownHyperOptLoss \
+  --data-dir data/ohlcv
+```
+
+### Supported spaces
+
+- `buy`
+- `sell`
+- `roi`
+- `stoploss`
+- `trailing`
+- `trades`
+- `default`
+- `all`
+
+### Outputs
+
+Each run writes:
+- a trial summary JSON under `results/hyperopt/`
+- a merged best-config JSON under `results/hyperopt/`
+
+The merged config applies the best parameter set to the current runtime config so you can promote it into your checked-in config after review.
+
 ## Interpreting Results
 
 ### Sharpe Ratio

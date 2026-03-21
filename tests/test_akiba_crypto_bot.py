@@ -1,49 +1,51 @@
-import pytest
-import pandas as pd
-import numpy as np
-from unittest.mock import Mock, patch
-import sys
 import os
+import sys
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-# Add src to path for imports
+import numpy as np
+import pandas as pd
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from bot import AkibaCryptoBot
+from strategies.base_strategy import SignalType, TradingSignal
+from trading.opportunity_scanner import OpportunityScanner
+from trading.position_manager import PositionManager
 
 
 @pytest.fixture
 def sample_config():
-    """Create sample configuration for testing"""
     return {
-        "exchange": {
-            "name": "binance",
-            "api_key": "test_key",
-            "api_secret": "test_secret",
-            "testnet": True,
+        "exchange": {"name": "binance", "sandbox": True},
+        "trading": {
+            "pairs": ["BTC/USDT", "ETH/USDT"],
+            "timeframes": {"primary": "1h", "secondary": "15m"},
+            "strategy": "momentum",
+            "max_open_trades": 3,
         },
-        "symbols": ["BTC/USDT", "ETH/USDT"],
-        "timeframe": "1h",
         "risk_management": {
             "max_position_size": 0.05,
             "max_daily_loss": 0.02,
             "stop_loss_percent": 0.02,
             "take_profit_percent": 0.04,
+            "max_spread_percent": 0.5,
+            "cooldown_candles": 5,
+            "trailing_stop": True,
+            "trailing_stop_positive": 0.01,
         },
-        "strategy": {
-            "name": "momentum",
-            "min_signal_strength": 0.6,
-            "rsi_oversold": 30,
-            "rsi_overbought": 70,
-            "adx_threshold": 25,
-        },
+        "strategy_config": {"min_signal_strength": 0.45},
+        "persistence": {"db_path": "data/trades.db"},
+        "notifications": {"telegram_enabled": False},
+        "logging": {"level": "DEBUG"},
     }
 
 
 @pytest.fixture
 def sample_ohlcv_data():
-    """Create sample OHLCV data for testing"""
-    dates = pd.date_range("2023-01-01", periods=100, freq="1H")
-    data = pd.DataFrame(
+    dates = pd.date_range("2023-01-01", periods=100, freq="1h")
+    return pd.DataFrame(
         {
             "open": np.random.uniform(40000, 50000, 100),
             "high": np.random.uniform(41000, 51000, 100),
@@ -53,235 +55,201 @@ def sample_ohlcv_data():
         },
         index=dates,
     )
-    return data
+
+
+@pytest.fixture
+def bot_fixture(sample_config):
+    bot = AkibaCryptoBot.__new__(AkibaCryptoBot)
+    bot.config = sample_config
+    bot.logger = MagicMock()
+    bot.exchange = AsyncMock()
+    bot.data_exchange = AsyncMock()
+    bot.trade_store = AsyncMock()
+    bot.risk_manager = MagicMock()
+    bot.risk_manager.trailing_stop = True
+    bot.risk_manager.positions = {}
+    bot.advanced_risk = MagicMock()
+    bot.advanced_risk.check_correlation_diversification.return_value = True
+    bot.strategy_manager = MagicMock()
+    bot.telegram = None
+    bot.active_trades = {}
+    bot.is_running = False
+    bot.start_time = datetime.now()
+    bot.session_id = None
+    bot.last_update = datetime.now()
+    bot._background_tasks = set()
+    bot.portfolio_value_history = []
+    bot.price_data_cache = {}
+    bot.circuit_breaker_active = False
+    bot.circuit_breaker_reason = ""
+    bot._cached_balance = None
+    bot.pair_cooldowns = {}
+    bot.performance_tracker = MagicMock()
+    bot.performance_tracker.record_trade_exit = AsyncMock()
+    bot.position_manager = PositionManager(bot)
+    bot.opportunity_scanner = OpportunityScanner(bot)
+    return bot
 
 
 class TestAkibaCryptoBot:
-    """Test cases for AkibaCryptoBot class"""
-
-    @patch("akiba_crypto_bot.BinanceConnector")
-    @patch("akiba_crypto_bot.MomentumStrategy")
-    @patch("akiba_crypto_bot.RiskManager")
-    @patch("akiba_crypto_bot.PortfolioManager")
+    @patch("bot.OpportunityScanner")
+    @patch("bot.PositionManager")
+    @patch("bot.ReconciliationManager")
+    @patch("bot.TradeStore")
+    @patch("bot.StrategyManager")
+    @patch("bot.AdvancedRiskManager")
+    @patch("bot.RiskManager")
+    @patch("bot.BinanceClient")
+    @patch("bot.setup_logging")
     def test_bot_initialization(
         self,
-        mock_portfolio_manager,
+        mock_setup_logging,
+        mock_binance_client,
         mock_risk_manager,
-        mock_strategy,
-        mock_connector,
+        mock_advanced_risk,
+        mock_strategy_manager,
+        mock_trade_store,
+        mock_reconciliation,
+        mock_position_manager,
+        mock_opportunity_scanner,
         sample_config,
     ):
-        """Test AkibaCryptoBot initialization"""
-        # Create mock instances
-        mock_connector_instance = Mock()
-        mock_strategy_instance = Mock()
-        mock_risk_manager_instance = Mock()
-        mock_portfolio_manager_instance = Mock()
+        mock_logger = Mock()
+        mock_setup_logging.return_value = mock_logger
+        mock_binance_client.return_value = Mock()
 
-        mock_connector.return_value = mock_connector_instance
-        mock_strategy.return_value = mock_strategy_instance
-        mock_risk_manager.return_value = mock_risk_manager_instance
-        mock_portfolio_manager.return_value = mock_portfolio_manager_instance
+        with patch.object(
+            AkibaCryptoBot, "load_config", return_value=sample_config
+        ), patch.object(AkibaCryptoBot, "_load_strategies"):
+            bot = AkibaCryptoBot("config/config.json")
 
-        # Create bot instance
-        bot = AkibaCryptoBot(sample_config)
-
-        # Check that components were initialized
         assert bot.config == sample_config
-        assert bot.symbols == ["BTC/USDT", "ETH/USDT"]
-        assert bot.timeframe == "1h"
-        assert bot.connector == mock_connector_instance
-        assert bot.strategy == mock_strategy_instance
-        assert bot.risk_manager == mock_risk_manager_instance
-        assert bot.portfolio_manager == mock_portfolio_manager_instance
+        assert bot.logger is mock_logger
+        assert mock_binance_client.call_count == 2
+        mock_risk_manager.assert_called_once_with(sample_config["risk_management"])
+        mock_advanced_risk.assert_called_once_with(sample_config)
+        mock_strategy_manager.assert_called_once_with(sample_config)
+        mock_trade_store.assert_called_once_with("data/trades.db")
+        mock_reconciliation.assert_called_once_with(bot)
+        mock_position_manager.assert_called_once_with(bot)
+        mock_opportunity_scanner.assert_called_once_with(bot)
 
     @pytest.mark.asyncio
-    @patch("akiba_crypto_bot.BinanceConnector")
-    @patch("akiba_crypto_bot.MomentumStrategy")
-    async def test_fetch_market_data(
-        self, mock_strategy, mock_connector, sample_config, sample_ohlcv_data
+    async def test_update_market_data_caches_ohlcv(
+        self, bot_fixture, sample_ohlcv_data
     ):
-        """Test fetching market data"""
-        # Create mock instances
-        mock_connector_instance = Mock()
-        mock_strategy_instance = Mock()
-
-        mock_connector.return_value = mock_connector_instance
-        mock_strategy.return_value = mock_strategy_instance
-
-        # Mock the fetch_ohlcv method
-        mock_connector_instance.fetch_ohlcv.return_value = sample_ohlcv_data
-
-        # Create bot instance
-        bot = AkibaCryptoBot(sample_config)
-
-        # Test fetching market data
-        ohlcv_data = await bot.fetch_market_data("BTC/USDT")
-
-        # Check that fetch_ohlcv was called with correct parameters
-        mock_connector_instance.fetch_ohlcv.assert_called_once_with(
-            "BTC/USDT", "1h", 200
-        )
-
-        # Check that returned data matches expected data
-        assert isinstance(ohlcv_data, pd.DataFrame)
-        assert len(ohlcv_data) == len(sample_ohlcv_data)
-
-    @pytest.mark.asyncio
-    @patch("akiba_crypto_bot.BinanceConnector")
-    @patch("akiba_crypto_bot.MomentumStrategy")
-    @patch("akiba_crypto_bot.RiskManager")
-    async def test_execute_trade_no_signal(
-        self, mock_risk_manager, mock_strategy, mock_connector, sample_config
-    ):
-        """Test executing trade with no signal"""
-        # Create mock instances
-        mock_connector_instance = Mock()
-        mock_strategy_instance = Mock()
-        mock_risk_manager_instance = Mock()
-
-        mock_connector.return_value = mock_connector_instance
-        mock_strategy.return_value = mock_strategy_instance
-        mock_risk_manager.return_value = mock_risk_manager_instance
-
-        # Mock the strategy to return None (no signal)
-        mock_strategy_instance.generate_signal.return_value = None
-
-        # Create bot instance
-        bot = AkibaCryptoBot(sample_config)
-
-        # Test executing trade
-        result = await bot.execute_trade("BTC/USDT")
-
-        # Check that no trade was executed
-        assert result is None
-        mock_strategy_instance.generate_signal.assert_called_once()
-        mock_connector_instance.create_market_order.assert_not_called()
-
-    @pytest.mark.asyncio
-    @patch("akiba_crypto_bot.BinanceConnector")
-    @patch("akiba_crypto_bot.MomentumStrategy")
-    @patch("akiba_crypto_bot.RiskManager")
-    @patch("akiba_crypto_bot.PortfolioManager")
-    async def test_execute_trade_with_signal(
-        self,
-        mock_portfolio_manager,
-        mock_risk_manager,
-        mock_strategy,
-        mock_connector,
-        sample_config,
-        sample_ohlcv_data,
-    ):
-        """Test executing trade with valid signal"""
-        # Create mock instances
-        mock_connector_instance = Mock()
-        mock_strategy_instance = Mock()
-        mock_risk_manager_instance = Mock()
-        mock_portfolio_manager_instance = Mock()
-
-        mock_connector.return_value = mock_connector_instance
-        mock_strategy.return_value = mock_strategy_instance
-        mock_risk_manager.return_value = mock_risk_manager_instance
-        mock_portfolio_manager.return_value = mock_portfolio_manager_instance
-
-        # Mock the strategy to return a buy signal
-        mock_signal = Mock()
-        mock_signal.signal_type.name = "BUY"
-        mock_signal.price = 45000
-        mock_strategy_instance.generate_signal.return_value = mock_signal
-
-        # Mock risk manager to return valid position size
-        mock_risk_manager_instance.calculate_position_size.return_value = 0.1
-
-        # Mock connector to return successful order
-        mock_order_response = {
-            "id": "123456",
-            "symbol": "BTC/USDT",
-            "type": "market",
-            "side": "buy",
-            "amount": 0.1,
-            "price": 45000,
-            "cost": 4500,
-            "filled": 0.1,
-            "remaining": 0.0,
-            "status": "closed",
-        }
-        mock_connector_instance.create_market_order.return_value = mock_order_response
-
-        # Create bot instance
-        bot = AkibaCryptoBot(sample_config)
-
-        # Test executing trade
-        result = await bot.execute_trade("BTC/USDT")
-
-        # Check that trade was executed
-        assert result == mock_order_response
-        mock_strategy_instance.generate_signal.assert_called_once()
-        mock_risk_manager_instance.calculate_position_size.assert_called_once()
-        mock_connector_instance.create_market_order.assert_called_once_with(
-            "BTC/USDT", "buy", 0.1
-        )
-
-    @pytest.mark.asyncio
-    @patch("akiba_crypto_bot.BinanceConnector")
-    @patch("akiba_crypto_bot.MomentumStrategy")
-    @patch("akiba_crypto_bot.RiskManager")
-    async def test_manage_positions(
-        self, mock_risk_manager, mock_strategy, mock_connector, sample_config
-    ):
-        """Test managing positions"""
-        # Create mock instances
-        mock_connector_instance = Mock()
-        mock_strategy_instance = Mock()
-        mock_risk_manager_instance = Mock()
-
-        mock_connector.return_value = mock_connector_instance
-        mock_strategy.return_value = mock_strategy_instance
-        mock_risk_manager.return_value = mock_risk_manager_instance
-
-        # Mock current positions
-        mock_positions = [
-            {
-                "symbol": "BTC/USDT",
-                "side": "long",
-                "amount": 0.1,
-                "entryPrice": 45000,
-                "markPrice": 44000,  # Price moved against us
-            }
+        bot_fixture.data_exchange.get_ticker.side_effect = [
+            {"last": 45000.0},
+            {"last": 3200.0},
         ]
-        mock_connector_instance.fetch_positions.return_value = mock_positions
+        bot_fixture.data_exchange.get_ohlcv.side_effect = [
+            sample_ohlcv_data,
+            sample_ohlcv_data.tail(80),
+        ]
 
-        # Mock strategy to return exit signal
-        mock_exit_signal = Mock()
-        mock_exit_signal.signal_type.name = "CLOSE_LONG"
-        mock_strategy_instance.should_exit_position.return_value = mock_exit_signal
+        await bot_fixture.update_market_data()
 
-        # Mock connector to return successful order
-        mock_order_response = {
-            "id": "123457",
-            "symbol": "BTC/USDT",
-            "type": "market",
-            "side": "sell",
-            "amount": 0.1,
-            "price": 44000,
-            "cost": 4400,
-            "filled": 0.1,
-            "remaining": 0.0,
-            "status": "closed",
+        assert set(bot_fixture.price_data_cache) == {"BTC/USDT", "ETH/USDT"}
+        assert bot_fixture.data_exchange.get_ticker.await_count == 2
+        assert bot_fixture.data_exchange.get_ohlcv.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_process_pair_no_signal_skips_trade(
+        self, bot_fixture, sample_ohlcv_data
+    ):
+        bot_fixture.data_exchange.get_ohlcv.return_value = sample_ohlcv_data
+        bot_fixture.data_exchange.get_ticker.return_value = {"last": 45000.0}
+        bot_fixture.data_exchange.get_market_depth.return_value = {
+            "bids": [[45000.0, 1]],
+            "asks": [[45010.0, 1]],
         }
-        mock_connector_instance.create_market_order.return_value = mock_order_response
+        bot_fixture.strategy_manager.generate_signal = AsyncMock(return_value=None)
 
-        # Create bot instance
-        bot = AkibaCryptoBot(sample_config)
+        await bot_fixture._process_pair("BTC/USDT")
 
-        # Test managing positions
-        result = await bot.manage_positions()
+        bot_fixture.exchange.place_market_order.assert_not_awaited()
+        bot_fixture.trade_store.insert_trade.assert_not_awaited()
 
-        # Check that position was closed
-        assert len(result) == 1
-        assert result[0] == mock_order_response
-        mock_connector_instance.fetch_positions.assert_called_once()
-        mock_strategy_instance.should_exit_position.assert_called_once()
-        mock_connector_instance.create_market_order.assert_called_once_with(
-            "BTC/USDT", "sell", 0.1
+    @pytest.mark.asyncio
+    async def test_process_pair_places_trade(self, bot_fixture, sample_ohlcv_data):
+        signal = TradingSignal(
+            signal_type=SignalType.BUY,
+            strength=0.8,
+            price=45000.0,
+            timestamp=datetime.now(),
+            stop_loss=44100.0,
+            take_profit=46800.0,
         )
+        bot_fixture.data_exchange.get_ohlcv.return_value = sample_ohlcv_data
+        bot_fixture.data_exchange.get_ticker.return_value = {"last": 45000.0}
+        bot_fixture.data_exchange.get_market_depth.return_value = {
+            "bids": [[45000.0, 1]],
+            "asks": [[45005.0, 1]],
+        }
+        bot_fixture.exchange.get_balance.return_value = {
+            "USDT": {"free": 1000, "used": 0}
+        }
+        bot_fixture.strategy_manager.generate_signal = AsyncMock(return_value=signal)
+        bot_fixture.risk_manager.can_open_position.return_value = True
+        bot_fixture.risk_manager.calculate_position_size_with_signal.return_value = 0.02
+        bot_fixture.risk_manager.calculate_stop_loss.return_value = 44100.0
+        bot_fixture.risk_manager.calculate_take_profit.return_value = 46800.0
+        bot_fixture.exchange.place_market_order.return_value = {
+            "id": "order_123",
+            "status": "filled",
+            "fee": {"cost": 0.25, "currency": "USDT"},
+        }
+        bot_fixture.trade_store.insert_trade.return_value = 77
+
+        await bot_fixture._process_pair("BTC/USDT")
+
+        bot_fixture.exchange.place_market_order.assert_awaited_once_with(
+            "BTC/USDT", "buy", 0.02, price=45000.0
+        )
+        assert bot_fixture.active_trades["BTC/USDT"]["db_id"] == 77
+        assert bot_fixture.active_trades["BTC/USDT"]["entry_fee"] == pytest.approx(0.25)
+
+    @pytest.mark.asyncio
+    async def test_manage_positions_closes_trade_on_exit_signal(
+        self, bot_fixture, sample_ohlcv_data
+    ):
+        bot_fixture.active_trades = {
+            "BTC/USDT": {
+                "symbol": "BTC/USDT",
+                "side": "buy",
+                "amount": 0.1,
+                "entry_price": 45000.0,
+                "stop_loss": 44100.0,
+                "take_profit": 46800.0,
+                "entry_fee": 0.1,
+                "order_id": "entry_1",
+            }
+        }
+        bot_fixture.exchange.get_open_orders.return_value = []
+        bot_fixture.data_exchange.get_ticker.return_value = {"last": 46000.0}
+        bot_fixture.data_exchange.get_ohlcv.return_value = sample_ohlcv_data
+        strategy = MagicMock()
+        strategy.should_exit_position = AsyncMock(
+            return_value=TradingSignal(
+                signal_type=SignalType.CLOSE_LONG,
+                strength=1.0,
+                price=46000.0,
+                timestamp=datetime.now(),
+                metadata={"exit_reason": "strategy_exit"},
+            )
+        )
+        bot_fixture.strategy_manager.get_active_strategy.return_value = strategy
+        bot_fixture.exchange.place_market_order.return_value = {
+            "id": "exit_1",
+            "status": "filled",
+            "fee": {"cost": 0.2, "currency": "USDT"},
+        }
+        bot_fixture.risk_manager.remove_position.return_value = {"pnl": 100.0}
+
+        await bot_fixture.manage_positions()
+
+        bot_fixture.exchange.place_market_order.assert_awaited_once_with(
+            "BTC/USDT", "sell", 0.1, price=46000.0
+        )
+        bot_fixture.trade_store.update_trade_exit.assert_awaited_once()
+        assert "BTC/USDT" not in bot_fixture.active_trades

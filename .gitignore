@@ -202,3 +202,6 @@ docker-compose.override.yml
 !/logs/.gitkeep
 *.pkl
 *.pickle
+
+# Generated analysis outputs
+results/

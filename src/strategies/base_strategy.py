@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Optional
+import copy
+from typing import TYPE_CHECKING, Dict, List, Optional
 import pandas as pd
 import logging
 from datetime import datetime
 from enum import Enum
+
+if TYPE_CHECKING:
+    from optimization.parameters import HyperParameter
 
 logger = logging.getLogger(f"akiba_crypto_bot.{__name__}")
 
@@ -64,6 +68,27 @@ class BaseStrategy(ABC):
         }
 
         logger.info(f"Initialized strategy: {self.name}")
+
+    @classmethod
+    def hyperopt_parameters(cls) -> List["HyperParameter"]:
+        """Return the strategy-owned hyperopt parameter definitions."""
+        return []
+
+    @classmethod
+    def apply_hyperopt_parameters_to_config(
+        cls, full_config: Dict, params: Dict
+    ) -> Dict:
+        """Merge hyperopt params into a full runtime config."""
+        updated = copy.deepcopy(full_config)
+        strategy_config = copy.deepcopy(updated.get("strategy_config", {}))
+        strategy_config.update(params)
+        updated["strategy_config"] = strategy_config
+        return updated
+
+    @classmethod
+    def get_strategy_init_config(cls, full_config: Dict) -> Dict:
+        """Extract the config block expected by the strategy constructor."""
+        return copy.deepcopy(full_config.get("strategy_config", {}))
 
     @abstractmethod
     async def generate_signal(

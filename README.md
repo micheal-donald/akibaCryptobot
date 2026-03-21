@@ -103,6 +103,21 @@ For detailed steps, see [**Deployment Guide**](docs/DEPLOYMENT.md).
 
 ---
 
+## Hyperopt
+
+Hyperparameter optimization is available through a Freqtrade-inspired Optuna workflow built on top of the project's own backtesting engine.
+
+```bash
+pip install -r requirements-hyperopt.txt
+python scripts/run_hyperopt.py --strategy momentum --epochs 100 --spaces buy roi stoploss
+```
+
+By default the hyperopt runner will:
+- load OHLCV files from `--data-dir` when you provide them,
+- fall back to synthetic candles when no files are available,
+- save a JSON summary to `results/hyperopt/`, and
+- export a merged best-config JSON you can review or reuse.
+
 ## 🧪 Testing
 
 ```bash

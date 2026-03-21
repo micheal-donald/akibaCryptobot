@@ -83,14 +83,13 @@ class BacktestEngine:
         """
         logger.info(f"Starting backtest for {strategy.name} on {len(symbols)} symbols")
 
-        # Initialize tracking variables
         balance = self.initial_balance
         equity_curve = [balance]
-        timestamps = []
-        all_trades = []
-        open_positions = {}  # symbol -> BacktestTrade
+        timestamps: List[datetime] = []
+        all_trades: List[BacktestTrade] = []
+        open_positions: Dict[str, BacktestTrade] = {}
+        latest_prices: Dict[str, float] = {}
 
-        # Combine data from all symbols and sort by timestamp
         combined_data = self._combine_and_sort_data(data, symbols)
 
         if combined_data.empty:
@@ -99,23 +98,16 @@ class BacktestEngine:
 
         logger.info(f"Backtesting on {len(combined_data)} time periods")
 
-        # Process each time period
-        for idx, row in combined_data.iterrows():
+        for _, row in combined_data.iterrows():
             timestamp = row.name
             symbol = row["symbol"]
+            current_price = row["close"]
+            latest_prices[symbol] = current_price
             ohlcv_data = data[symbol]
-
-            # Get data up to current timestamp for this symbol
             current_data = ohlcv_data[ohlcv_data.index <= timestamp]
 
-            if len(current_data) < 50:  # Need minimum data
-                continue
-
-            current_price = row["close"]
-
-            # Check if we should exit any open positions
-            if symbol in open_positions:
-                await self._check_exit_conditions(
+            if len(current_data) >= 50 and symbol in open_positions:
+                closed_trade = await self._check_exit_conditions(
                     strategy,
                     open_positions,
                     symbol,
@@ -123,51 +115,60 @@ class BacktestEngine:
                     current_data,
                     timestamp,
                 )
+                if closed_trade and closed_trade.pnl is not None:
+                    balance += closed_trade.pnl
 
-            # Check if we have too many open positions
-            if len(open_positions) >= self.config.get("max_open_trades", 3):
-                continue
+            if len(current_data) >= 50 and len(open_positions) < self.config.get(
+                "max_open_trades", 3
+            ):
+                try:
+                    signal = await strategy.generate_signal(
+                        symbol, current_data, current_price
+                    )
 
-            # Generate trading signal
-            try:
-                signal = await strategy.generate_signal(
-                    symbol, current_data, current_price
-                )
-
-                if signal and symbol not in open_positions:
-                    # Validate signal strength
-                    if signal.strength >= strategy.min_signal_strength:
-                        # Calculate position size
-                        position_size = (
-                            self.risk_manager.calculate_position_size_with_signal(
-                                balance,
-                                signal.strength,
-                                current_price,
-                                signal.stop_loss or (current_price * 0.98),
+                    if signal and symbol not in open_positions:
+                        if signal.strength >= strategy.min_signal_strength:
+                            position_size = (
+                                self.risk_manager.calculate_position_size_with_signal(
+                                    balance,
+                                    signal.strength,
+                                    current_price,
+                                    signal.stop_loss or (current_price * 0.98),
+                                )
                             )
-                        )
 
-                        if position_size > 0:
-                            # Execute trade
-                            trade = await self._execute_entry(
-                                symbol, signal, position_size, current_price, timestamp
-                            )
-                            open_positions[symbol] = trade
-                            all_trades.append(trade)
+                            if position_size > 0:
+                                trade = await self._execute_entry(
+                                    symbol,
+                                    signal,
+                                    position_size,
+                                    current_price,
+                                    timestamp,
+                                )
+                                open_positions[symbol] = trade
+                                all_trades.append(trade)
 
-            except Exception as e:
-                logger.error(f"Error generating signal for {symbol}: {e}")
-                continue
+                except Exception as e:
+                    logger.error(f"Error generating signal for {symbol}: {e}")
 
-        # Close all open positions at the end
+            equity_curve.append(
+                self._calculate_current_equity(balance, open_positions, latest_prices)
+            )
+            timestamps.append(timestamp)
+
         for symbol, trade in list(open_positions.items()):
             final_price = data[symbol].iloc[-1]["close"]
+            latest_timestamp = data[symbol].index[-1]
+            latest_prices[symbol] = final_price
             await self._execute_exit(
-                trade, final_price, "end_of_backtest", data[symbol].index[-1]
+                trade, final_price, "end_of_backtest", latest_timestamp
             )
+            if trade.pnl is not None:
+                balance += trade.pnl
             del open_positions[symbol]
+            equity_curve.append(balance)
+            timestamps.append(latest_timestamp)
 
-        # Calculate performance metrics
         result = self._calculate_performance_metrics(
             all_trades, equity_curve, timestamps
         )
@@ -190,27 +191,22 @@ class BacktestEngine:
         if not combined_rows:
             return pd.DataFrame()
 
-        # Concatenate all data
         combined_df = pd.concat(combined_rows)
-
-        # Sort by timestamp
         combined_df.sort_index(inplace=True)
-
         return combined_df
 
     async def _check_exit_conditions(
         self,
         strategy: BaseStrategy,
-        open_positions: Dict,
+        open_positions: Dict[str, BacktestTrade],
         symbol: str,
         current_price: float,
         current_data: pd.DataFrame,
         timestamp: datetime,
-    ):
-        """Check if we should exit an open position"""
+    ) -> Optional[BacktestTrade]:
+        """Check if we should exit an open position."""
         position = open_positions[symbol]
 
-        # Check basic stop loss / take profit
         exit_signal = await strategy.should_exit_position(
             symbol,
             {
@@ -230,13 +226,15 @@ class BacktestEngine:
                 timestamp,
             )
             del open_positions[symbol]
-            return
+            return position
 
-        # Check if we've held the position too long (7 days default)
         max_hold_period = timedelta(days=self.config.get("max_hold_days", 7))
         if timestamp - position.entry_time > max_hold_period:
             await self._execute_exit(position, current_price, "time_exit", timestamp)
             del open_positions[symbol]
+            return position
+
+        return None
 
     async def _execute_entry(
         self,
@@ -282,7 +280,7 @@ class BacktestEngine:
             pnl_percentage = (
                 (exit_price - trade.entry_price) / trade.entry_price
             ) * 100
-        else:  # sell
+        else:
             pnl = (trade.entry_price - exit_price) * trade.quantity - total_fees
             pnl_percentage = (
                 (trade.entry_price - exit_price) / trade.entry_price
@@ -299,6 +297,23 @@ class BacktestEngine:
             f"Executed exit: {trade.symbol} {exit_reason} {trade.quantity:.6f} @ {exit_price:.6f} "
             f"PnL: {pnl:.6f} ({pnl_percentage:.2f}%)"
         )
+
+    def _calculate_current_equity(
+        self,
+        balance: float,
+        open_positions: Dict[str, BacktestTrade],
+        latest_prices: Dict[str, float],
+    ) -> float:
+        """Approximate mark-to-market equity from open positions."""
+        equity = balance
+        for symbol, trade in open_positions.items():
+            current_price = latest_prices.get(symbol, trade.entry_price)
+            if trade.side == "buy":
+                equity += (current_price - trade.entry_price) * trade.quantity
+            else:
+                equity += (trade.entry_price - current_price) * trade.quantity
+            equity -= trade.fees
+        return equity
 
     def _calculate_performance_metrics(
         self,
@@ -324,14 +339,12 @@ class BacktestEngine:
 
         win_rate = (winning_trades / total_trades * 100) if total_trades > 0 else 0
 
-        # Calculate profit factor
         gross_profits = sum(t.pnl for t in completed_trades if t.pnl > 0)
         gross_losses = abs(sum(t.pnl for t in completed_trades if t.pnl < 0))
         profit_factor = (
             gross_profits / gross_losses if gross_losses > 0 else float("inf")
         )
 
-        # Calculate average win/loss
         avg_win = (
             np.mean([t.pnl for t in completed_trades if t.pnl > 0])
             if winning_trades > 0
@@ -343,16 +356,11 @@ class BacktestEngine:
             else 0
         )
 
-        # Calculate max drawdown
         max_drawdown = self._calculate_max_drawdown(equity_curve)
-
-        # Calculate Sharpe ratio (simplified)
         returns = [
             t.pnl_percentage for t in completed_trades if t.pnl_percentage is not None
         ]
         sharpe_ratio = self._calculate_sharpe_ratio(returns) if returns else 0
-
-        # Calculate max consecutive wins/losses
         (
             max_consecutive_wins,
             max_consecutive_losses,
@@ -408,7 +416,6 @@ class BacktestEngine:
         if std_excess == 0:
             return 0.0
 
-        # Annualize (assuming daily returns, 365 trading days)
         sharpe = (mean_excess / std_excess) * np.sqrt(365)
         return sharpe
 

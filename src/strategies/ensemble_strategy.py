@@ -92,6 +92,85 @@ class EnsembleStrategy(BaseStrategy):
             f"momentum={momentum_weight}, freqai={freqai_weight}"
         )
 
+    @classmethod
+    def hyperopt_parameters(cls):
+        from optimization.parameters import DecimalParameter, IntParameter
+
+        return [
+            DecimalParameter(
+                name="momentum_weight",
+                default=0.4,
+                low=0.1,
+                high=0.9,
+                step=0.05,
+                space="buy",
+            ),
+            DecimalParameter(
+                name="freqai_weight",
+                default=0.6,
+                low=0.1,
+                high=0.9,
+                step=0.05,
+                space="buy",
+            ),
+            DecimalParameter(
+                name="min_consensus",
+                default=0.3,
+                low=0.1,
+                high=0.7,
+                step=0.05,
+                space="buy",
+            ),
+            IntParameter(
+                name="min_strategies_agree",
+                default=1,
+                low=1,
+                high=2,
+                step=1,
+                space="buy",
+            ),
+            DecimalParameter(
+                name="strength_boost",
+                default=0.1,
+                low=0.0,
+                high=0.3,
+                step=0.05,
+                space="buy",
+            ),
+        ]
+
+    @classmethod
+    def apply_hyperopt_parameters_to_config(
+        cls, full_config: Dict, params: Dict
+    ) -> Dict:
+        updated = full_config.copy()
+        updated["strategy_config"] = dict(updated.get("strategy_config", {}))
+        ensemble_config = dict(updated.get("ensemble", {}))
+
+        if "momentum_weight" in params:
+            ensemble_config["momentum_weight"] = params["momentum_weight"]
+        if "freqai_weight" in params:
+            ensemble_config["freqai_weight"] = params["freqai_weight"]
+
+        if "momentum_weight" in ensemble_config or "freqai_weight" in ensemble_config:
+            momentum_weight = float(ensemble_config.get("momentum_weight", 0.4))
+            freqai_weight = float(ensemble_config.get("freqai_weight", 0.6))
+            total_weight = momentum_weight + freqai_weight
+            if total_weight > 0:
+                ensemble_config["momentum_weight"] = momentum_weight / total_weight
+                ensemble_config["freqai_weight"] = freqai_weight / total_weight
+
+        for key in ("min_consensus", "min_strategies_agree", "strength_boost"):
+            if key in params:
+                ensemble_config[key] = params[key]
+
+        updated["ensemble"] = ensemble_config
+        return updated
+
+    @classmethod
+    def get_strategy_init_config(cls, full_config: Dict) -> Dict:
+        return full_config.copy()
+
     def calculate_indicators(self, ohlcv_data: pd.DataFrame) -> pd.DataFrame:
         """
         Calculate indicators using the primary strategy (momentum).

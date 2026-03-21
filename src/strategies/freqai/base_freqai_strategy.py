@@ -47,6 +47,11 @@ class BaseFreqAIStrategy(BaseStrategy):
         logger.info(f"FreqAI enabled: {self.freqai_enabled}")
         logger.info(f"Model: {self.freqai_model}")
 
+    @classmethod
+    def get_strategy_init_config(cls, full_config: Dict) -> Dict:
+        """FreqAI strategies expect the full runtime config."""
+        return full_config.copy()
+
     def feature_engineering_expand_all(
         self, dataframe: pd.DataFrame, **kwargs
     ) -> pd.DataFrame:

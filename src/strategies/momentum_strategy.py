@@ -52,6 +52,69 @@ class MomentumStrategy(BaseStrategy):
             f"MomentumStrategy initialized with RSI({self.rsi_oversold}, {self.rsi_overbought}), ADX>{self.adx_threshold}"
         )
 
+    @classmethod
+    def hyperopt_parameters(cls):
+        from optimization.parameters import DecimalParameter, IntParameter
+
+        return [
+            DecimalParameter(
+                name="min_signal_strength",
+                default=0.35,
+                low=0.2,
+                high=0.8,
+                step=0.05,
+                space="buy",
+            ),
+            IntParameter(
+                name="rsi_oversold",
+                default=30,
+                low=20,
+                high=40,
+                step=1,
+                space="buy",
+            ),
+            IntParameter(
+                name="rsi_overbought",
+                default=70,
+                low=60,
+                high=85,
+                step=1,
+                space="sell",
+            ),
+            IntParameter(
+                name="stoch_oversold",
+                default=20,
+                low=10,
+                high=35,
+                step=1,
+                space="buy",
+            ),
+            IntParameter(
+                name="stoch_overbought",
+                default=80,
+                low=65,
+                high=90,
+                step=1,
+                space="sell",
+            ),
+            IntParameter(
+                name="adx_threshold",
+                default=25,
+                low=15,
+                high=40,
+                step=1,
+                space="buy",
+            ),
+            DecimalParameter(
+                name="min_volume_ratio",
+                default=1.2,
+                low=0.8,
+                high=2.0,
+                step=0.1,
+                space="buy",
+            ),
+        ]
+
     async def generate_signal(
         self, symbol: str, ohlcv_data: pd.DataFrame, current_price: float
     ) -> Optional[TradingSignal]:
