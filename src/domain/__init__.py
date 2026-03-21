@@ -1,6 +1,7 @@
 """Typed runtime/domain contracts for AkibaCryptoBot."""
 
 from .events import (
+    BalanceUpdatePayload,
     BookTickerPayload,
     EventMeta,
     EventType,
@@ -19,6 +20,7 @@ from .models import Candle, SymbolState
 from .state import OrderState, OrderStatus, PositionState, PositionStatus
 
 __all__ = [
+    "BalanceUpdatePayload",
     "BookTickerPayload",
     "Candle",
     "EventMeta",

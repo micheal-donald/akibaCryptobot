@@ -16,6 +16,7 @@ EventType = Literal[
     "execution.order_update",
     "execution.fill",
     "execution.order_rejected",
+    "execution.balance_update",
     "position.opened",
     "position.protective_submitted",
     "position.closed",
@@ -139,6 +140,13 @@ class FillPayload:
     fee_currency: str | None = None
     is_maker: bool | None = None
     reduce_only: bool = False
+
+
+@dataclass(slots=True, frozen=True)
+class BalanceUpdatePayload:
+    """Normalized balance update from the exchange user stream."""
+
+    balances: dict[str, dict[str, float]]
 
 
 @dataclass(slots=True, frozen=True)

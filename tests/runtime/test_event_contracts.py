@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from domain.events import (
+    BalanceUpdatePayload,
     BookTickerPayload,
     EventMeta,
     HousekeepingPayload,
@@ -75,6 +76,18 @@ def test_kline_and_housekeeping_payloads_are_dataclasses() -> None:
 
     assert kline.interval == "1m"
     assert housekeeping.reason == "portfolio_snapshot"
+
+
+def test_balance_update_payload_captures_asset_balances() -> None:
+    payload = BalanceUpdatePayload(
+        balances={
+            "USDT": {"free": 125.0, "locked": 5.0},
+            "BTC": {"free": 0.01, "locked": 0.0},
+        }
+    )
+
+    assert payload.balances["USDT"]["free"] == 125.0
+    assert payload.balances["BTC"]["locked"] == 0.0
 
 
 def test_symbol_state_updates_book_ticker_and_spread() -> None:
