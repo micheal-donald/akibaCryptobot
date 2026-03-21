@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from domain.events import BookTickerPayload, EventMeta, RuntimeEvent
+from domain.models import SymbolState
 from runtime.config import RuntimeConfig
 from runtime.shadow import ShadowRuntime, build_shadow_runtime
 
@@ -63,6 +64,7 @@ def test_build_shadow_runtime_only_wires_non_trading_services() -> None:
     assert isinstance(runtime, ShadowRuntime)
     assert runtime.app.config.shadow_mode is True
     assert runtime.app.services.names() == ("telemetry", "market-data")
+    assert runtime.shadow_comparator is None
     assert runtime.app.is_running is False
 
 
@@ -83,7 +85,13 @@ def test_build_shadow_runtime_uses_adapter_gateway_by_default(monkeypatch) -> No
 
 def test_shadow_runtime_starts_and_routes_market_events_to_telemetry() -> None:
     gateway = FakeMarketDataGateway()
-    runtime = build_shadow_runtime(make_config(), gateway)
+    legacy_states: dict[str, SymbolState] = {}
+    runtime = build_shadow_runtime(
+        make_config(),
+        gateway,
+        lambda: legacy_states,
+        comparison_interval_seconds=0.01,
+    )
 
     ts = datetime(2026, 3, 21, 12, 0, tzinfo=timezone.utc)
 
@@ -107,7 +115,13 @@ def test_shadow_runtime_starts_and_routes_market_events_to_telemetry() -> None:
                 ),
             )
         )
+        legacy_states["BTC/USDT"] = runtime.market_data_service.get_symbol_state(
+            "BTC/USDT"
+        )
         await asyncio.wait_for(_wait_for_total(runtime.telemetry_service, 1), timeout=1)
+        await asyncio.wait_for(
+            _wait_for_comparisons(runtime.shadow_comparator, 1), timeout=1
+        )
         await runtime.stop()
 
     asyncio.run(run())
@@ -119,10 +133,18 @@ def test_shadow_runtime_starts_and_routes_market_events_to_telemetry() -> None:
         "disconnect",
     ]
     assert runtime.telemetry_service.get_total_events() == 1
+    assert runtime.shadow_comparator is not None
+    assert runtime.shadow_comparator.get_comparison_runs() >= 1
+    assert runtime.shadow_comparator.get_drift_count() == 0
     assert runtime.market_data_service.get_symbol_state("BTC/USDT") is not None
     assert runtime.app.is_running is False
 
 
 async def _wait_for_total(service, expected: int) -> None:
     while service.get_total_events() < expected:
+        await asyncio.sleep(0)
+
+
+async def _wait_for_comparisons(service, expected: int) -> None:
+    while service.get_comparison_runs() < expected:
         await asyncio.sleep(0)

@@ -93,6 +93,27 @@ def test_telemetry_service_start_and_stop_are_idempotent() -> None:
     assert service.is_running is False
 
 
+def test_telemetry_service_records_runtime_metrics() -> None:
+    service = TelemetryService(name="telemetry")
+
+    service.record_queue_depth("market-data", 3)
+    service.record_dropped_event("shadow", event_type="market.kline")
+    service.record_reconnect("market-data")
+    service.record_stale_symbol("BTC/USDT")
+    service.record_shadow_drift("BTC/USDT")
+    service.record_missing_symbol("ETH/USDT", side="legacy")
+
+    assert service.get_metric_count("queue_depth.market-data") == 3
+    assert service.get_metric_count("dropped_event") == 1
+    assert service.get_metric_count("dropped_event.shadow.market.kline") == 1
+    assert service.get_metric_count("reconnect.market-data") == 1
+    assert service.get_metric_count("stale_symbol.BTC/USDT") == 1
+    assert service.get_metric_count("shadow_drift.BTC/USDT") == 1
+    assert service.get_metric_count("missing_symbol.ETH/USDT") == 1
+    assert service.get_metric_count("missing_symbol.legacy") == 1
+    assert service.get_queue_depth("market-data") == 3
+
+
 async def _wait_for_total(service: TelemetryService, expected: int) -> None:
     while service.get_total_events() < expected:
         await asyncio.sleep(0)
