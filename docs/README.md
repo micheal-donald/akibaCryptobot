@@ -17,6 +17,8 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Backtesting](BACKTESTING.md) | Backtest engine, walk-forward analysis, interpreting results |
 | [Reconciliation](ARCHITECTURE.md#reconciliation) | How the bot stays in sync with actual exchange balances |
 | [Deployment](DEPLOYMENT.md) | Local dev, Docker, CI/CD pipeline, cloud deployment |
+| [Refactor Specs](specs/PHASE_1_EVENT_RUNTIME_SPEC.md) | Event-driven runtime refactor specs and AI task templates |
+| [Phase 2 Market Data Spec](specs/PHASE_2_MARKET_DATA_SHADOW_SPEC.md) | Websocket-first market-data runtime, bootstrap, and shadow-mode validation |
 
 ---
 
@@ -46,3 +48,4 @@ open http://localhost:8000
 | Document | Description |
 |---|---|
 | [FreqAI Integration](freqai_integration.md) | FreqAI ML framework integration — feature engineering, custom strategies, model persistence |
+| [AI Task Spec Template](specs/AI_TASK_SPEC_TEMPLATE.md) | Reusable ticket template for spec-driven and AI-assisted implementation |
