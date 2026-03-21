@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Literal, Protocol, runtime_checkable
 
 from domain.events import RuntimeEvent
+from domain.models import Candle
 
 MarketDataEventType = Literal[
     "market.tick",
@@ -32,3 +33,15 @@ class MarketDataGateway(Protocol):
     async def subscribe_book_ticker(self, symbol: str) -> None: ...
 
     async def subscribe_kline(self, symbol: str, interval: str = "1m") -> None: ...
+
+
+@runtime_checkable
+class MarketDataBootstrapGateway(Protocol):
+    """REST bootstrap contract for historical OHLCV loading."""
+
+    async def fetch_ohlcv(
+        self,
+        symbol: str,
+        interval: str,
+        limit: int,
+    ) -> list[Candle]: ...

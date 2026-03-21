@@ -90,6 +90,39 @@ def test_gateway_normalizes_book_ticker_events() -> None:
     assert events[0].payload.ask_price == 100.2
 
 
+def test_gateway_normalizes_raw_binance_book_ticker_payloads() -> None:
+    manager = FakeWebSocketManager()
+    gateway = BinanceWebSocketGateway(websocket_manager=manager)
+    events: list[RuntimeEvent] = []
+    gateway.register_callback("market.tick", events.append)
+
+    expected_ts = datetime.fromtimestamp(1_743_480_000_000 / 1000, tz=timezone.utc)
+
+    async def run() -> None:
+        await gateway.connect()
+        await manager.callbacks["book_ticker"](
+            {
+                "s": "BTCUSDT",
+                "b": "100.0",
+                "B": "1.5",
+                "a": "100.2",
+                "A": "2.0",
+                "E": 1_743_480_000_000,
+            }
+        )
+
+    import asyncio
+
+    asyncio.run(run())
+
+    assert len(events) == 1
+    assert events[0].meta.symbol == "BTCUSDT"
+    assert events[0].meta.ts_exchange == expected_ts
+    assert isinstance(events[0].payload, BookTickerPayload)
+    assert events[0].payload.bid_price == 100.0
+    assert events[0].payload.ask_qty == 2.0
+
+
 def test_gateway_routes_open_and_closed_kline_events() -> None:
     manager = FakeWebSocketManager()
     gateway = BinanceWebSocketGateway(websocket_manager=manager)
@@ -153,6 +186,54 @@ def test_gateway_routes_open_and_closed_kline_events() -> None:
     assert open_events[0].payload.close_time == expected_close_time
     assert open_events[0].meta.ts_exchange == expected_event_time
     assert closed_events[0].meta.ts_exchange == expected_event_time
+
+
+def test_gateway_normalizes_raw_binance_nested_kline_payloads() -> None:
+    manager = FakeWebSocketManager()
+    gateway = BinanceWebSocketGateway(websocket_manager=manager)
+    closed_events: list[RuntimeEvent] = []
+    gateway.register_callback("market.kline_closed", closed_events.append)
+
+    open_time_ms = 1_743_480_060_000
+    close_time_ms = 1_743_480_120_000
+    event_time_ms = 1_743_480_120_500
+    expected_open_time = datetime.fromtimestamp(open_time_ms / 1000, tz=timezone.utc)
+    expected_close_time = datetime.fromtimestamp(close_time_ms / 1000, tz=timezone.utc)
+    expected_event_time = datetime.fromtimestamp(event_time_ms / 1000, tz=timezone.utc)
+
+    async def run() -> None:
+        await gateway.connect()
+        await manager.callbacks["kline"](
+            {
+                "e": "kline",
+                "E": event_time_ms,
+                "s": "BTCUSDT",
+                "k": {
+                    "t": open_time_ms,
+                    "T": close_time_ms,
+                    "i": "1m",
+                    "o": "100.0",
+                    "h": "101.0",
+                    "l": "99.5",
+                    "c": "100.5",
+                    "v": "25.0",
+                    "x": True,
+                },
+            }
+        )
+
+    import asyncio
+
+    asyncio.run(run())
+
+    assert len(closed_events) == 1
+    assert closed_events[0].meta.symbol == "BTCUSDT"
+    assert closed_events[0].meta.ts_exchange == expected_event_time
+    assert isinstance(closed_events[0].payload, KlinePayload)
+    assert closed_events[0].payload.interval == "1m"
+    assert closed_events[0].payload.open_time == expected_open_time
+    assert closed_events[0].payload.close_time == expected_close_time
+    assert closed_events[0].payload.is_closed is True
 
 
 def test_gateway_rejects_unsupported_event_registration() -> None:

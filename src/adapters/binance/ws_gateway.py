@@ -91,49 +91,53 @@ class BinanceWebSocketGateway(MarketDataGateway):
         self._bridges_registered = True
 
     async def _handle_book_ticker(self, data: dict[str, Any]) -> None:
+        normalized = self._normalize_book_ticker_payload(data)
         event = RuntimeEvent(
             meta=EventMeta(
                 event_id=uuid4().hex,
                 event_type="market.tick",
                 source="binance.ws.book_ticker",
-                symbol=str(data.get("symbol")) if data.get("symbol") else None,
-                ts_exchange=self._coerce_datetime(data.get("timestamp")),
+                symbol=normalized["symbol"],
+                ts_exchange=self._coerce_datetime(normalized["timestamp"]),
                 ts_received=datetime.now(timezone.utc),
             ),
             payload=BookTickerPayload(
-                bid_price=float(data.get("bid_price", 0.0)),
-                bid_qty=float(data.get("bid_qty", 0.0)),
-                ask_price=float(data.get("ask_price", 0.0)),
-                ask_qty=float(data.get("ask_qty", 0.0)),
+                bid_price=float(normalized["bid_price"]),
+                bid_qty=float(normalized["bid_qty"]),
+                ask_price=float(normalized["ask_price"]),
+                ask_qty=float(normalized["ask_qty"]),
             ),
         )
         await self._dispatch("market.tick", event)
 
     async def _handle_kline(self, data: dict[str, Any]) -> None:
-        event_type = "market.kline_closed" if data.get("is_closed") else "market.kline"
+        normalized = self._normalize_kline_payload(data)
+        event_type = (
+            "market.kline_closed" if normalized["is_closed"] else "market.kline"
+        )
         event = RuntimeEvent(
             meta=EventMeta(
                 event_id=uuid4().hex,
                 event_type=event_type,
-                source=f"binance.ws.kline.{data.get('interval', '1m')}",
-                symbol=str(data.get("symbol")) if data.get("symbol") else None,
+                source=f"binance.ws.kline.{normalized['interval']}",
+                symbol=normalized["symbol"],
                 ts_exchange=self._coerce_datetime(
-                    data.get("timestamp") or data.get("close_time")
+                    normalized["timestamp"] or normalized["close_time"]
                 ),
                 ts_received=datetime.now(timezone.utc),
             ),
             payload=KlinePayload(
-                interval=str(data.get("interval", "1m")),
-                open_time=self._coerce_datetime(data.get("open_time"))
+                interval=str(normalized["interval"]),
+                open_time=self._coerce_datetime(normalized["open_time"])
                 or datetime.now(timezone.utc),
-                close_time=self._coerce_datetime(data.get("close_time"))
+                close_time=self._coerce_datetime(normalized["close_time"])
                 or datetime.now(timezone.utc),
-                open=float(data.get("open", 0.0)),
-                high=float(data.get("high", 0.0)),
-                low=float(data.get("low", 0.0)),
-                close=float(data.get("close", 0.0)),
-                volume=float(data.get("volume", 0.0)),
-                is_closed=bool(data.get("is_closed", False)),
+                open=float(normalized["open"]),
+                high=float(normalized["high"]),
+                low=float(normalized["low"]),
+                close=float(normalized["close"]),
+                volume=float(normalized["volume"]),
+                is_closed=bool(normalized["is_closed"]),
             ),
         )
         await self._dispatch(event_type, event)
@@ -156,3 +160,48 @@ class BinanceWebSocketGateway(MarketDataGateway):
                 epoch_value /= 1000.0
             return datetime.fromtimestamp(epoch_value, tz=timezone.utc)
         return None
+
+    @staticmethod
+    def _normalize_book_ticker_payload(data: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "symbol": data.get("symbol") or data.get("s"),
+            "bid_price": data.get("bid_price", data.get("b", 0.0)),
+            "bid_qty": data.get("bid_qty", data.get("B", 0.0)),
+            "ask_price": data.get("ask_price", data.get("a", 0.0)),
+            "ask_qty": data.get("ask_qty", data.get("A", 0.0)),
+            "timestamp": data.get("timestamp") or data.get("E"),
+        }
+
+    @staticmethod
+    def _normalize_kline_payload(data: dict[str, Any]) -> dict[str, Any]:
+        kline = data.get("k") if isinstance(data.get("k"), dict) else {}
+        source = kline if kline else data
+        return {
+            "symbol": (
+                source.get("symbol")
+                or data.get("symbol")
+                or source.get("s")
+                or data.get("s")
+            ),
+            "interval": (
+                source.get("interval")
+                or source.get("i")
+                or data.get("interval")
+                or data.get("i")
+                or "1m"
+            ),
+            "open_time": source.get("open_time", source.get("t")),
+            "close_time": source.get("close_time", source.get("T")),
+            "open": source.get("open", source.get("o", 0.0)),
+            "high": source.get("high", source.get("h", 0.0)),
+            "low": source.get("low", source.get("l", 0.0)),
+            "close": source.get("close", source.get("c", 0.0)),
+            "volume": source.get("volume", source.get("v", 0.0)),
+            "is_closed": source.get("is_closed", source.get("x", False)),
+            "timestamp": (
+                source.get("timestamp")
+                or data.get("timestamp")
+                or data.get("E")
+                or source.get("E")
+            ),
+        }
