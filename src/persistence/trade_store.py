@@ -294,6 +294,10 @@ class TradeStore:
         exit_reason: str = "clean_shutdown",
     ):
         """Mark a session as ended and record its uptime."""
+        if self._db is None:
+            logger.warning("TradeStore end_session called after database close")
+            return
+
         now_ts = int(datetime.now().timestamp())
         # Fetch start_time to compute duration
         cursor = await self._db.execute(

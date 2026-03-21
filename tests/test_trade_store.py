@@ -122,3 +122,14 @@ async def test_update_trailing_stop(trade_store):
 
     open_trades = await trade_store.load_open_trades()
     assert open_trades["BNB/USDT"]["trailing_stop_price"] == 410.0
+
+
+@pytest.mark.asyncio
+async def test_end_session_noops_after_close(tmp_path):
+    db_path = str(tmp_path / "test_end_session_after_close.db")
+    store = TradeStore(db_path)
+    await store.initialize()
+    session_id = await store.start_session(strategy="ensemble", trading_mode="paper")
+    await store.close()
+
+    await store.end_session(session_id)
