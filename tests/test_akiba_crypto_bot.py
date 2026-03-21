@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -84,6 +85,8 @@ def bot_fixture(sample_config):
     bot.circuit_breaker_reason = ""
     bot._cached_balance = None
     bot.pair_cooldowns = {}
+    bot._stop_event = asyncio.Event()
+    bot._cleanup_future = None
     bot.performance_tracker = MagicMock()
     bot.performance_tracker.record_trade_exit = AsyncMock()
     bot.position_manager = PositionManager(bot)

@@ -16,6 +16,38 @@ from api.routes import status, trading, account, performance, risk, strategy, mo
 from api.websockets import router as ws_router
 
 logger = logging.getLogger(__name__)
+BOT_SHUTDOWN_TIMEOUT_SECONDS = 90.0
+
+
+async def shutdown_trading_bot(
+    bot,
+    trading_task: asyncio.Task,
+    *,
+    timeout_seconds: float = BOT_SHUTDOWN_TIMEOUT_SECONDS,
+) -> None:
+    """Stop the bot cooperatively before falling back to task cancellation."""
+
+    logger.info("Shutting down trading bot...")
+    bot.stop()
+
+    try:
+        await asyncio.wait_for(asyncio.shield(trading_task), timeout=timeout_seconds)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Trading bot did not stop within %.1fs, cancelling task",
+            timeout_seconds,
+        )
+        trading_task.cancel()
+        try:
+            await trading_task
+        except asyncio.CancelledError:
+            pass
+    except asyncio.CancelledError:
+        pass
+    except Exception as exc:
+        logger.error("Trading bot exited with error during shutdown: %s", exc)
+
+    logger.info("Trading bot shutdown complete")
 
 
 @asynccontextmanager
@@ -60,15 +92,8 @@ async def lifespan(app: FastAPI):
     yield  # Server is running, bot is trading
 
     # Shutdown
-    logger.info("Shutting down trading bot...")
-    bot.stop()
-    trading_task.cancel()
-    try:
-        await trading_task
-    except asyncio.CancelledError:
-        pass
-    await bot.cleanup()
-    logger.info("Trading bot shutdown complete")
+    await shutdown_trading_bot(bot, trading_task)
+    bot_state["bot"] = None
 
 
 def create_app(

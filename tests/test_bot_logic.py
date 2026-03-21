@@ -1,4 +1,5 @@
 import pytest
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 from bot import AkibaCryptoBot
@@ -58,6 +59,8 @@ def bot(mock_config):
         bot.circuit_breaker_reason = ""
         bot._cached_balance = None
         bot.pair_cooldowns = {}
+        bot._stop_event = asyncio.Event()
+        bot._cleanup_future = None
         bot.performance_tracker = MagicMock()
         bot.position_manager = PositionManager(bot)
         bot.opportunity_scanner = OpportunityScanner(bot)
@@ -148,6 +151,31 @@ async def test_feature_9_cancel_on_shutdown(bot):
     await bot.cleanup()
 
     bot.exchange.cancel_order.assert_called_once_with("999", "BTC/USDT")
+
+
+@pytest.mark.asyncio
+async def test_stop_sets_shutdown_event(bot):
+    bot.is_running = True
+
+    bot.stop()
+
+    assert bot.is_running is False
+    assert bot._stop_event.is_set() is True
+
+
+@pytest.mark.asyncio
+async def test_cleanup_is_idempotent_under_concurrent_calls(bot):
+    async def delayed_close():
+        await asyncio.sleep(0.01)
+
+    bot.trade_store.close = AsyncMock(side_effect=delayed_close)
+    bot.exchange.close = AsyncMock(side_effect=delayed_close)
+    bot.data_exchange = bot.exchange
+
+    await asyncio.gather(bot.cleanup(), bot.cleanup())
+
+    assert bot.trade_store.close.await_count == 1
+    assert bot.exchange.close.await_count == 1
 
 
 @pytest.mark.asyncio

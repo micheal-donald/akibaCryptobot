@@ -28,6 +28,7 @@ class AkibaCryptoBot:
     RECONCILIATION_CYCLE_INTERVAL = 60
     PORTFOLIO_HISTORY_LIMIT = 1000
     EQUITY_CURVE_LIMIT = 5000
+    CLEANUP_STEP_TIMEOUT_SECONDS = 15
 
     def __init__(self, config_path: str = "config/config.json"):
         self.config = self.load_config(config_path)
@@ -95,6 +96,8 @@ class AkibaCryptoBot:
         self.pair_cooldowns: Dict[str, datetime] = (
             {}
         )  # symbol -> cooldown-expiry datetime
+        self._stop_event = asyncio.Event()
+        self._cleanup_future: asyncio.Future[None] | None = None
 
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -116,6 +119,9 @@ class AkibaCryptoBot:
     async def start(self):
         self.logger.info("Starting AkibaCryptoBot...")
         self.is_running = True
+        self._stop_event.clear()
+        if self._cleanup_future is not None and self._cleanup_future.done():
+            self._cleanup_future = None
 
         try:
             # Initialize trade persistence and reload open positions
@@ -223,56 +229,155 @@ class AkibaCryptoBot:
                     if cycle_count % self.RECONCILIATION_CYCLE_INTERVAL == 0:
                         await self.reconciliation.reconcile()
 
-                    await asyncio.sleep(self.CYCLE_INTERVAL_SECONDS)
+                    if await self._wait_for_stop(self.CYCLE_INTERVAL_SECONDS):
+                        break
                 except Exception as e:
                     self.logger.error(f"Error in trading cycle: {e}")
                     if self.telegram:
                         await self.telegram.send_message(
                             f"❌ Trading cycle error: {str(e)}"
                         )
-                    await asyncio.sleep(self.CYCLE_INTERVAL_SECONDS)
+                    if await self._wait_for_stop(self.CYCLE_INTERVAL_SECONDS):
+                        break
 
+        except asyncio.CancelledError:
+            self.logger.info("Trading loop cancelled, stopping bot...")
+            self.stop()
+            raise
         except Exception as e:
             self.logger.error(f"Critical error: {e}")
             if self.telegram:
                 await self.telegram.send_message(f"🚨 Critical error: {str(e)}")
         finally:
+            self.is_running = False
             await self.cleanup()
 
     def stop(self):
+        if not self.is_running and self._stop_event.is_set():
+            return
         self.logger.info("Stopping bot...")
         self.is_running = False
+        self._stop_event.set()
 
     async def cleanup(self):
+        existing_cleanup = self._cleanup_future
+        if existing_cleanup is not None:
+            await asyncio.shield(existing_cleanup)
+            return
+
+        cleanup_future = asyncio.get_running_loop().create_future()
+        self._cleanup_future = cleanup_future
+
+        try:
+            await self._cleanup_impl()
+        except Exception as exc:
+            if not cleanup_future.done():
+                cleanup_future.set_exception(exc)
+            raise
+        else:
+            if not cleanup_future.done():
+                cleanup_future.set_result(None)
+
+    async def _cleanup_impl(self):
         self.logger.info("Cleaning up resources...")
+        self.is_running = False
+        self._stop_event.set()
 
         # Cancel open orders for all active trades (best-effort, errors are logged)
-        for symbol in self.active_trades:
-            await self._cancel_orders_for_symbol(symbol)
+        for symbol in tuple(self.active_trades):
+            await self._run_cleanup_step(
+                f"cancel_orders:{symbol}",
+                self._cancel_orders_for_symbol(symbol),
+            )
 
         # End the current bot session
         if self.session_id is not None:
-            await self.trade_store.end_session(
-                self.session_id, exit_reason="clean_shutdown"
+            await self._run_cleanup_step(
+                "end_session",
+                self.trade_store.end_session(
+                    self.session_id, exit_reason="clean_shutdown"
+                ),
             )
+            self.session_id = None
 
         # Close trade persistence DB
-        await self.trade_store.close()
+        await self._run_cleanup_step("trade_store.close", self.trade_store.close())
 
         if self.data_exchange and self.data_exchange is not self.exchange:
-            await self.data_exchange.close()
+            await self._run_cleanup_step(
+                "data_exchange.close", self.data_exchange.close()
+            )
 
         if self.exchange:
-            await self.exchange.close()
+            await self._run_cleanup_step("exchange.close", self.exchange.close())
 
         if self.telegram:
+            await self._shutdown_telegram()
+
+        await self._cancel_background_tasks()
+
+    async def _wait_for_stop(self, timeout: float) -> bool:
+        try:
+            await asyncio.wait_for(self._stop_event.wait(), timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            return False
+
+    async def _run_cleanup_step(
+        self, step_name: str, awaitable, timeout: float | None = None
+    ) -> None:
+        try:
+            await asyncio.wait_for(
+                awaitable,
+                timeout=timeout or self.CLEANUP_STEP_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            self.logger.error(f"Cleanup step timed out: {step_name}")
+        except Exception as e:
+            self.logger.error(f"Cleanup step failed ({step_name}): {e}")
+
+    async def _shutdown_telegram(self) -> None:
+        await self._run_cleanup_step(
+            "telegram.send_stop_message",
+            self.telegram.send_message("🛑 AkibaCryptoBot stopped"),
+        )
+
+        application = getattr(self.telegram, "application", None)
+        if application is None:
+            return
+
+        updater = getattr(application, "updater", None)
+        if updater and getattr(updater, "running", False):
+            await self._run_cleanup_step("telegram.updater.stop", updater.stop())
+
+        if getattr(application, "running", False):
+            await self._run_cleanup_step(
+                "telegram.application.stop", application.stop()
+            )
+
+        await self._run_cleanup_step(
+            "telegram.application.shutdown",
+            application.shutdown(),
+        )
+
+    async def _cancel_background_tasks(self) -> None:
+        pending_tasks = [task for task in self._background_tasks if not task.done()]
+        if not pending_tasks:
+            self._background_tasks.clear()
+            return
+
+        for task in pending_tasks:
+            task.cancel()
+
+        for task in pending_tasks:
             try:
-                await self.telegram.send_message("🛑 AkibaCryptoBot stopped")
-                if self.telegram.application and self.telegram.application.running:
-                    await self.telegram.application.stop()
-                    await self.telegram.application.shutdown()
+                await asyncio.wait_for(task, timeout=self.CLEANUP_STEP_TIMEOUT_SECONDS)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                continue
             except Exception as e:
-                self.logger.error(f"Error stopping Telegram bot: {e}")
+                self.logger.error(f"Background task failed during cleanup: {e}")
+
+        self._background_tasks.clear()
 
     async def _cancel_orders_for_symbol(self, symbol: str):
         """Cancel all open orders for a symbol. Best-effort — errors are logged."""
