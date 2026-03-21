@@ -6,18 +6,35 @@ on:
     types: [completed]
     branches: [master]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy to Vultr (bare-metal)
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    timeout-minutes: 25
+    if: >-
+      ${{
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push'
+      }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Get short SHA
-        id: sha
-        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Set deploy metadata
+        id: meta
+        run: |
+          target_sha="${{ github.event.workflow_run.head_sha }}"
+          echo "sha=${target_sha}" >> "$GITHUB_OUTPUT"
+          echo "short=${target_sha::7}" >> "$GITHUB_OUTPUT"
 
       - name: Setup SSH Key
         run: |
@@ -26,51 +43,51 @@ jobs:
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
+      - name: Ensure remote app directory exists
+        run: |
+          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no \
+            root@${{ secrets.SERVER_IP }} "mkdir -p /opt/akibabot"
+
       - name: Sync Files to Server via Rsync
         run: |
-          rsync -avz --exclude='.git' --exclude='venv' --exclude='__pycache__' \
-          --exclude='.pytest_cache' --exclude='logs/' --exclude='models/' \
-          -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
-          ./ root@${{ secrets.SERVER_IP }}:/opt/akibabot/
+          rsync -az \
+            --exclude='.git' \
+            --exclude='.venv' \
+            --exclude='venv' \
+            --exclude='__pycache__' \
+            --exclude='.pytest_cache' \
+            --exclude='logs/' \
+            --exclude='models/' \
+            --exclude='.env' \
+            --exclude='plan.md' \
+            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
+            ./ root@${{ secrets.SERVER_IP }}:/opt/akibabot/
 
-      - name: Rebuild .env and Restart Systemd Service
+      - name: Deploy and Verify Service
         uses: appleboy/ssh-action@v1.0.0
         env:
+          DEPLOY_SHA: ${{ steps.meta.outputs.sha }}
           TRADING_MODE: ${{ vars.TRADING_MODE != '' && vars.TRADING_MODE || 'paper' }}
+          LOG_LEVEL: ${{ vars.LOG_LEVEL != '' && vars.LOG_LEVEL || 'INFO' }}
+          AKIBA_STRATEGY: ${{ vars.AKIBA_STRATEGY != '' && vars.AKIBA_STRATEGY || 'ensemble' }}
+          AKIBA_HOST: 0.0.0.0
+          AKIBA_PORT: 8000
+          AKIBA_CONFIG: config/config.json
+          AKIBA_NO_API: 'false'
+          AKIBA_DRY_RUN: 'false'
           BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
           BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          VULTR_API_KEY: ${{ secrets.VULTR_API_KEY }}
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: TRADING_MODE,BINANCE_API_KEY,BINANCE_SECRET_KEY,TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID,VULTR_API_KEY
+          script_stop: true
+          envs: DEPLOY_SHA,TRADING_MODE,LOG_LEVEL,AKIBA_STRATEGY,AKIBA_HOST,AKIBA_PORT,AKIBA_CONFIG,AKIBA_NO_API,AKIBA_DRY_RUN,BINANCE_API_KEY,BINANCE_SECRET_KEY,TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID
           script: |
             cd /opt/akibabot
-
-            # Recreate .env with Action Secrets
-            cat > .env << EOF
-            TRADING_MODE=${TRADING_MODE}
-            BINANCE_API_KEY=${BINANCE_API_KEY}
-            BINANCE_SECRET_KEY=${BINANCE_SECRET_KEY}
-            TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-            TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-            VULTR_API_KEY=${VULTR_API_KEY}
-            LOG_LEVEL=INFO
-            EOF
-
-            # Install any new dependencies
-            source venv/bin/activate
-            pip install -r requirements.txt
-
-            # Restart the bot service
-            systemctl restart akibabot.service
-
-            # Check status (first 5 seconds of logs to verify it loaded)
-            sleep 5
-            systemctl status akibabot.service --no-pager
+            bash ./scripts/deploy_remote.sh
 
       - name: Notify Telegram (Deployment Success)
         if: success()
@@ -82,11 +99,11 @@ jobs:
             🚀 *AkibaCryptoBot Deployment*
 
             Status: ✅ Success (Bare-Metal)
-            Commit: `${{ steps.sha.outputs.short }}`
+            Commit: `${{ steps.meta.outputs.short }}`
             Branch: `master`
             Host: `${{ secrets.SERVER_IP }}`
 
-            Bot has been restarted via systemd.
+            Deployment verified via systemd and `/api/health`.
 
       - name: Notify Telegram (Deployment Failed)
         if: failure()
@@ -98,6 +115,6 @@ jobs:
             🚨 *AkibaCryptoBot CI/CD Failed*
 
             Status: ❌ Failed to deploy to `${{ secrets.SERVER_IP }}`
-            Commit: `${{ steps.sha.outputs.short }}`
+            Commit: `${{ steps.meta.outputs.short }}`
 
             Check the GitHub Actions log for details.

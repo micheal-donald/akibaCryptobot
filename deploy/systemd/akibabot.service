@@ -1,0 +1,22 @@
+[Unit]
+Description=AkibaCryptoBot Trading Engine + API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/akibabot
+EnvironmentFile=/opt/akibabot/.env
+Environment=PYTHONPATH=/opt/akibabot/src
+ExecStart=/opt/akibabot/scripts/run_bot_service.sh
+Restart=always
+RestartSec=10
+TimeoutStartSec=180
+TimeoutStopSec=180
+KillSignal=SIGTERM
+StandardOutput=append:/opt/akibabot/logs/akiba_crypto_bot.log
+StandardError=append:/opt/akibabot/logs/akiba_crypto_bot_error.log
+
+[Install]
+WantedBy=multi-user.target

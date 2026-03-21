@@ -15,7 +15,7 @@ on:
 jobs:
   train:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -60,13 +60,37 @@ jobs:
 
       - name: Restart bot to load new models
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          AKIBA_PORT: 8000
         with:
           host: ${{ secrets.SERVER_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: AKIBA_PORT
           script: |
             systemctl restart akibabot.service
-            sleep 5
+            deadline=$((SECONDS + 180))
+            until systemctl is-active --quiet akibabot.service; do
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                systemctl status akibabot.service --no-pager || true
+                journalctl -u akibabot.service -n 50 --no-pager || true
+                exit 1
+              fi
+              sleep 2
+            done
+
+            deadline=$((SECONDS + 180))
+            until curl -fsS "http://127.0.0.1:${AKIBA_PORT}/api/health" >/dev/null; do
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                systemctl status akibabot.service --no-pager || true
+                journalctl -u akibabot.service -n 50 --no-pager || true
+                exit 1
+              fi
+              sleep 2
+            done
+
+            curl -fsS "http://127.0.0.1:${AKIBA_PORT}/api/health"
+            echo
             systemctl status akibabot.service --no-pager
 
       - name: Notify via Telegram

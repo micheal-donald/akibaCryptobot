@@ -155,21 +155,22 @@ Three GitHub Actions workflows in `.github/workflows/`:
 **Triggers:** Push to `master`, `develop`, `feature/**`; PRs to `master`
 
 ```
-Lint & Format → Test → Smoke Test
+Test → Smoke Test
 ```
 
 | Job | Steps |
 |---|---|
-| **lint** | Install deps → Black check → Flake8 → MyPy |
 | **test** | Install deps → pytest with coverage → Upload to Codecov |
 | **smoke** | Install deps → Verify app starts → Check routes registered |
 
 ### 2. `deploy.yml` — Continuous Deployment
 
-**Triggers:** Push to `master` (after CI passes)
+**Triggers:** `workflow_run` after `CI` succeeds on `master`
 
 ```
-Sync Files via Rsync → Rebuild .env → Restart Systemd → Notify Telegram
+Checkout exact CI-passed SHA → Rsync app files → Render runtime `.env`
+→ Install deps only when `requirements.txt` changes → Install/version the systemd unit
+→ Restart service → Wait for `/api/health` → Notify Telegram
 ```
 
 ### 3. `train.yml` — Model Training
@@ -182,16 +183,34 @@ Handles FreqAI model re-training on schedule or manual trigger.
 |---|---|
 | `SERVER_IP` | Vultr VPS IP |
 | `SSH_PRIVATE_KEY` | SSH private key for root access |
+| `TRADING_MODE` | GitHub Actions variable for `paper` or `live` mode |
 | `BINANCE_API_KEY` | Binance API key |
 | `BINANCE_SECRET_KEY` | Binance secret key |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID |
-| `VULTR_API_KEY` | Vultr API key |
 
 ---
 
+### Runtime vs Deployment Secrets
+
+Application runtime secrets live in the server-side `.env` file and are rendered by the deploy workflow from GitHub Actions secrets and variables. Deployment metadata such as `SERVER_IP` belongs in GitHub Actions configuration, not in the local project `.env`.
+
 ### Vultr Bare-Metal Setup
 The bot runs as a systemd service (`akibabot.service`) on a Vultr Ubuntu instance.
+
+The canonical service unit is versioned in:
+
+```text
+deploy/systemd/akibabot.service
+```
+
+The service boot command is driven by:
+
+```text
+scripts/run_bot_service.sh
+```
+
+This keeps the deployed `ExecStart` aligned with `TRADING_MODE`, strategy, host, and port settings.
 
 ```bash
 # SSH into the instance

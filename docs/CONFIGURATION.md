@@ -14,14 +14,19 @@ AkibaCryptoBot is configured via two JSON files and environment variables.
 | `TELEGRAM_CHAT_ID` | Telegram chat ID for notifications | — |
 | `TRADING_MODE` | `paper` or `live` | `paper` |
 | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` | `INFO` |
+| `AKIBA_STRATEGY` | Service strategy override | `ensemble` |
+| `AKIBA_HOST` | API bind host for service mode | `0.0.0.0` |
+| `AKIBA_PORT` | API port for service mode | `8000` |
+| `AKIBA_CONFIG` | Config path for service mode | `config/config.json` |
+| `AKIBA_NO_API` | Disable API in service mode | `false` |
+| `AKIBA_DRY_RUN` | Run service in dry-run mode | `false` |
 | `MAX_POSITION_SIZE` | Max portfolio fraction per trade | `0.05` |
 | `MAX_DAILY_LOSS` | Max daily loss fraction | `0.02` |
 | `STOP_LOSS_PERCENT` | Default stop-loss percentage | `0.02` |
 | `TAKE_PROFIT_PERCENT` | Default take-profit percentage | `0.04` |
-| `VULTR_API_KEY` | Vultr API key (for cloud deployment) | — |
 
 > [!TIP]
-> Copy `.env.example` to `.env` and fill in your credentials. Never commit `.env` to version control.
+> Copy `.env.example` to `.env` and fill in your runtime credentials. Keep deployment-only values such as `SERVER_IP` and SSH/Vultr secrets in GitHub Actions secrets and variables, not in the local `.env`.
 
 ---
 
