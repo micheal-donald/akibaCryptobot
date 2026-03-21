@@ -18,11 +18,14 @@ class ServiceRegistry:
                 self.register(name, service)
 
     def register(self, name: str, service: AsyncService) -> None:
-        if not name:
+        if not isinstance(name, str) or not name.strip():
             raise ValueError("service name must not be empty")
         if any(existing_name == name for existing_name, _ in self._services):
             raise ValueError(f"service '{name}' is already registered")
         self._services.append((name, service))
+
+    def has(self, name: str) -> bool:
+        return any(existing_name == name for existing_name, _ in self._services)
 
     def names(self) -> tuple[str, ...]:
         return tuple(name for name, _ in self._services)
@@ -38,6 +41,9 @@ class ServiceRegistry:
             if existing_name == name:
                 return service
         raise KeyError(name)
+
+    def __contains__(self, name: object) -> bool:
+        return isinstance(name, str) and self.has(name)
 
     async def start_all(self) -> None:
         started: list[AsyncService] = []

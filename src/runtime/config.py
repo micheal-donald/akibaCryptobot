@@ -1,11 +1,12 @@
-"""Runtime configuration objects for the phase 1 runtime shell."""
+"""Runtime configuration objects for the runtime shell."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Mapping, Sequence
 import json
+from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 
 @dataclass(slots=True, frozen=True)
@@ -15,31 +16,102 @@ class RuntimeConfig:
     symbols: tuple[str, ...]
     kline_intervals: tuple[str, ...]
     candle_history_limit: int = 2048
+    queue_maxsize: int = 0
     event_bus_maxsize: int = 0
+    stale_after_seconds: float = 30.0
     housekeeping_interval_seconds: float = 60.0
+    market_data_source: str = "binance"
+    sandbox_execution: bool = False
+    sandbox_market_data: bool = False
     shadow_mode: bool = True
+
+    def __post_init__(self) -> None:
+        if self.candle_history_limit <= 0:
+            raise ValueError("candle_history_limit must be positive")
+        if self.queue_maxsize < 0:
+            raise ValueError("queue_maxsize cannot be negative")
+        if self.event_bus_maxsize < 0:
+            raise ValueError("event_bus_maxsize cannot be negative")
+        if self.stale_after_seconds <= 0:
+            raise ValueError("stale_after_seconds must be positive")
+        if self.housekeeping_interval_seconds <= 0:
+            raise ValueError("housekeeping_interval_seconds must be positive")
+
+        if self.queue_maxsize == 0 and self.event_bus_maxsize > 0:
+            object.__setattr__(self, "queue_maxsize", self.event_bus_maxsize)
+        elif self.event_bus_maxsize == 0 and self.queue_maxsize > 0:
+            object.__setattr__(self, "event_bus_maxsize", self.queue_maxsize)
+        elif self.queue_maxsize != self.event_bus_maxsize:
+            raise ValueError(
+                "queue_maxsize and event_bus_maxsize must match when both are set"
+            )
+
+        normalized_market_data_source = self.market_data_source.strip()
+        if not normalized_market_data_source:
+            raise ValueError("market_data_source must not be empty")
+        object.__setattr__(self, "market_data_source", normalized_market_data_source)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "RuntimeConfig":
         """Create a runtime config from the existing nested config structure."""
 
-        runtime_section = data.get("runtime", {})
-        trading_section = data.get("trading", {})
+        runtime_section = cls._as_mapping(data.get("runtime"))
+        trading_section = cls._as_mapping(data.get("trading"))
+        exchange_section = cls._as_mapping(data.get("exchange"))
 
-        symbols = cls._as_string_tuple(trading_section.get("pairs", ()))
-        intervals = cls._as_string_tuple(
-            runtime_section.get("kline_intervals", ("1m",))
+        symbols = cls._resolve_symbols(runtime_section, trading_section)
+        intervals = cls._resolve_intervals(runtime_section, trading_section)
+        queue_maxsize = cls._coerce_int(
+            runtime_section.get("queue_maxsize"),
+            runtime_section.get("event_bus_maxsize"),
+            default=0,
+        )
+        event_bus_maxsize = cls._coerce_int(
+            runtime_section.get("event_bus_maxsize"),
+            runtime_section.get("queue_maxsize"),
+            default=queue_maxsize,
+        )
+        market_data_source = cls._resolve_market_data_source(
+            runtime_section,
+            exchange_section,
         )
 
         return cls(
             symbols=symbols,
             kline_intervals=intervals,
-            candle_history_limit=int(runtime_section.get("candle_history_limit", 2048)),
-            event_bus_maxsize=int(runtime_section.get("event_bus_maxsize", 0)),
-            housekeeping_interval_seconds=float(
-                runtime_section.get("housekeeping_interval_seconds", 60.0)
+            candle_history_limit=cls._coerce_int(
+                runtime_section.get("candle_history_limit"),
+                default=2048,
             ),
-            shadow_mode=bool(runtime_section.get("shadow_mode", True)),
+            queue_maxsize=queue_maxsize,
+            event_bus_maxsize=event_bus_maxsize,
+            stale_after_seconds=cls._coerce_float(
+                runtime_section.get("stale_after_seconds"),
+                default=30.0,
+            ),
+            housekeeping_interval_seconds=float(
+                cls._coerce_float(
+                    runtime_section.get("housekeeping_interval_seconds"),
+                    default=60.0,
+                )
+            ),
+            market_data_source=market_data_source,
+            sandbox_execution=cls._coerce_bool(
+                runtime_section.get("sandbox_execution"),
+                exchange_section.get("sandbox"),
+                trading_section.get("sandbox_execution"),
+                default=False,
+            ),
+            sandbox_market_data=cls._coerce_bool(
+                runtime_section.get("sandbox_market_data"),
+                exchange_section.get("market_data_sandbox"),
+                trading_section.get("sandbox_market_data"),
+                default=False,
+            ),
+            shadow_mode=cls._coerce_bool(
+                runtime_section.get("shadow_mode"),
+                default=True,
+            ),
         )
 
     @classmethod
@@ -55,7 +127,118 @@ class RuntimeConfig:
     @staticmethod
     def _as_string_tuple(values: Sequence[Any] | Any) -> tuple[str, ...]:
         if isinstance(values, str):
-            return (values,)
+            cleaned = values.strip()
+            return (cleaned,) if cleaned else ()
         if isinstance(values, Sequence):
-            return tuple(str(value) for value in values)
+            cleaned_values = []
+            for value in values:
+                if value is None:
+                    continue
+                text = str(value).strip()
+                if text:
+                    cleaned_values.append(text)
+            return tuple(cleaned_values)
         return ()
+
+    @staticmethod
+    def _as_mapping(value: Any) -> Mapping[str, Any]:
+        if isinstance(value, Mapping):
+            return value
+        return {}
+
+    @classmethod
+    def _resolve_symbols(
+        cls,
+        runtime_section: Mapping[str, Any],
+        trading_section: Mapping[str, Any],
+    ) -> tuple[str, ...]:
+        runtime_symbols = cls._as_string_tuple(runtime_section.get("symbols", ()))
+        if runtime_symbols:
+            return runtime_symbols
+        return cls._as_string_tuple(trading_section.get("pairs", ()))
+
+    @classmethod
+    def _resolve_intervals(
+        cls,
+        runtime_section: Mapping[str, Any],
+        trading_section: Mapping[str, Any],
+    ) -> tuple[str, ...]:
+        runtime_intervals = cls._as_string_tuple(
+            runtime_section.get("kline_intervals", ())
+        )
+        if runtime_intervals:
+            return runtime_intervals
+
+        timeframes = cls._as_mapping(trading_section.get("timeframes"))
+        preferred_order = ("primary", "secondary", "tertiary", "quaternary")
+        intervals: list[str] = []
+        for key in preferred_order:
+            value = timeframes.get(key)
+            if value is None:
+                continue
+            interval = str(value).strip()
+            if interval:
+                intervals.append(interval)
+
+        if intervals:
+            return tuple(intervals)
+
+        configured_intervals = cls._as_string_tuple(
+            trading_section.get("timeframes", ())
+        )
+        if configured_intervals:
+            return configured_intervals
+
+        return ("1m",)
+
+    @staticmethod
+    def _resolve_market_data_source(
+        runtime_section: Mapping[str, Any],
+        exchange_section: Mapping[str, Any],
+    ) -> str:
+        for candidate in (
+            runtime_section.get("market_data_source"),
+            exchange_section.get("market_data_source"),
+            exchange_section.get("name"),
+        ):
+            if candidate is None:
+                continue
+            text = str(candidate).strip()
+            if text:
+                return text
+        return "binance"
+
+    @staticmethod
+    def _coerce_bool(*values: Any, default: bool) -> bool:
+        for value in values:
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                return value
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if not normalized:
+                    continue
+                if normalized in {"1", "true", "yes", "y", "on"}:
+                    return True
+                if normalized in {"0", "false", "no", "n", "off"}:
+                    return False
+                raise ValueError(f"cannot interpret boolean value: {value!r}")
+            return bool(value)
+        return default
+
+    @staticmethod
+    def _coerce_int(*values: Any, default: int) -> int:
+        for value in values:
+            if value is None:
+                continue
+            return int(value)
+        return int(default)
+
+    @staticmethod
+    def _coerce_float(*values: Any, default: float) -> float:
+        for value in values:
+            if value is None:
+                continue
+            return float(value)
+        return float(default)
