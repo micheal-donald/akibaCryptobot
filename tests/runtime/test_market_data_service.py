@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from domain.events import BookTickerPayload, EventMeta, KlinePayload, RuntimeEvent
+from domain.models import Candle
 from runtime.config import RuntimeConfig
 from services.market_data_service import MarketDataService
 
@@ -34,7 +35,25 @@ class FakeMarketDataGateway:
         self.calls.append(("kline", symbol, interval))
 
 
-def build_service() -> tuple[MarketDataService, FakeMarketDataGateway, asyncio.Queue]:
+class FakeBootstrapGateway:
+    def __init__(self, payloads: dict[tuple[str, str], list[Candle]]) -> None:
+        self.payloads = payloads
+        self.calls: list[tuple[str, str, int]] = []
+
+    async def fetch_ohlcv(
+        self,
+        symbol: str,
+        interval: str,
+        limit: int,
+    ) -> list[Candle]:
+        self.calls.append((symbol, interval, limit))
+        return list(self.payloads.get((symbol, interval), ()))
+
+
+def build_service(
+    *,
+    bootstrap_gateway: FakeBootstrapGateway | None = None,
+) -> tuple[MarketDataService, FakeMarketDataGateway, asyncio.Queue]:
     gateway = FakeMarketDataGateway()
     queue: asyncio.Queue = asyncio.Queue()
     config = RuntimeConfig(
@@ -47,8 +66,28 @@ def build_service() -> tuple[MarketDataService, FakeMarketDataGateway, asyncio.Q
         gateway=gateway,
         runtime_config=config,
         event_bus=queue,
+        bootstrap_gateway=bootstrap_gateway,
     )
     return service, gateway, queue
+
+
+def _make_candle(
+    minute: int,
+    close: float,
+    *,
+    base_time: datetime,
+) -> Candle:
+    open_time = base_time + timedelta(minutes=minute)
+    close_time = open_time + timedelta(minutes=1)
+    return Candle(
+        open_time=open_time,
+        close_time=close_time,
+        open=close - 0.5,
+        high=close + 0.5,
+        low=close - 1.0,
+        close=close,
+        volume=25.0,
+    )
 
 
 def test_market_data_service_starts_and_subscribes() -> None:
@@ -72,6 +111,56 @@ def test_market_data_service_starts_and_subscribes() -> None:
         "market.kline",
         "market.kline_closed",
     }
+
+
+def test_market_data_service_bootstraps_history_before_subscribing() -> None:
+    base_time = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    bootstrap = FakeBootstrapGateway(
+        {
+            (
+                "BTCUSDT",
+                "1m",
+            ): [
+                _make_candle(0, 100.5, base_time=base_time),
+                _make_candle(1, 101.5, base_time=base_time),
+            ],
+            ("BTCUSDT", "15m"): [_make_candle(0, 110.5, base_time=base_time)],
+        }
+    )
+    service, gateway, _ = build_service(bootstrap_gateway=bootstrap)
+
+    async def run() -> None:
+        await service.start()
+        await service.stop()
+
+    asyncio.run(run())
+
+    assert bootstrap.calls == [
+        ("BTCUSDT", "1m", 16),
+        ("BTCUSDT", "15m", 16),
+    ]
+    assert gateway.calls[0] == "connect"
+    assert gateway.calls[1:] == [
+        ("book_ticker", "BTCUSDT"),
+        ("kline", "BTCUSDT", "1m"),
+        ("kline", "BTCUSDT", "15m"),
+        "disconnect",
+    ]
+
+    state = service.get_symbol_state("BTC/USDT")
+    assert state is not None
+    assert len(state.candles_1m) == 2
+    assert len(state.candle_buffers["15m"]) == 1
+    assert state.last_price == 110.5
+    assert (
+        state.last_kline_by_interval["1m"]
+        == _make_candle(
+            1,
+            101.5,
+            base_time=base_time,
+        ).close_time
+    )
+    assert state.is_stale is False
 
 
 def test_market_data_service_updates_state_and_publishes_tick_events() -> None:
@@ -152,12 +241,100 @@ def test_market_data_service_updates_kline_buffers_and_returns_snapshots() -> No
     assert queue.qsize() == 1
 
 
-def test_market_data_service_returns_read_only_snapshots() -> None:
+def test_market_data_service_tracks_multi_interval_candles() -> None:
     service, gateway, _ = build_service()
-    ts = datetime(2026, 3, 21, 12, 0, tzinfo=timezone.utc)
+    one_minute_close = datetime(2026, 3, 21, 12, 1, tzinfo=timezone.utc)
+    fifteen_minute_close = datetime(2026, 3, 21, 12, 15, tzinfo=timezone.utc)
 
     async def run() -> None:
         await service.start()
+        await gateway.callbacks["market.kline_closed"][0](
+            RuntimeEvent(
+                meta=EventMeta(
+                    event_id="evt-2a",
+                    event_type="market.kline_closed",
+                    source="binance.ws.kline.1m",
+                    symbol="BTCUSDT",
+                    ts_exchange=one_minute_close,
+                    ts_received=one_minute_close,
+                ),
+                payload=KlinePayload(
+                    interval="1m",
+                    open_time=one_minute_close,
+                    close_time=one_minute_close,
+                    open=100.0,
+                    high=101.0,
+                    low=99.5,
+                    close=100.5,
+                    volume=25.0,
+                    is_closed=True,
+                ),
+            )
+        )
+        await gateway.callbacks["market.kline_closed"][0](
+            RuntimeEvent(
+                meta=EventMeta(
+                    event_id="evt-2b",
+                    event_type="market.kline_closed",
+                    source="binance.ws.kline.15m",
+                    symbol="BTCUSDT",
+                    ts_exchange=fifteen_minute_close,
+                    ts_received=fifteen_minute_close,
+                ),
+                payload=KlinePayload(
+                    interval="15m",
+                    open_time=fifteen_minute_close,
+                    close_time=fifteen_minute_close,
+                    open=110.0,
+                    high=111.0,
+                    low=109.5,
+                    close=110.5,
+                    volume=30.0,
+                    is_closed=True,
+                ),
+            )
+        )
+
+    asyncio.run(run())
+
+    state = service.get_symbol_state("BTC/USDT")
+    assert state is not None
+    assert service.get_candles("BTC/USDT", "1m")[0].close == 100.5
+    assert service.get_candles("BTC/USDT", "15m")[0].close == 110.5
+    assert state.candle_buffers["15m"][-1].close == 110.5
+    assert state.last_kline_by_interval["15m"] == fifteen_minute_close
+
+
+def test_market_data_service_returns_read_only_snapshots() -> None:
+    service, gateway, _ = build_service()
+    ts = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+    close_time = ts + timedelta(minutes=1)
+
+    async def run() -> None:
+        await service.start()
+        await gateway.callbacks["market.kline_closed"][0](
+            RuntimeEvent(
+                meta=EventMeta(
+                    event_id="evt-2",
+                    event_type="market.kline_closed",
+                    source="binance.ws.kline.1m",
+                    symbol="BTCUSDT",
+                    ts_exchange=close_time,
+                    ts_received=close_time,
+                ),
+                payload=KlinePayload(
+                    interval="1m",
+                    open_time=ts,
+                    close_time=close_time,
+                    open=100.0,
+                    high=101.0,
+                    low=99.5,
+                    close=100.5,
+                    volume=25.0,
+                    is_closed=True,
+                ),
+            )
+        )
         await gateway.callbacks["market.tick"][0](
             RuntimeEvent(
                 meta=EventMeta(
@@ -182,4 +359,6 @@ def test_market_data_service_returns_read_only_snapshots() -> None:
     snapshot = service.get_symbol_state("BTC/USDT")
     assert snapshot is not None
     snapshot.best_bid = 1.0
+    snapshot.candles_1m.clear()
     assert service.get_symbol_state("BTC/USDT").best_bid == 100.0
+    assert len(service.get_symbol_state("BTC/USDT").candles_1m) == 1

@@ -8,9 +8,12 @@ from typing import Any, Protocol, runtime_checkable
 
 import pandas as pd
 
+from adapters.binance.symbol_mapper import BinanceSymbolMapper
 from domain.models import Candle
 from exchange.binance_client import BinanceClient
 from ports.exchange import MarketDataBootstrapGateway
+
+_SYMBOL_MAPPER = BinanceSymbolMapper()
 
 
 @runtime_checkable
@@ -57,8 +60,9 @@ class BinanceBootstrapGateway(MarketDataBootstrapGateway):
     ) -> list[Candle]:
         """Fetch historical candles and return normalized, typed objects."""
 
+        client_symbol = self._normalize_client_symbol(symbol)
         raw_ohlcv = await self.client.get_ohlcv(
-            symbol,
+            client_symbol,
             timeframe=interval,
             limit=limit,
         )
@@ -147,3 +151,14 @@ class BinanceBootstrapGateway(MarketDataBootstrapGateway):
                 epoch_value /= 1000.0
             return datetime.fromtimestamp(epoch_value, tz=timezone.utc)
         raise TypeError(f"unsupported timestamp value: {value!r}")
+
+    @staticmethod
+    def _normalize_client_symbol(symbol: str) -> str:
+        text = str(symbol).strip()
+        if not text:
+            raise ValueError("symbol must not be empty")
+        if "/" in text:
+            return _SYMBOL_MAPPER.to_canonical_symbol(
+                _SYMBOL_MAPPER.to_exchange_symbol(text)
+            )
+        return _SYMBOL_MAPPER.to_canonical_symbol(text)
