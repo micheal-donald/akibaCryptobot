@@ -69,7 +69,7 @@ class WebSocketManager:
         """Close all connections and clean up"""
         try:
             # Cancel all running tasks
-            for task_name, task in self.tasks.items():
+            for task in self.tasks.values():
                 if not task.done():
                     task.cancel()
                     try:
@@ -240,6 +240,43 @@ class WebSocketManager:
                         break
                     except Exception as e:
                         logger.error(f"Error in ticker stream {stream_name}: {e}")
+                        await asyncio.sleep(1)
+
+        task = asyncio.create_task(handle_socket())
+        self.tasks[stream_name] = task
+
+    async def subscribe_book_ticker(self, symbol: str):
+        """Subscribe to best bid/ask updates."""
+        stream_name = f"book_ticker_{symbol}"
+
+        if stream_name in self.sockets:
+            return
+
+        async def handle_socket():
+            socket = self.bm.symbol_book_ticker_socket(symbol)
+            async with socket as stream:
+                self.sockets[stream_name] = socket
+                logger.info(f"Subscribed to book ticker stream: {symbol}")
+
+                while True:
+                    try:
+                        msg = await stream.recv()
+
+                        parsed_data = {
+                            "symbol": symbol,
+                            "bid_price": float(msg.get("b", 0)),
+                            "bid_qty": float(msg.get("B", 0)),
+                            "ask_price": float(msg.get("a", 0)),
+                            "ask_qty": float(msg.get("A", 0)),
+                            "timestamp": datetime.now(),
+                        }
+
+                        await self._dispatch_event("book_ticker", parsed_data)
+
+                    except asyncio.CancelledError:
+                        break
+                    except Exception as e:
+                        logger.error(f"Error in book ticker stream {stream_name}: {e}")
                         await asyncio.sleep(1)
 
         task = asyncio.create_task(handle_socket())
