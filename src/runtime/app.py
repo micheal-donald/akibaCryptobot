@@ -41,11 +41,17 @@ class RuntimeApp:
     async def start(self) -> None:
         if self.is_running:
             return
-        await self.services.start_all()
+        try:
+            await self.services.start_all()
+        except Exception:
+            self.is_running = False
+            raise
         self.is_running = True
 
     async def stop(self) -> None:
         if not self.is_running and len(self.services) == 0:
             return
-        await self.services.stop_all()
-        self.is_running = False
+        try:
+            await self.services.stop_all()
+        finally:
+            self.is_running = False

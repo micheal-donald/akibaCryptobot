@@ -3,16 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Protocol, runtime_checkable
-
-
-@runtime_checkable
-class AsyncService(Protocol):
-    """Minimal async service contract used by the runtime shell."""
-
-    async def start(self) -> None: ...
-
-    async def stop(self) -> None: ...
+from services.base import AsyncService
 
 
 class ServiceRegistry:
@@ -49,8 +40,18 @@ class ServiceRegistry:
         raise KeyError(name)
 
     async def start_all(self) -> None:
-        for _, service in self._services:
-            await service.start()
+        started: list[AsyncService] = []
+        try:
+            for _, service in self._services:
+                await service.start()
+                started.append(service)
+        except Exception:
+            for service in reversed(started):
+                try:
+                    await service.stop()
+                except Exception:
+                    continue
+            raise
 
     async def stop_all(self) -> None:
         for _, service in reversed(self._services):
