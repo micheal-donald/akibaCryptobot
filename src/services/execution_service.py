@@ -6,6 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import cast
+from enum import StrEnum
 from uuid import uuid4
 
 from domain.events import (
@@ -17,9 +18,35 @@ from domain.events import (
     RuntimeEvent,
 )
 from domain.state import OrderState, OrderStatus
-from ports.exchange import ExecutionGateway, UserStreamGateway
+from ports.exchange import ExecutionGateway, ProtectionIntent, UserStreamGateway
 
 from .base import BaseService
+
+
+class ProtectionStatus(StrEnum):
+    """Runtime protection outcome for an entry order."""
+
+    PENDING = "pending"
+    NATIVE_SUBMITTED = "native_submitted"
+    DEGRADED = "degraded"
+
+
+@dataclass(slots=True)
+class ProtectionState:
+    """Mutable native protection outcome for a submitted entry order."""
+
+    client_order_id: str
+    symbol: str
+    requested_qty: float
+    stop_loss: float | None
+    take_profit: float | None
+    trailing_stop: float | None
+    status: ProtectionStatus = ProtectionStatus.PENDING
+    mode: str = "native"
+    submitted_order_ids: tuple[str, ...] = ()
+    reason: str | None = None
+    attempted_at: datetime | None = None
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass(slots=True)
@@ -33,7 +60,13 @@ class ExecutionService(BaseService):
     _submitted_orders: dict[str, OrderSubmittedPayload] = field(
         default_factory=dict, init=False, repr=False
     )
+    _order_intents: dict[str, OrderIntentPayload] = field(
+        default_factory=dict, init=False, repr=False
+    )
     _exchange_to_client_order_ids: dict[str, str] = field(
+        default_factory=dict, init=False, repr=False
+    )
+    _protection_states: dict[str, ProtectionState] = field(
         default_factory=dict, init=False, repr=False
     )
     _callbacks_registered: bool = field(default=False, init=False, repr=False)
@@ -101,6 +134,7 @@ class ExecutionService(BaseService):
         state.reduce_only = submitted.reduce_only
         state.status = OrderStatus.ACCEPTED
         state.updated_at = self._now()
+        self._order_intents[intent.intent_id] = intent
 
         if submitted.exchange_order_id is not None:
             self._exchange_to_client_order_ids[submitted.exchange_order_id] = (
@@ -176,6 +210,7 @@ class ExecutionService(BaseService):
                 payload.client_order_id
             )
         await self._emit_event(event)
+        await self._maybe_submit_native_protection(state)
 
     async def _handle_fill_event(self, event: RuntimeEvent) -> None:
         payload = cast(FillPayload, event.payload)
@@ -209,6 +244,7 @@ class ExecutionService(BaseService):
                 payload.client_order_id
             )
         await self._emit_event(event)
+        await self._maybe_submit_native_protection(state)
 
     async def _handle_balance_update_event(self, event: RuntimeEvent) -> None:
         await self._emit_event(event)
@@ -220,6 +256,128 @@ class ExecutionService(BaseService):
         if self.user_stream_gateway is not None:
             await self.user_stream_gateway.disconnect()
         await self.execution_gateway.disconnect()
+
+    async def _maybe_submit_native_protection(self, state: OrderState) -> None:
+        if state.status != OrderStatus.FILLED or state.reduce_only:
+            return
+
+        intent = self._order_intents.get(state.client_order_id)
+        if intent is None:
+            return
+
+        protection = self._build_protection_intent(intent)
+        if protection is None:
+            return
+
+        existing = self._protection_states.get(state.client_order_id)
+        if existing is not None and existing.status != ProtectionStatus.PENDING:
+            return
+
+        protection_state = ProtectionState(
+            client_order_id=state.client_order_id,
+            symbol=state.symbol,
+            requested_qty=max(state.filled_qty, state.requested_qty),
+            stop_loss=protection.stop_loss_price,
+            take_profit=protection.take_profit_price,
+            trailing_stop=protection.trailing_stop_price,
+            attempted_at=self._now(),
+        )
+
+        try:
+            submitted_orders = await self.execution_gateway.submit_protection(
+                state.symbol,
+                state.side,
+                protection_state.requested_qty,
+                protection,
+            )
+        except Exception as exc:
+            protection_state.status = ProtectionStatus.DEGRADED
+            protection_state.mode = "degraded"
+            protection_state.reason = str(exc)
+            protection_state.updated_at = self._now()
+            self._protection_states[state.client_order_id] = protection_state
+            await self._emit_protective_submission_event(protection_state)
+            return
+
+        protection_state.submitted_order_ids = tuple(
+            order.exchange_order_id
+            for order in submitted_orders
+            if order.exchange_order_id is not None
+        )
+        requested_count = self._requested_protection_count(protection)
+        if len(protection_state.submitted_order_ids) >= requested_count:
+            protection_state.status = ProtectionStatus.NATIVE_SUBMITTED
+            protection_state.mode = "native"
+            protection_state.reason = None
+        else:
+            protection_state.status = ProtectionStatus.DEGRADED
+            protection_state.mode = "degraded"
+            protection_state.reason = (
+                "native protection partially submitted"
+                if protection_state.submitted_order_ids
+                else "native protection unavailable"
+            )
+        protection_state.updated_at = self._now()
+        self._protection_states[state.client_order_id] = protection_state
+        await self._emit_protective_submission_event(protection_state)
+
+    async def _emit_protective_submission_event(
+        self, protection_state: ProtectionState
+    ) -> None:
+        await self._emit_event(
+            RuntimeEvent(
+                meta=EventMeta(
+                    event_id=uuid4().hex,
+                    event_type="position.protective_submitted",
+                    source="execution.service",
+                    symbol=protection_state.symbol,
+                    ts_exchange=None,
+                    ts_received=self._now(),
+                ),
+                payload={
+                    "client_order_id": protection_state.client_order_id,
+                    "symbol": protection_state.symbol,
+                    "status": protection_state.status.value,
+                    "mode": protection_state.mode,
+                    "requested_qty": protection_state.requested_qty,
+                    "submitted_order_ids": protection_state.submitted_order_ids,
+                    "reason": protection_state.reason,
+                    "stop_loss": protection_state.stop_loss,
+                    "take_profit": protection_state.take_profit,
+                    "trailing_stop": protection_state.trailing_stop,
+                    "attempted_at": protection_state.attempted_at,
+                    "updated_at": protection_state.updated_at,
+                },
+            )
+        )
+
+    @staticmethod
+    def _requested_protection_count(protection: ProtectionIntent) -> int:
+        return sum(
+            value is not None
+            for value in (
+                protection.stop_loss_price,
+                protection.take_profit_price,
+                protection.trailing_stop_price,
+            )
+        )
+
+    @staticmethod
+    def _build_protection_intent(
+        intent: OrderIntentPayload,
+    ) -> ProtectionIntent | None:
+        if (
+            intent.stop_loss is None
+            and intent.take_profit is None
+            and not intent.reduce_only
+        ):
+            return None
+        return ProtectionIntent(
+            stop_loss_price=intent.stop_loss,
+            take_profit_price=intent.take_profit,
+            trailing_stop_price=None,
+            native_preferred=True,
+        )
 
     def _create_order_state(self, intent: OrderIntentPayload) -> OrderState:
         return OrderState(
@@ -307,3 +465,8 @@ class ExecutionService(BaseService):
     @staticmethod
     def _now() -> datetime:
         return datetime.now(timezone.utc)
+
+    def get_protection_state(self, client_order_id: str) -> ProtectionState | None:
+        """Return the last known native protection outcome for an order."""
+
+        return self._protection_states.get(client_order_id)

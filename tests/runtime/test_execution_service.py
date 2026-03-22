@@ -22,6 +22,7 @@ class FakeExecutionGateway:
         self.connected = 0
         self.disconnected = 0
         self.submissions: list[OrderIntentPayload] = []
+        self.protection_calls: list[tuple[str, str, float, object]] = []
         self.next_response = OrderSubmittedPayload(
             client_order_id="intent-1",
             exchange_order_id="order-1",
@@ -32,6 +33,29 @@ class FakeExecutionGateway:
             requested_price=65000.0,
         )
         self.raise_on_submit: Exception | None = None
+        self.raise_on_protection: Exception | None = None
+        self.protection_response: tuple[OrderSubmittedPayload, ...] = (
+            OrderSubmittedPayload(
+                client_order_id="protect-1-sl",
+                exchange_order_id="protect-order-sl",
+                symbol="BTC/USDT",
+                side="sell",
+                order_type="stop_loss_limit",
+                requested_qty=0.5,
+                requested_price=63000.0,
+                reduce_only=True,
+            ),
+            OrderSubmittedPayload(
+                client_order_id="protect-1-tp",
+                exchange_order_id="protect-order-tp",
+                symbol="BTC/USDT",
+                side="sell",
+                order_type="take_profit_limit",
+                requested_qty=0.5,
+                requested_price=66000.0,
+                reduce_only=True,
+            ),
+        )
 
     async def connect(self) -> None:
         self.connected += 1
@@ -45,15 +69,23 @@ class FakeExecutionGateway:
         self.submissions.append(intent)
         return self.next_response
 
+    async def submit_protection(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        protection: object,
+    ) -> tuple[OrderSubmittedPayload, ...]:
+        if self.raise_on_protection is not None:
+            raise self.raise_on_protection
+        self.protection_calls.append((symbol, side, quantity, protection))
+        return self.protection_response
+
     async def cancel_order(self, symbol: str, exchange_order_id: str) -> None:
         del symbol, exchange_order_id
 
     async def fetch_order(self, symbol: str, exchange_order_id: str) -> None:
         del symbol, exchange_order_id
-
-    async def submit_protection(self, *args, **kwargs):  # pragma: no cover - unused
-        del args, kwargs
-        return ()
 
 
 class FakeUserStreamGateway:
@@ -166,6 +198,8 @@ def test_execution_service_tracks_user_stream_updates() -> None:
         side="buy",
         order_type="market",
         quantity=0.5,
+        stop_loss=63000.0,
+        take_profit=66000.0,
     )
     order_event = RuntimeEvent(
         meta=EventMeta(
@@ -227,11 +261,79 @@ def test_execution_service_tracks_user_stream_updates() -> None:
     assert state.status == "filled"
     assert state.filled_qty == 0.5
     assert state.avg_fill_price == 65010.5
-    assert event_bus.qsize() == 3
-    assert [event_bus.get_nowait().meta.event_type for _ in range(3)] == [
+    assert service.get_protection_state("intent-1") is not None
+    protection_state = service.get_protection_state("intent-1")
+    assert protection_state is not None
+    assert protection_state.status == "native_submitted"
+    assert protection_state.mode == "native"
+    assert protection_state.submitted_order_ids == (
+        "protect-order-sl",
+        "protect-order-tp",
+    )
+    assert event_bus.qsize() == 4
+    assert [event_bus.get_nowait().meta.event_type for _ in range(4)] == [
         "execution.order_submitted",
         "execution.order_update",
         "execution.fill",
+        "position.protective_submitted",
+    ]
+
+
+def test_execution_service_tracks_degraded_protection_state_on_failure() -> None:
+    service, execution_gateway, user_stream_gateway, event_bus = build_service()
+    execution_gateway.raise_on_protection = RuntimeError("native protection rejected")
+    intent = OrderIntentPayload(
+        intent_id="intent-2",
+        symbol="BTC/USDT",
+        side="buy",
+        order_type="market",
+        quantity=0.5,
+        stop_loss=63000.0,
+        take_profit=66000.0,
+    )
+    fill_event = RuntimeEvent(
+        meta=EventMeta(
+            event_id="evt-2",
+            event_type="execution.fill",
+            source="binance.ws.user.execution_report",
+            symbol="BTC/USDT",
+            ts_exchange=datetime(2026, 3, 22, 9, 0, tzinfo=timezone.utc),
+            ts_received=datetime(2026, 3, 22, 9, 0, tzinfo=timezone.utc),
+        ),
+        payload=FillPayload(
+            client_order_id="intent-2",
+            exchange_order_id="order-2",
+            symbol="BTC/USDT",
+            side="buy",
+            fill_qty=0.5,
+            fill_price=65010.5,
+            cumulative_qty=0.5,
+            cumulative_quote_qty=32505.25,
+            fee_cost=0.1,
+            fee_currency="USDT",
+            is_maker=False,
+            reduce_only=False,
+        ),
+    )
+
+    async def run() -> None:
+        await service.start()
+        await service.submit_order_intent(intent)
+        await user_stream_gateway.emit("execution.fill", fill_event)
+        await service.stop()
+
+    asyncio.run(run())
+
+    protection_state = service.get_protection_state("intent-2")
+    assert protection_state is not None
+    assert protection_state.status == "degraded"
+    assert protection_state.mode == "degraded"
+    assert protection_state.reason == "native protection rejected"
+    assert event_bus.qsize() == 3
+    assert [event_bus.get_nowait().meta.event_type for _ in range(3)] == [
+        "execution.order_submitted",
+        "execution.fill",
+        "position.protective_submitted",
     ]
 
 
