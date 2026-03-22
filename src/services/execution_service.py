@@ -180,6 +180,9 @@ class ExecutionService(BaseService):
     async def _handle_fill_event(self, event: RuntimeEvent) -> None:
         payload = cast(FillPayload, event.payload)
         state = self._resolve_order_state(payload)
+        state.order_id = payload.exchange_order_id or state.order_id
+        state.symbol = payload.symbol
+        state.side = payload.side
         previous_filled_qty = state.filled_qty
         cumulative_qty = max(float(payload.cumulative_qty), float(payload.fill_qty))
         state.filled_qty = max(state.filled_qty, cumulative_qty)

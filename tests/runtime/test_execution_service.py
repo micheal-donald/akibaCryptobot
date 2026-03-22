@@ -259,3 +259,49 @@ def test_execution_service_emits_rejection_on_submit_failure() -> None:
     event = event_bus.get_nowait()
     assert event.meta.event_type == "execution.order_rejected"
     assert event.payload["intent_id"] == "intent-1"
+
+
+def test_execution_service_creates_order_state_from_fill_first_updates() -> None:
+    service, _, user_stream_gateway, event_bus = build_service()
+    fill_event = RuntimeEvent(
+        meta=EventMeta(
+            event_id="evt-3",
+            event_type="execution.fill",
+            source="binance.ws.user.execution_report",
+            symbol="ETH/USDT",
+            ts_exchange=datetime(2026, 3, 22, 9, 5, tzinfo=timezone.utc),
+            ts_received=datetime(2026, 3, 22, 9, 5, tzinfo=timezone.utc),
+        ),
+        payload=FillPayload(
+            client_order_id="intent-fill-first",
+            exchange_order_id="order-fill-first",
+            symbol="ETH/USDT",
+            side="sell",
+            fill_qty=0.4,
+            fill_price=2200.5,
+            cumulative_qty=0.4,
+            cumulative_quote_qty=880.2,
+            fee_cost=0.05,
+            fee_currency="USDT",
+            is_maker=True,
+            reduce_only=True,
+        ),
+    )
+
+    async def run() -> None:
+        await service.start()
+        await user_stream_gateway.emit("execution.fill", fill_event)
+        await service.stop()
+
+    asyncio.run(run())
+
+    state = service.get_order_state("intent-fill-first")
+    assert state is not None
+    assert state.order_id == "order-fill-first"
+    assert state.symbol == "ETH/USDT"
+    assert state.side == "sell"
+    assert state.status == "filled"
+    assert state.filled_qty == 0.4
+    assert state.avg_fill_price == 2200.5
+    assert event_bus.qsize() == 1
+    assert event_bus.get_nowait().meta.event_type == "execution.fill"

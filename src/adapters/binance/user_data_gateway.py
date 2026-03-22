@@ -1,4 +1,4 @@
-"""Binance user-data gateway adapter for normalized execution events."""
+"""Binance websocket user-data adapter for normalized execution events."""
 
 from __future__ import annotations
 
@@ -17,18 +17,25 @@ from domain.events import (
     RuntimeEvent,
 )
 from exchange.websocket_manager import WebSocketManager
-from ports.exchange import (
-    UserStreamEventHandler,
-    UserStreamEventType,
-    UserStreamGateway,
-)
+from ports.exchange import UserStreamEventHandler, UserStreamGateway
 
+_SYMBOL_MAPPER = BinanceSymbolMapper()
 _SUPPORTED_EVENT_TYPES = {
     "execution.order_update",
     "execution.fill",
     "execution.balance_update",
 }
-_SYMBOL_MAPPER = BinanceSymbolMapper()
+_STATUS_MAP = {
+    "NEW": "accepted",
+    "OPEN": "accepted",
+    "PARTIALLY_FILLED": "partially_filled",
+    "FILLED": "filled",
+    "CANCELED": "cancelled",
+    "CANCELLED": "cancelled",
+    "PENDING_CANCEL": "cancel_pending",
+    "REJECTED": "rejected",
+    "EXPIRED": "expired",
+}
 
 
 @runtime_checkable
@@ -43,7 +50,7 @@ class _WebSocketManagerLike(Protocol):
 
 
 class BinanceUserDataGateway(UserStreamGateway):
-    """Normalize Binance user-data callbacks into runtime execution events."""
+    """Normalize Binance user-data callbacks into typed runtime execution events."""
 
     def __init__(
         self,
@@ -61,17 +68,17 @@ class BinanceUserDataGateway(UserStreamGateway):
             )
         self._manager = websocket_manager
         self._callbacks: dict[str, list[UserStreamEventHandler]] = defaultdict(list)
-        self._bridge_registered = False
+        self._bridges_registered = False
 
     async def connect(self) -> None:
         await self._manager.connect()
-        self._ensure_bridge()
+        self._ensure_bridges()
 
     async def disconnect(self) -> None:
         await self._manager.disconnect()
 
     async def subscribe_user_stream(self) -> None:
-        self._ensure_bridge()
+        self._ensure_bridges()
         await self._manager.subscribe_user_data()
 
     def register_order_update_handler(self, handler: UserStreamEventHandler) -> None:
@@ -83,212 +90,222 @@ class BinanceUserDataGateway(UserStreamGateway):
     def register_balance_update_handler(self, handler: UserStreamEventHandler) -> None:
         self._callbacks["execution.balance_update"].append(handler)
 
-    def _ensure_bridge(self) -> None:
-        if self._bridge_registered:
+    def _ensure_bridges(self) -> None:
+        if self._bridges_registered:
             return
         self._manager.register_callback("user", self._handle_user_event)
-        self._bridge_registered = True
+        self._bridges_registered = True
 
     async def _handle_user_event(self, data: dict[str, Any]) -> None:
-        event_type = self._detect_event_type(data)
-        if event_type is None:
-            return
+        try:
+            order_update_event = self._normalize_order_update_event(data)
+            if order_update_event is not None:
+                await self._dispatch("execution.order_update", order_update_event)
 
-        if event_type == "execution.balance_update":
-            event = self._build_balance_update_event(data)
-            if event is not None:
-                await self._dispatch(event_type, event)
-            return
-
-        if event_type == "execution.order_update":
-            order_event = self._build_order_update_event(data)
-            if order_event is not None:
-                await self._dispatch(event_type, order_event)
-
-            fill_event = self._build_fill_event(data)
+            fill_event = self._normalize_fill_event(data)
             if fill_event is not None:
                 await self._dispatch("execution.fill", fill_event)
 
-    async def _dispatch(
-        self, event_type: UserStreamEventType, event: RuntimeEvent
-    ) -> None:
+            balance_event = self._normalize_balance_update_event(data)
+            if balance_event is not None:
+                await self._dispatch("execution.balance_update", balance_event)
+        except (TypeError, ValueError):
+            return
+
+    async def _dispatch(self, event_type: str, event: RuntimeEvent) -> None:
+        if event_type not in _SUPPORTED_EVENT_TYPES:
+            raise ValueError(f"unsupported user-stream event type: {event_type}")
         for callback in self._callbacks[event_type]:
             result = callback(event)
             if inspect.isawaitable(result):
                 await cast(Any, result)
 
-    def _build_order_update_event(self, data: dict[str, Any]) -> RuntimeEvent | None:
-        symbol = self._normalize_symbol(
-            data.get("symbol") or data.get("s") or data.get("symbol_name")
-        )
-        if symbol is None:
+    def _normalize_order_update_event(
+        self, data: dict[str, Any]
+    ) -> RuntimeEvent | None:
+        event_type = data.get("type")
+        if event_type != "order_update" and data.get("e") != "executionReport":
             return None
 
-        payload = OrderUpdatePayload(
-            client_order_id=self._string_or_none(
-                data.get("client_order_id")
-                or data.get("clientOrderId")
-                or data.get("c")
-            ),
-            exchange_order_id=self._string_or_none(
-                data.get("order_id") or data.get("orderId") or data.get("i")
-            ),
-            symbol=symbol,
-            status=self._normalize_status(data),
-            filled_qty=self._float_or_default(
-                data.get("filled_quantity") or data.get("filledQty") or data.get("z"),
-                default=0.0,
-            ),
-            remaining_qty=self._float_or_default(
-                data.get("remaining_quantity")
-                or data.get("remainingQty")
-                or self._derive_remaining_qty(data),
-                default=0.0,
-            ),
-            avg_fill_price=self._optional_float(
-                data.get("avg_fill_price")
-                or data.get("avgPrice")
-                or data.get("average")
-                or data.get("L")
-            ),
-            reduce_only=self._bool_or_default(
-                data.get("reduce_only") or data.get("reduceOnly"),
-                default=False,
-            ),
-            raw_status=self._string_or_none(data.get("raw_status") or data.get("X")),
+        raw_status = self._extract_value(data, "status", "X")
+        symbol = self._normalize_symbol(self._extract_value(data, "symbol", "s"))
+        if symbol is None:
+            return None
+        filled_qty = self._extract_float(data, "filled_quantity", "z", default=0.0)
+        requested_qty = self._extract_float(data, "quantity", "q", default=0.0)
+        remaining_qty = self._extract_float(
+            data,
+            "remaining_quantity",
+            "remainingQty",
+            default=max(requested_qty - filled_qty, 0.0),
+        )
+        cumulative_quote = self._extract_optional_float(
+            data, "cumulative_quote_quantity", "Z"
+        )
+        avg_fill_price = self._extract_average_fill_price(
+            data,
+            filled_qty=filled_qty,
+            cumulative_quote=cumulative_quote,
         )
 
         return RuntimeEvent(
             meta=EventMeta(
                 event_id=uuid4().hex,
                 event_type="execution.order_update",
-                source="binance.ws.user_data",
+                source="binance.ws.user.execution_report",
                 symbol=symbol,
-                ts_exchange=self._coerce_datetime(
-                    data.get("timestamp") or data.get("E")
-                ),
+                ts_exchange=self._extract_event_timestamp(data),
                 ts_received=datetime.now(timezone.utc),
             ),
-            payload=payload,
+            payload=OrderUpdatePayload(
+                client_order_id=self._extract_string(data, "client_order_id", "c"),
+                exchange_order_id=self._extract_string(data, "order_id", "i"),
+                symbol=symbol,
+                status=self._normalize_status(raw_status),
+                filled_qty=filled_qty,
+                remaining_qty=remaining_qty,
+                avg_fill_price=avg_fill_price,
+                reduce_only=bool(
+                    self._extract_value(data, "reduce_only", "R") or False
+                ),
+                raw_status=str(raw_status) if raw_status is not None else None,
+            ),
         )
 
-    def _build_fill_event(self, data: dict[str, Any]) -> RuntimeEvent | None:
-        symbol = self._normalize_symbol(
-            data.get("symbol") or data.get("s") or data.get("symbol_name")
-        )
-        if symbol is None:
-            return None
-
-        fill_qty = self._float_or_default(
-            data.get("last_fill_qty")
-            or data.get("lastExecutedQty")
-            or data.get("last_executed_qty")
-            or data.get("l")
-            or data.get("filled_quantity")
-            or data.get("filledQty")
-            or data.get("z"),
+    def _normalize_fill_event(self, data: dict[str, Any]) -> RuntimeEvent | None:
+        event_type = data.get("type")
+        execution_type = self._extract_string(data, "execution_type", "x")
+        last_fill_qty = self._extract_float(
+            data,
+            "last_filled_quantity",
+            "last_fill_qty",
             default=0.0,
         )
-        if fill_qty <= 0:
+        if last_fill_qty <= 0:
+            last_fill_qty = self._extract_float(
+                data,
+                "l",
+                "lastExecutedQty",
+                default=0.0,
+            )
+        if last_fill_qty <= 0:
+            last_fill_qty = self._extract_float(
+                data,
+                "last_executed_qty",
+                "filled_quantity",
+                default=0.0,
+            )
+        if data.get("e") == "executionReport":
+            if execution_type != "TRADE" or last_fill_qty <= 0:
+                return None
+        elif event_type == "order_update":
+            if execution_type not in {"TRADE", "trade"} or last_fill_qty <= 0:
+                return None
+        else:
             return None
 
-        payload = FillPayload(
-            client_order_id=self._string_or_none(
-                data.get("client_order_id")
-                or data.get("clientOrderId")
-                or data.get("c")
-            ),
-            exchange_order_id=self._string_or_none(
-                data.get("order_id") or data.get("orderId") or data.get("i")
-            ),
-            symbol=symbol,
-            side=self._normalize_side(data.get("side") or data.get("S")),
-            fill_qty=fill_qty,
-            fill_price=self._float_or_default(
-                data.get("fill_price")
-                or data.get("lastPrice")
-                or data.get("L")
-                or data.get("price")
-                or 0.0,
-                default=0.0,
-            ),
-            cumulative_qty=self._float_or_default(
-                data.get("cumulative_qty")
-                or data.get("filled_quantity")
-                or data.get("z"),
-                default=fill_qty,
-            ),
-            cumulative_quote_qty=self._optional_float(
-                data.get("cumulative_quote_qty")
-                or data.get("quoteQty")
-                or data.get("Z")
-            ),
-            fee_cost=self._optional_float(data.get("fee_cost") or data.get("n")),
-            fee_currency=self._string_or_none(
-                data.get("fee_currency") or data.get("N")
-            ),
-            is_maker=self._optional_bool(data.get("is_maker") or data.get("m")),
-            reduce_only=self._bool_or_default(
-                data.get("reduce_only") or data.get("reduceOnly"),
-                default=False,
-            ),
+        symbol = self._normalize_symbol(self._extract_value(data, "symbol", "s"))
+        side = self._normalize_side(self._extract_value(data, "side", "S"))
+        if symbol is None or side is None:
+            return None
+        fill_price = self._extract_optional_float(data, "last_fill_price", "L")
+        if fill_price is None:
+            fill_price = self._extract_optional_float(data, "fill_price", "price")
+        if fill_price is None:
+            fill_price = self._extract_optional_float(data, "lastPrice", "p")
+        cumulative_qty = self._extract_float(
+            data,
+            "filled_quantity",
+            "z",
+            default=last_fill_qty,
         )
 
         return RuntimeEvent(
             meta=EventMeta(
                 event_id=uuid4().hex,
                 event_type="execution.fill",
-                source="binance.ws.user_data",
+                source="binance.ws.user.execution_report",
                 symbol=symbol,
-                ts_exchange=self._coerce_datetime(
-                    data.get("timestamp") or data.get("E")
-                ),
+                ts_exchange=self._extract_event_timestamp(data),
                 ts_received=datetime.now(timezone.utc),
             ),
-            payload=payload,
+            payload=FillPayload(
+                client_order_id=self._extract_string(data, "client_order_id", "c"),
+                exchange_order_id=self._extract_string(data, "order_id", "i"),
+                symbol=symbol,
+                side=side,
+                fill_qty=last_fill_qty,
+                fill_price=float(fill_price or 0.0),
+                cumulative_qty=cumulative_qty,
+                cumulative_quote_qty=self._extract_optional_float(
+                    data, "cumulative_quote_quantity", "Z"
+                ),
+                fee_cost=self._extract_optional_float(data, "fee_cost", "n"),
+                fee_currency=self._extract_string(data, "fee_currency", "N"),
+                is_maker=self._extract_optional_bool(data, "is_maker", "m"),
+                reduce_only=bool(
+                    self._extract_value(data, "reduce_only", "R") or False
+                ),
+            ),
         )
 
-    def _build_balance_update_event(self, data: dict[str, Any]) -> RuntimeEvent | None:
-        balances = data.get("balances") or data.get("B")
-        normalized_balances = self._normalize_balances(balances)
-        if not normalized_balances:
+    def _normalize_balance_update_event(
+        self, data: dict[str, Any]
+    ) -> RuntimeEvent | None:
+        event_type = data.get("type")
+        if (
+            event_type != "balance_update"
+            and data.get("e") != "outboundAccountPosition"
+        ):
+            return None
+
+        balances = self._normalize_balances(data.get("balances") or data.get("B"))
+        if not balances:
             return None
 
         return RuntimeEvent(
             meta=EventMeta(
                 event_id=uuid4().hex,
                 event_type="execution.balance_update",
-                source="binance.ws.user_data",
+                source="binance.ws.user.account_position",
                 symbol=None,
-                ts_exchange=self._coerce_datetime(
-                    data.get("timestamp") or data.get("E")
-                ),
+                ts_exchange=self._extract_event_timestamp(data),
                 ts_received=datetime.now(timezone.utc),
             ),
-            payload=BalanceUpdatePayload(balances=normalized_balances),
+            payload=BalanceUpdatePayload(balances=balances),
         )
 
-    @staticmethod
-    def _derive_remaining_qty(data: dict[str, Any]) -> float | None:
-        original_qty = BinanceUserDataGateway._optional_float(
-            data.get("original_quantity") or data.get("originalQty") or data.get("q")
-        )
-        filled_qty = BinanceUserDataGateway._optional_float(
-            data.get("filled_quantity") or data.get("filledQty") or data.get("z")
-        )
-        if original_qty is None:
-            return None
-        return max(original_qty - (filled_qty or 0.0), 0.0)
+    def _extract_average_fill_price(
+        self,
+        data: dict[str, Any],
+        *,
+        filled_qty: float,
+        cumulative_quote: float | None,
+    ) -> float | None:
+        direct_value = self._extract_optional_float(data, "avg_fill_price", "avgPrice")
+        if direct_value is not None:
+            return direct_value
+        direct_value = self._extract_optional_float(data, "last_fill_price", "L")
+        if direct_value is not None:
+            return direct_value
+        if cumulative_quote is not None and filled_qty > 0:
+            return cumulative_quote / filled_qty
+        return None
 
-    @staticmethod
-    def _detect_event_type(data: dict[str, Any]) -> str | None:
-        event_type = data.get("type") or data.get("e")
-        if event_type in {"order_update", "executionReport"}:
-            return "execution.order_update"
-        if event_type in {"balance_update", "outboundAccountPosition", "balanceUpdate"}:
-            return "execution.balance_update"
-        if event_type in {"balance_update"}:
-            return "execution.balance_update"
+    def _extract_event_timestamp(self, data: dict[str, Any]) -> datetime | None:
+        for key in (
+            "trade_time",
+            "T",
+            "event_time",
+            "E",
+            "update_time",
+            "u",
+            "timestamp",
+        ):
+            value = data.get(key)
+            coerced = self._coerce_datetime(value)
+            if coerced is not None:
+                return coerced
         return None
 
     @staticmethod
@@ -298,61 +315,25 @@ class BinanceUserDataGateway(UserStreamGateway):
         text = str(symbol).strip()
         if not text:
             return None
-        try:
-            return _SYMBOL_MAPPER.to_canonical_symbol(text)
-        except ValueError:
+        if "/" in text:
+            return _SYMBOL_MAPPER.to_canonical_symbol(
+                _SYMBOL_MAPPER.to_exchange_symbol(text)
+            )
+        return _SYMBOL_MAPPER.to_canonical_symbol(text)
+
+    @staticmethod
+    def _normalize_side(side: Any) -> str | None:
+        normalized = str(side or "").strip().lower()
+        if normalized not in {"buy", "sell"}:
             return None
-
-    @staticmethod
-    def _normalize_side(side: Any) -> str:
-        text = str(side or "").strip().lower()
-        if text in {"buy", "b"}:
-            return "buy"
-        if text in {"sell", "s"}:
-            return "sell"
-        return "buy"
-
-    @staticmethod
-    def _normalize_status(data: dict[str, Any]) -> str:
-        status = str(
-            data.get("status") or data.get("X") or data.get("raw_status") or "unknown"
-        )
-        normalized = status.strip().lower()
-        mapping = {
-            "new": "accepted",
-            "partially_filled": "partially_filled",
-            "partiallyfilled": "partially_filled",
-            "filled": "filled",
-            "canceled": "cancelled",
-            "cancelled": "cancelled",
-            "rejected": "rejected",
-            "expired": "expired",
-        }
-        return mapping.get(normalized, normalized)
-
-    @staticmethod
-    def _normalize_balances(balances: Any) -> dict[str, dict[str, float]]:
-        if not isinstance(balances, (list, tuple)):
-            return {}
-
-        normalized: dict[str, dict[str, float]] = {}
-        for item in balances:
-            if not isinstance(item, dict):
-                continue
-            asset = str(item.get("a") or item.get("asset") or "").strip().upper()
-            if not asset:
-                continue
-            normalized[asset] = {
-                "free": BinanceUserDataGateway._float_or_default(
-                    item.get("f") or item.get("free"),
-                    default=0.0,
-                ),
-                "locked": BinanceUserDataGateway._float_or_default(
-                    item.get("l") or item.get("locked"),
-                    default=0.0,
-                ),
-            }
         return normalized
+
+    @staticmethod
+    def _normalize_status(status: Any) -> str:
+        normalized = str(status).strip().upper()
+        if not normalized:
+            return "unknown"
+        return _STATUS_MAP.get(normalized, normalized.lower())
 
     @staticmethod
     def _coerce_datetime(value: Any) -> datetime | None:
@@ -368,14 +349,37 @@ class BinanceUserDataGateway(UserStreamGateway):
         return None
 
     @staticmethod
-    def _string_or_none(value: Any) -> str | None:
-        if value is None:
-            return None
-        text = str(value).strip()
-        return text or None
+    def _extract_value(data: dict[str, Any], primary: str, fallback: str) -> Any:
+        if primary in data and data[primary] is not None:
+            return data[primary]
+        return data.get(fallback)
 
     @staticmethod
-    def _optional_float(value: Any) -> float | None:
+    def _extract_string(
+        data: dict[str, Any], primary: str, fallback: str
+    ) -> str | None:
+        value = BinanceUserDataGateway._extract_value(data, primary, fallback)
+        if value is None:
+            return None
+        return str(value)
+
+    @staticmethod
+    def _extract_float(
+        data: dict[str, Any], primary: str, fallback: str, *, default: float
+    ) -> float:
+        value = BinanceUserDataGateway._extract_value(data, primary, fallback)
+        if value is None or value == "":
+            return default
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _extract_optional_float(
+        data: dict[str, Any], primary: str, fallback: str
+    ) -> float | None:
+        value = BinanceUserDataGateway._extract_value(data, primary, fallback)
         if value is None or value == "":
             return None
         try:
@@ -384,30 +388,45 @@ class BinanceUserDataGateway(UserStreamGateway):
             return None
 
     @staticmethod
-    def _float_or_default(value: Any, *, default: float) -> float:
-        if value is None or value == "":
-            return default
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
-
-    @staticmethod
-    def _bool_or_default(value: Any, *, default: bool) -> bool:
+    def _extract_optional_bool(
+        data: dict[str, Any], primary: str, fallback: str
+    ) -> bool | None:
+        value = BinanceUserDataGateway._extract_value(data, primary, fallback)
         if value is None:
-            return default
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"true", "1", "yes", "y"}:
-                return True
-            if normalized in {"false", "0", "no", "n"}:
-                return False
+            return None
         return bool(value)
 
     @staticmethod
-    def _optional_bool(value: Any) -> bool | None:
-        if value is None:
-            return None
-        return BinanceUserDataGateway._bool_or_default(value, default=False)
+    def _normalize_balances(balances: Any) -> dict[str, dict[str, float]]:
+        if isinstance(balances, dict):
+            normalized: dict[str, dict[str, float]] = {}
+            for asset, amounts in balances.items():
+                if not isinstance(amounts, dict):
+                    continue
+                normalized[str(asset).upper()] = {
+                    "free": BinanceUserDataGateway._extract_float(
+                        amounts, "free", "f", default=0.0
+                    ),
+                    "locked": BinanceUserDataGateway._extract_float(
+                        amounts, "locked", "l", default=0.0
+                    ),
+                }
+            return normalized
+        if not isinstance(balances, list):
+            return {}
+        normalized = {}
+        for item in balances:
+            if not isinstance(item, dict):
+                continue
+            asset = str(item.get("a") or item.get("asset") or "").strip().upper()
+            if not asset:
+                continue
+            normalized[asset] = {
+                "free": BinanceUserDataGateway._extract_float(
+                    item, "free", "f", default=0.0
+                ),
+                "locked": BinanceUserDataGateway._extract_float(
+                    item, "locked", "l", default=0.0
+                ),
+            }
+        return normalized

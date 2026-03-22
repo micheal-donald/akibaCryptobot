@@ -351,13 +351,16 @@ class WebSocketManager:
                                     }
                                     for b in msg.get("B", [])
                                 },
-                                "timestamp": datetime.now(),
+                                "timestamp": msg.get("E"),
+                                "event_time": msg.get("E"),
+                                "update_time": msg.get("u"),
                             }
                         elif event_type == "executionReport":
                             # Order update
                             parsed_data = {
                                 "type": "order_update",
                                 "symbol": msg.get("s"),
+                                "client_order_id": msg.get("c"),
                                 "order_id": msg.get("i"),
                                 "side": msg.get("S"),
                                 "order_type": msg.get("o"),
@@ -365,7 +368,21 @@ class WebSocketManager:
                                 "price": float(msg.get("p", 0)),
                                 "quantity": float(msg.get("q", 0)),
                                 "filled_quantity": float(msg.get("z", 0)),
-                                "timestamp": datetime.now(),
+                                "last_fill_qty": float(msg.get("l", 0)),
+                                "last_filled_quantity": float(msg.get("l", 0)),
+                                "fill_price": float(msg.get("L", 0)),
+                                "last_fill_price": float(msg.get("L", 0)),
+                                "execution_type": msg.get("x"),
+                                "cumulative_quote_qty": float(msg.get("Z", 0)),
+                                "cumulative_quote_quantity": float(msg.get("Z", 0)),
+                                "fee_cost": float(msg.get("n", 0)),
+                                "fee_currency": msg.get("N"),
+                                "is_maker": msg.get("m", False),
+                                "reduce_only": msg.get("R", False),
+                                "raw_status": msg.get("X"),
+                                "event_time": msg.get("E"),
+                                "trade_time": msg.get("T"),
+                                "timestamp": msg.get("T") or msg.get("E"),
                             }
                         else:
                             parsed_data = msg
