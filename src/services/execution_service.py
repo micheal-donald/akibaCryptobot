@@ -13,8 +13,10 @@ from domain.events import (
     EventMeta,
     FillPayload,
     OrderIntentPayload,
+    OrderRejectedPayload,
     OrderSubmittedPayload,
     OrderUpdatePayload,
+    ProtectionSubmittedPayload,
     RuntimeEvent,
 )
 from domain.state import OrderState, OrderStatus
@@ -116,11 +118,11 @@ class ExecutionService(BaseService):
                         ts_exchange=None,
                         ts_received=self._now(),
                     ),
-                    payload={
-                        "intent_id": intent.intent_id,
-                        "symbol": intent.symbol,
-                        "reason": str(exc),
-                    },
+                    payload=OrderRejectedPayload(
+                        intent_id=intent.intent_id,
+                        symbol=intent.symbol,
+                        reason=str(exc),
+                    ),
                 )
             )
             raise
@@ -443,20 +445,20 @@ class ExecutionService(BaseService):
                     ts_exchange=None,
                     ts_received=self._now(),
                 ),
-                payload={
-                    "client_order_id": protection_state.client_order_id,
-                    "symbol": protection_state.symbol,
-                    "status": protection_state.status.value,
-                    "mode": protection_state.mode,
-                    "requested_qty": protection_state.requested_qty,
-                    "submitted_order_ids": protection_state.submitted_order_ids,
-                    "reason": protection_state.reason,
-                    "stop_loss": protection_state.stop_loss,
-                    "take_profit": protection_state.take_profit,
-                    "trailing_stop": protection_state.trailing_stop,
-                    "attempted_at": protection_state.attempted_at,
-                    "updated_at": protection_state.updated_at,
-                },
+                payload=ProtectionSubmittedPayload(
+                    client_order_id=protection_state.client_order_id,
+                    symbol=protection_state.symbol,
+                    status=protection_state.status.value,  # type: ignore[arg-type]
+                    mode=protection_state.mode,  # type: ignore[arg-type]
+                    requested_qty=protection_state.requested_qty,
+                    submitted_order_ids=protection_state.submitted_order_ids,
+                    reason=protection_state.reason,
+                    stop_loss=protection_state.stop_loss,
+                    take_profit=protection_state.take_profit,
+                    trailing_stop=protection_state.trailing_stop,
+                    attempted_at=protection_state.attempted_at,
+                    updated_at=protection_state.updated_at,
+                ),
             )
         )
 

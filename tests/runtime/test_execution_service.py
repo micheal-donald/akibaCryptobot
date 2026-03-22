@@ -10,8 +10,10 @@ from domain.events import (
     EventMeta,
     FillPayload,
     OrderIntentPayload,
+    OrderRejectedPayload,
     OrderSubmittedPayload,
     OrderUpdatePayload,
+    ProtectionSubmittedPayload,
     RuntimeEvent,
 )
 from services.execution_service import ExecutionService
@@ -271,12 +273,14 @@ def test_execution_service_tracks_user_stream_updates() -> None:
         "protect-order-tp",
     )
     assert event_bus.qsize() == 4
-    assert [event_bus.get_nowait().meta.event_type for _ in range(4)] == [
+    events = [event_bus.get_nowait() for _ in range(4)]
+    assert [event.meta.event_type for event in events] == [
         "execution.order_submitted",
         "execution.order_update",
         "execution.fill",
         "position.protective_submitted",
     ]
+    assert isinstance(events[-1].payload, ProtectionSubmittedPayload)
 
 
 def test_execution_service_tracks_degraded_protection_state_on_failure() -> None:
@@ -330,11 +334,13 @@ def test_execution_service_tracks_degraded_protection_state_on_failure() -> None
     assert protection_state.mode == "degraded"
     assert protection_state.reason == "native protection rejected"
     assert event_bus.qsize() == 3
-    assert [event_bus.get_nowait().meta.event_type for _ in range(3)] == [
+    events = [event_bus.get_nowait() for _ in range(3)]
+    assert [event.meta.event_type for event in events] == [
         "execution.order_submitted",
         "execution.fill",
         "position.protective_submitted",
     ]
+    assert isinstance(events[-1].payload, ProtectionSubmittedPayload)
 
 
 def test_execution_service_emits_rejection_on_submit_failure() -> None:
@@ -360,7 +366,8 @@ def test_execution_service_emits_rejection_on_submit_failure() -> None:
     assert event_bus.qsize() == 1
     event = event_bus.get_nowait()
     assert event.meta.event_type == "execution.order_rejected"
-    assert event.payload["intent_id"] == "intent-1"
+    assert isinstance(event.payload, OrderRejectedPayload)
+    assert event.payload.intent_id == "intent-1"
 
 
 def test_execution_service_creates_order_state_from_fill_first_updates() -> None:

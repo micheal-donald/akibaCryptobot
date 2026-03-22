@@ -10,6 +10,7 @@ from domain.events import (
     OrderIntentPayload,
     OrderSubmittedPayload,
     OrderUpdatePayload,
+    ProtectionSubmittedPayload,
     RuntimeEvent,
 )
 from services.execution_service import ExecutionService
@@ -154,15 +155,15 @@ async def _drain_runtime_events(
         elif event.meta.event_type == "position.protective_submitted":
             payload = event.payload
             if (
-                isinstance(payload, dict)
-                and payload.get("status") == "native_submitted"
+                isinstance(payload, ProtectionSubmittedPayload)
+                and payload.status == "native_submitted"
             ):
                 position_service.mark_protective_orders(
-                    str(payload["client_order_id"]),
-                    tuple(str(order_id) for order_id in payload["submitted_order_ids"]),
-                    stop_loss=payload.get("stop_loss"),
-                    take_profit=payload.get("take_profit"),
-                    trailing_stop=payload.get("trailing_stop"),
+                    payload.client_order_id,
+                    payload.submitted_order_ids,
+                    stop_loss=payload.stop_loss,
+                    take_profit=payload.take_profit,
+                    trailing_stop=payload.trailing_stop,
                 )
     return seen
 

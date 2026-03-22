@@ -5,10 +5,12 @@ from datetime import datetime, timezone
 from domain.events import (
     FillPayload,
     OrderIntentPayload,
+    OrderRejectedPayload,
     OrderSubmittedPayload,
     OrderUpdatePayload,
     PositionClosedPayload,
     PositionOpenedPayload,
+    ProtectionSubmittedPayload,
     RiskBlockedPayload,
 )
 from domain.state import OrderState, OrderStatus, PositionState, PositionStatus
@@ -67,6 +69,29 @@ def test_order_and_fill_payloads_capture_normalized_execution_fields() -> None:
     assert update.status == "accepted"
     assert fill.fill_price == 65000.0
     assert fill.fee_currency == "USDT"
+
+
+def test_rejected_and_protective_submission_payloads_capture_runtime_outcomes() -> None:
+    rejected = OrderRejectedPayload(
+        intent_id="intent-1",
+        symbol="BTC/USDT",
+        reason="precision filter rejected",
+    )
+    protective = ProtectionSubmittedPayload(
+        client_order_id="intent-1",
+        symbol="BTC/USDT",
+        status="native_submitted",
+        mode="native",
+        requested_qty=0.01,
+        submitted_order_ids=("sl-1", "tp-1"),
+        reason=None,
+        stop_loss=64000.0,
+        take_profit=70000.0,
+    )
+
+    assert rejected.reason == "precision filter rejected"
+    assert protective.status == "native_submitted"
+    assert protective.submitted_order_ids == ("sl-1", "tp-1")
 
 
 def test_position_and_risk_payloads_capture_lifecycle_outcomes() -> None:

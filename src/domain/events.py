@@ -183,3 +183,30 @@ class RiskBlockedPayload:
     intent_id: str
     symbol: str
     reason: str
+
+
+@dataclass(slots=True, frozen=True)
+class OrderRejectedPayload:
+    """Execution rejection emitted when order submission fails."""
+
+    intent_id: str
+    symbol: str
+    reason: str
+
+
+@dataclass(slots=True, frozen=True)
+class ProtectionSubmittedPayload:
+    """Execution outcome for native or degraded protective order submission."""
+
+    client_order_id: str
+    symbol: str
+    status: Literal["native_submitted", "degraded"]
+    mode: Literal["native", "degraded"]
+    requested_qty: float
+    submitted_order_ids: tuple[str, ...]
+    reason: str | None = None
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    trailing_stop: float | None = None
+    attempted_at: datetime | None = None
+    updated_at: datetime | None = None
