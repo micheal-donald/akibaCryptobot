@@ -50,13 +50,14 @@ def build_intent(
 def build_open_position(
     *,
     symbol: str = "BTC/USDT",
+    side: str = "buy",
     open_qty: float = 0.01,
     status: PositionStatus = PositionStatus.OPEN,
 ) -> PositionState:
     return PositionState(
         position_id="pos-1",
         symbol=symbol,
-        side="buy",
+        side=side,
         requested_qty=open_qty,
         status=status,
         open_qty=open_qty,
@@ -150,3 +151,18 @@ def test_risk_service_allows_reduce_only_close_for_open_symbol() -> None:
 
     assert decision.allowed is True
     assert event_bus.empty()
+
+
+def test_risk_service_blocks_reduce_only_same_side_as_open_position() -> None:
+    service, event_bus = build_service()
+    intent = build_intent(reduce_only=True, quantity=0.005, side="buy")
+
+    decision = service.evaluate_intent(
+        intent, runtime_positions=(build_open_position(side="buy"),)
+    )
+
+    assert decision.allowed is False
+    assert decision.reason == "reduce_only_same_side"
+    event = event_bus.get_nowait()
+    assert isinstance(event.payload, RiskBlockedPayload)
+    assert event.payload.reason == "reduce_only_same_side"

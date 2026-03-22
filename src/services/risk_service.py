@@ -102,6 +102,8 @@ class RiskService(BaseService):
         if current_position is not None and current_position.open_qty > 0:
             if not intent.reduce_only:
                 return "duplicate_symbol_position"
+            if intent.side == current_position.side:
+                return "reduce_only_same_side"
             if intent.quantity > current_position.open_qty + 1e-12:
                 return "reduce_only_quantity_exceeds_open_qty"
 
