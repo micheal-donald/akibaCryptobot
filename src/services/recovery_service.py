@@ -59,6 +59,7 @@ class RestartRecoveryService(BaseService):
     position_service: PositionService
     max_recovery_items: int = 100
     fetch_timeout_seconds: float = 5.0
+    reapply_native_protection: bool = False
     _last_report: RecoveryReport | None = field(default=None, init=False, repr=False)
 
     async def on_start(self) -> None:
@@ -129,32 +130,48 @@ class RestartRecoveryService(BaseService):
                     order_snapshot=order_snapshot,
                 )
 
-            protection_state = await self.execution_service.ensure_native_protection(
-                position_key,
-                force=True,
-            )
-            if (
-                protection_state is not None
-                and protection_state.status.value == "native_submitted"
-                and protection_state.submitted_order_ids
-            ):
-                self.position_service.mark_protective_orders(
-                    position_state.position_id,
-                    protection_state.submitted_order_ids,
-                    stop_loss=position_state.stop_loss,
-                    take_profit=position_state.take_profit,
-                    trailing_stop=position_state.trailing_stop,
-                )
-                protected_symbols.append(symbol)
-            else:
-                unprotected_symbols.append(symbol)
-                issues.append(
-                    RecoveryIssue(
-                        symbol=symbol,
-                        kind="unprotected_position",
-                        reason="native protection missing after restart",
+            if self._should_attempt_protection_reapply(position_state):
+                if self.reapply_native_protection:
+                    protection_state = (
+                        await self.execution_service.ensure_native_protection(
+                            position_key,
+                            force=True,
+                        )
                     )
-                )
+                    if (
+                        protection_state is not None
+                        and protection_state.status.value == "native_submitted"
+                        and protection_state.submitted_order_ids
+                    ):
+                        self.position_service.mark_protective_orders(
+                            position_state.position_id,
+                            protection_state.submitted_order_ids,
+                            stop_loss=position_state.stop_loss,
+                            take_profit=position_state.take_profit,
+                            trailing_stop=position_state.trailing_stop,
+                        )
+                        protected_symbols.append(symbol)
+                    else:
+                        unprotected_symbols.append(symbol)
+                        issues.append(
+                            RecoveryIssue(
+                                symbol=symbol,
+                                kind="unprotected_position",
+                                reason="native protection missing after restart",
+                            )
+                        )
+                else:
+                    unprotected_symbols.append(symbol)
+                    issues.append(
+                        RecoveryIssue(
+                            symbol=symbol,
+                            kind="unprotected_position",
+                            reason=(
+                                "native protection state unknown after restart; "
+                                "automatic reapply disabled"
+                            ),
+                        )
+                    )
 
         report = RecoveryReport(
             processed_trades=min(len(open_trades), self.max_recovery_items),
@@ -193,3 +210,14 @@ class RestartRecoveryService(BaseService):
         """Return the most recent recovery report."""
 
         return self._last_report
+
+    @staticmethod
+    def _should_attempt_protection_reapply(position_state: Any) -> bool:
+        return any(
+            value is not None
+            for value in (
+                position_state.stop_loss,
+                position_state.take_profit,
+                position_state.trailing_stop,
+            )
+        )

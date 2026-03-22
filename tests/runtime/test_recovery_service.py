@@ -77,6 +77,8 @@ class FakeRecoveryExecutionGateway:
 def build_services(
     open_trades: dict[str, dict],
     snapshots: dict[str, OrderUpdatePayload],
+    *,
+    reapply_native_protection: bool = False,
 ) -> tuple[RestartRecoveryService, ExecutionService, PositionService, FakeTradeStore]:
     trade_store = FakeTradeStore(open_trades)
     execution_gateway = FakeRecoveryExecutionGateway(snapshots)
@@ -95,11 +97,12 @@ def build_services(
         position_service=position_service,
         max_recovery_items=10,
         fetch_timeout_seconds=1.0,
+        reapply_native_protection=reapply_native_protection,
     )
     return recovery_service, execution_service, position_service, trade_store
 
 
-def test_recovery_restores_open_trades_and_native_protection() -> None:
+def test_recovery_restores_open_trades_without_reapplying_native_protection() -> None:
     open_trades = {
         "BTC/USDT": {
             "db_id": 1,
@@ -138,9 +141,9 @@ def test_recovery_restores_open_trades_and_native_protection() -> None:
         report = await recovery_service.recover()
         await recovery_service.stop()
         assert report.restored_symbols == ("BTC/USDT",)
-        assert report.protected_symbols == ("BTC/USDT",)
+        assert report.protected_symbols == ()
         assert report.orphaned_symbols == ()
-        assert report.unprotected_symbols == ()
+        assert report.unprotected_symbols == ("BTC/USDT",)
         assert report.reconcile_error_symbols == ()
 
     asyncio.run(run())
@@ -149,6 +152,57 @@ def test_recovery_restores_open_trades_and_native_protection() -> None:
     order_state = execution_service.get_order_state("order-1")
     assert order_state is not None
     assert order_state.status.value == "filled"
+    position_state = position_service.get_position_for_symbol("BTC/USDT")
+    assert position_state is not None
+    assert position_state.status.value == "protective_pending"
+    assert position_state.protective_order_ids == ()
+
+
+def test_recovery_can_reapply_native_protection_when_explicitly_enabled() -> None:
+    open_trades = {
+        "BTC/USDT": {
+            "db_id": 1,
+            "symbol": "BTC/USDT",
+            "side": "buy",
+            "amount": 0.5,
+            "entry_price": 65000.0,
+            "stop_loss": 63000.0,
+            "take_profit": 66000.0,
+            "timestamp": datetime.now(timezone.utc),
+            "order_id": "order-1",
+            "status": "open",
+            "fees": 0.1,
+            "trailing_stop_price": None,
+        }
+    }
+    snapshots = {
+        "order-1": OrderUpdatePayload(
+            client_order_id="order-1",
+            exchange_order_id="order-1",
+            symbol="BTC/USDT",
+            status="filled",
+            filled_qty=0.5,
+            remaining_qty=0.0,
+            avg_fill_price=65000.0,
+            reduce_only=False,
+        )
+    }
+    recovery_service, execution_service, position_service, _ = build_services(
+        open_trades,
+        snapshots,
+        reapply_native_protection=True,
+    )
+
+    async def run() -> None:
+        await recovery_service.start()
+        report = await recovery_service.recover()
+        await recovery_service.stop()
+        assert report.restored_symbols == ("BTC/USDT",)
+        assert report.protected_symbols == ("BTC/USDT",)
+        assert report.unprotected_symbols == ()
+
+    asyncio.run(run())
+
     protection_state = execution_service.get_protection_state("order-1")
     assert protection_state is not None
     assert protection_state.status.value == "native_submitted"
