@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import cast
+from typing import Any, cast
 from enum import StrEnum
 from uuid import uuid4
 
@@ -157,6 +157,82 @@ class ExecutionService(BaseService):
         )
         return submitted
 
+    def restore_order_from_trade(
+        self,
+        trade: dict[str, Any],
+        *,
+        order_snapshot: OrderUpdatePayload | None = None,
+    ) -> OrderState:
+        """Rehydrate a persisted open trade into execution state."""
+
+        client_order_id = str(trade.get("order_id") or trade.get("symbol"))
+        if not client_order_id:
+            raise ValueError("trade must provide symbol or order_id")
+
+        symbol = str(trade["symbol"])
+        side = str(trade["side"])
+        requested_qty = float(trade["amount"])
+        intent = OrderIntentPayload(
+            intent_id=client_order_id,
+            symbol=symbol,
+            side=side,  # type: ignore[arg-type]
+            order_type="market",
+            quantity=requested_qty,
+            stop_loss=self._optional_float(trade.get("stop_loss")),
+            take_profit=self._optional_float(trade.get("take_profit")),
+            reduce_only=False,
+            reason="recovered_from_persistence",
+        )
+        self._order_intents[client_order_id] = intent
+
+        state = self._order_states.get(client_order_id)
+        if state is None:
+            state = OrderState(
+                client_order_id=client_order_id,
+                symbol=symbol,
+                side=side,
+                order_type="market",
+                requested_qty=requested_qty,
+            )
+            self._order_states[client_order_id] = state
+
+        state.order_id = str(trade.get("order_id") or client_order_id)
+        state.symbol = symbol
+        state.side = side
+        state.order_type = "market"
+        state.requested_qty = requested_qty
+        state.requested_price = None
+        state.reduce_only = False
+        state.status = OrderStatus.FILLED
+        state.filled_qty = requested_qty
+        state.avg_fill_price = self._optional_float(trade.get("entry_price"))
+        state.updated_at = self._now()
+
+        if order_snapshot is not None:
+            state.order_id = order_snapshot.exchange_order_id or state.order_id
+            state.status = self._coerce_status(
+                order_snapshot.status,
+                default=OrderStatus.FILLED,
+            )
+            state.filled_qty = max(state.filled_qty, float(order_snapshot.filled_qty))
+            state.avg_fill_price = order_snapshot.avg_fill_price or state.avg_fill_price
+            if order_snapshot.exchange_order_id is not None:
+                self._exchange_to_client_order_ids[order_snapshot.exchange_order_id] = (
+                    client_order_id
+                )
+
+        self._submitted_orders[client_order_id] = OrderSubmittedPayload(
+            client_order_id=client_order_id,
+            exchange_order_id=state.order_id,
+            symbol=symbol,
+            side=side,  # type: ignore[arg-type]
+            order_type=state.order_type,
+            requested_qty=requested_qty,
+            requested_price=None,
+            reduce_only=False,
+        )
+        return state
+
     def get_order_state(self, client_order_id: str) -> OrderState | None:
         """Return the live state for a client order id."""
 
@@ -257,8 +333,41 @@ class ExecutionService(BaseService):
             await self.user_stream_gateway.disconnect()
         await self.execution_gateway.disconnect()
 
-    async def _maybe_submit_native_protection(self, state: OrderState) -> None:
-        if state.status != OrderStatus.FILLED or state.reduce_only:
+    async def ensure_native_protection(
+        self,
+        client_order_id: str,
+        *,
+        force: bool = False,
+    ) -> ProtectionState | None:
+        """Attempt native protection for a known order state."""
+
+        state = self._order_states.get(client_order_id)
+        if state is None:
+            return None
+        await self._maybe_submit_native_protection(state, force=force)
+        return self._protection_states.get(client_order_id)
+
+    def mark_order_orphaned(self, client_order_id: str, reason: str) -> OrderState:
+        """Flag a recovered order as orphaned after exchange reconciliation."""
+
+        state = self._order_states.get(client_order_id)
+        if state is None:
+            raise KeyError(client_order_id)
+        state.status = OrderStatus.ORPHANED
+        state.updated_at = self._now()
+        if reason:
+            self.logger.warning(
+                "Recovered order %s marked orphaned: %s", client_order_id, reason
+            )
+        return state
+
+    async def _maybe_submit_native_protection(
+        self,
+        state: OrderState,
+        *,
+        force: bool = False,
+    ) -> None:
+        if (not force and state.status != OrderStatus.FILLED) or state.reduce_only:
             return
 
         intent = self._order_intents.get(state.client_order_id)
@@ -378,6 +487,15 @@ class ExecutionService(BaseService):
             trailing_stop_price=None,
             native_preferred=True,
         )
+
+    @staticmethod
+    def _optional_float(value: Any) -> float | None:
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     def _create_order_state(self, intent: OrderIntentPayload) -> OrderState:
         return OrderState(

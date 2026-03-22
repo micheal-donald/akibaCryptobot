@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from domain.events import (
@@ -50,6 +50,72 @@ class PositionService(BaseService):
             await self.handle_order_update_event(event)
         elif event.meta.event_type == "execution.fill":
             await self.handle_fill_event(event)
+
+    def restore_position_from_trade(
+        self,
+        trade: dict[str, Any],
+        *,
+        position_id: str | None = None,
+        open_qty: float | None = None,
+    ) -> PositionState:
+        """Rehydrate a persisted open trade into position state."""
+
+        recovered_position_id = position_id or str(
+            trade.get("order_id") or trade.get("symbol")
+        )
+        if not recovered_position_id:
+            raise ValueError("trade must provide symbol or order_id")
+
+        symbol = str(trade["symbol"])
+        side = str(trade["side"])
+        requested_qty = float(trade["amount"])
+        state = self._positions.get(recovered_position_id)
+        if state is None:
+            state = PositionState(
+                position_id=recovered_position_id,
+                symbol=symbol,
+                side=side,
+                requested_qty=requested_qty,
+            )
+            self._positions[recovered_position_id] = state
+
+        state.symbol = symbol
+        state.side = side
+        state.requested_qty = requested_qty
+        state.open_qty = open_qty if open_qty is not None else requested_qty
+        state.avg_entry_price = self._optional_float(trade.get("entry_price"))
+        state.stop_loss = self._optional_float(trade.get("stop_loss"))
+        state.take_profit = self._optional_float(trade.get("take_profit"))
+        state.trailing_stop = self._optional_float(trade.get("trailing_stop_price"))
+        state.entry_order_ids = (
+            (str(trade["order_id"]),) if trade.get("order_id") else ()
+        )
+        state.protective_order_ids = ()
+        state.status = (
+            PositionStatus.OPEN
+            if state.open_qty >= state.requested_qty > 0
+            else PositionStatus.ENTRY_PENDING
+        )
+        if state.open_qty > 0 and (
+            state.stop_loss is not None
+            or state.take_profit is not None
+            or state.trailing_stop is not None
+        ):
+            state.status = PositionStatus.PROTECTIVE_PENDING
+        state.updated_at = self._now()
+        self._symbol_to_position_ids[state.symbol] = recovered_position_id
+        if state.entry_order_ids:
+            self._exchange_order_to_position_ids[state.entry_order_ids[0]] = (
+                recovered_position_id
+            )
+        if (
+            recovered_position_id not in self._client_order_to_position_ids
+            and trade.get("order_id")
+        ):
+            self._client_order_to_position_ids[str(trade["order_id"])] = (
+                recovered_position_id
+            )
+        return state
 
     async def handle_order_update_event(self, event: RuntimeEvent) -> None:
         """Update entry lifecycle state from an order update event."""
@@ -177,6 +243,14 @@ class PositionService(BaseService):
         state.updated_at = self._now()
         self._emit_position_closed_event(state, close_reason)
         self._forget_symbol_mapping(state.symbol, position_id)
+        return state
+
+    def mark_reconcile_error(self, position_id: str) -> PositionState:
+        """Flag a position as requiring manual reconciliation."""
+
+        state = self._positions[position_id]
+        state.status = PositionStatus.RECONCILE_ERROR
+        state.updated_at = self._now()
         return state
 
     def get_position_state(self, position_id: str) -> PositionState | None:
@@ -403,6 +477,15 @@ class PositionService(BaseService):
     ) -> str:
         del symbol, client_order_id
         return PositionService._normalize_position_side(state.side)
+
+    @staticmethod
+    def _optional_float(value: Any) -> float | None:
+        if value is None or value == "":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
 
     @staticmethod
     def _update_average_price(
