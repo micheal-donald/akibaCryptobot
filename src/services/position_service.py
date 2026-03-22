@@ -108,7 +108,13 @@ class PositionService(BaseService):
         previous_open_qty = state.open_qty
 
         if payload.reduce_only:
-            self._apply_exit_fill(state, payload, fill_qty, previous_open_qty)
+            self._apply_exit_fill(
+                state,
+                payload,
+                fill_qty,
+                previous_open_qty,
+                cumulative_qty,
+            )
         else:
             self._apply_entry_fill(
                 state,
@@ -189,7 +195,12 @@ class PositionService(BaseService):
         return tuple(
             state
             for state in self._positions.values()
-            if state.status in {PositionStatus.OPEN, PositionStatus.ENTRY_PENDING}
+            if state.status
+            in {
+                PositionStatus.OPEN,
+                PositionStatus.ENTRY_PENDING,
+                PositionStatus.PROTECTIVE_PENDING,
+            }
             and state.open_qty > 0
             and not state.protective_order_ids
         )
@@ -285,6 +296,7 @@ class PositionService(BaseService):
         payload: FillPayload,
         fill_qty: float,
         previous_open_qty: float,
+        cumulative_qty: float,
     ) -> None:
         if (
             payload.exchange_order_id
@@ -299,7 +311,7 @@ class PositionService(BaseService):
             fill_qty=fill_qty,
             fill_price=payload.fill_price,
             cumulative_quote_qty=payload.cumulative_quote_qty,
-            cumulative_qty=fill_qty,
+            cumulative_qty=cumulative_qty,
         )
         state.fees_paid += float(payload.fee_cost or 0.0)
         state.open_qty = max(previous_open_qty - fill_qty, 0.0)

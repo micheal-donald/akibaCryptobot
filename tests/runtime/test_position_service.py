@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 
+import pytest
+
 from domain.events import EventMeta, FillPayload, OrderUpdatePayload, RuntimeEvent
 from domain.state import PositionStatus
 from services.position_service import PositionService
@@ -140,6 +142,42 @@ def test_position_service_marks_and_detects_protective_orders() -> None:
     assert service.get_unprotected_positions() == ()
 
 
+def test_position_service_reports_protective_pending_positions() -> None:
+    service, _ = build_service()
+    entry_event = RuntimeEvent(
+        meta=EventMeta(
+            event_id="evt-3b",
+            event_type="execution.fill",
+            source="binance.ws.user.execution_report",
+            symbol="ETH/USDT",
+            ts_exchange=datetime(2026, 3, 22, 9, 2, tzinfo=timezone.utc),
+            ts_received=datetime(2026, 3, 22, 9, 2, tzinfo=timezone.utc),
+        ),
+        payload=FillPayload(
+            client_order_id="intent-3b",
+            exchange_order_id="order-3b",
+            symbol="ETH/USDT",
+            side="buy",
+            fill_qty=0.3,
+            fill_price=2300.0,
+            cumulative_qty=0.3,
+            cumulative_quote_qty=690.0,
+            fee_cost=0.01,
+            fee_currency="USDT",
+            is_maker=False,
+            reduce_only=False,
+        ),
+    )
+
+    asyncio.run(service.handle_fill_event(entry_event))
+    state = service.mark_protective_orders("intent-3b", ())
+
+    assert state.status == PositionStatus.PROTECTIVE_PENDING
+    unprotected = service.get_unprotected_positions()
+    assert len(unprotected) == 1
+    assert unprotected[0].position_id == "intent-3b"
+
+
 def test_position_service_closes_from_reduce_only_fill() -> None:
     service, event_bus = build_service()
     entry_event = RuntimeEvent(
@@ -205,3 +243,96 @@ def test_position_service_closes_from_reduce_only_fill() -> None:
         "position.opened",
         "position.closed",
     ]
+
+
+def test_position_service_aggregates_partial_reduce_only_exit_fills() -> None:
+    service, event_bus = build_service()
+    entry_event = RuntimeEvent(
+        meta=EventMeta(
+            event_id="evt-6",
+            event_type="execution.fill",
+            source="binance.ws.user.execution_report",
+            symbol="BTC/USDT",
+            ts_exchange=datetime(2026, 3, 22, 9, 5, tzinfo=timezone.utc),
+            ts_received=datetime(2026, 3, 22, 9, 5, tzinfo=timezone.utc),
+        ),
+        payload=FillPayload(
+            client_order_id="intent-6",
+            exchange_order_id="order-6",
+            symbol="BTC/USDT",
+            side="buy",
+            fill_qty=0.5,
+            fill_price=65000.0,
+            cumulative_qty=0.5,
+            cumulative_quote_qty=32500.0,
+            fee_cost=0.02,
+            fee_currency="USDT",
+            is_maker=False,
+            reduce_only=False,
+        ),
+    )
+    first_exit_event = RuntimeEvent(
+        meta=EventMeta(
+            event_id="evt-7",
+            event_type="execution.fill",
+            source="binance.ws.user.execution_report",
+            symbol="BTC/USDT",
+            ts_exchange=datetime(2026, 3, 22, 9, 6, tzinfo=timezone.utc),
+            ts_received=datetime(2026, 3, 22, 9, 6, tzinfo=timezone.utc),
+        ),
+        payload=FillPayload(
+            client_order_id="intent-6",
+            exchange_order_id="close-6",
+            symbol="BTC/USDT",
+            side="sell",
+            fill_qty=0.2,
+            fill_price=65100.0,
+            cumulative_qty=0.2,
+            cumulative_quote_qty=13020.0,
+            fee_cost=0.01,
+            fee_currency="USDT",
+            is_maker=False,
+            reduce_only=True,
+        ),
+    )
+    second_exit_event = RuntimeEvent(
+        meta=EventMeta(
+            event_id="evt-8",
+            event_type="execution.fill",
+            source="binance.ws.user.execution_report",
+            symbol="BTC/USDT",
+            ts_exchange=datetime(2026, 3, 22, 9, 7, tzinfo=timezone.utc),
+            ts_received=datetime(2026, 3, 22, 9, 7, tzinfo=timezone.utc),
+        ),
+        payload=FillPayload(
+            client_order_id="intent-6",
+            exchange_order_id="close-6",
+            symbol="BTC/USDT",
+            side="sell",
+            fill_qty=0.3,
+            fill_price=65200.0,
+            cumulative_qty=0.5,
+            cumulative_quote_qty=32580.0,
+            fee_cost=0.01,
+            fee_currency="USDT",
+            is_maker=True,
+            reduce_only=True,
+        ),
+    )
+
+    asyncio.run(service.handle_fill_event(entry_event))
+    asyncio.run(service.handle_fill_event(first_exit_event))
+    interim_state = service.get_position_state("intent-6")
+    assert interim_state is not None
+    assert interim_state.status == PositionStatus.REDUCE_PENDING
+    assert interim_state.open_qty == pytest.approx(0.3)
+    assert interim_state.avg_exit_price == pytest.approx(65100.0)
+
+    asyncio.run(service.handle_fill_event(second_exit_event))
+
+    final_state = service.get_position_state("intent-6")
+    assert final_state is not None
+    assert final_state.status == PositionStatus.CLOSED
+    assert final_state.open_qty == 0.0
+    assert final_state.avg_exit_price == pytest.approx(65160.0)
+    assert event_bus.qsize() == 2
