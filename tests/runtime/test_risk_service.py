@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import asyncio
 
-from domain.events import OrderIntentPayload, RiskBlockedPayload, RuntimeEvent
+from domain.events import (
+    OrderIntentPayload,
+    OrderSubmittedPayload,
+    RiskBlockedPayload,
+    RuntimeEvent,
+)
 from domain.state import PositionState, PositionStatus
 from services.risk_service import RiskService
 
@@ -62,6 +67,26 @@ def build_open_position(
         status=status,
         open_qty=open_qty,
     )
+
+
+class FakeExecutionService:
+    def __init__(self) -> None:
+        self.submissions: list[OrderIntentPayload] = []
+
+    async def submit_order_intent(
+        self, intent: OrderIntentPayload
+    ) -> OrderSubmittedPayload:
+        self.submissions.append(intent)
+        return OrderSubmittedPayload(
+            client_order_id=intent.intent_id,
+            exchange_order_id="order-1",
+            symbol=intent.symbol,
+            side=intent.side,
+            order_type=intent.order_type,
+            requested_qty=intent.quantity,
+            requested_price=intent.limit_price,
+            reduce_only=intent.reduce_only,
+        )
 
 
 def test_risk_service_allows_valid_intent_without_emitting_block_event() -> None:
@@ -166,3 +191,33 @@ def test_risk_service_blocks_reduce_only_same_side_as_open_position() -> None:
     event = event_bus.get_nowait()
     assert isinstance(event.payload, RiskBlockedPayload)
     assert event.payload.reason == "reduce_only_same_side"
+
+
+def test_risk_service_routes_only_approved_intents_to_execution() -> None:
+    service, event_bus = build_service()
+    execution_service = FakeExecutionService()
+    service.execution_service = execution_service
+
+    allowed_intent = build_intent(
+        intent_id="intent-allowed",
+        stop_loss=64000.0,
+        take_profit=70000.0,
+    )
+    blocked_intent = build_intent(
+        intent_id="intent-blocked",
+        quantity=0.0,
+    )
+
+    async def run() -> (
+        tuple[OrderSubmittedPayload | None, OrderSubmittedPayload | None]
+    ):
+        allowed = await service.submit_order_intent(allowed_intent)
+        blocked = await service.submit_order_intent(blocked_intent)
+        return allowed, blocked
+
+    allowed, blocked = asyncio.run(run())
+
+    assert allowed is not None
+    assert blocked is None
+    assert execution_service.submissions == [allowed_intent]
+    assert event_bus.get_nowait().payload.reason == "invalid_quantity"

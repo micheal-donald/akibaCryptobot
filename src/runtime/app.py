@@ -181,9 +181,16 @@ class RuntimeApp:
             name="position",
             event_bus=app.event_bus,
         )
+        app.execution_service = ExecutionService(
+            name="execution",
+            execution_gateway=execution_gateway,
+            user_stream_gateway=user_stream_gateway,
+            event_bus=app.event_bus,
+        )
         app.risk_service = RiskService(
             name="risk",
             event_bus=app.event_bus,
+            execution_service=app.execution_service,
             position_source=app.position_service,
             max_open_positions=max_open_positions,
             kill_switch_enabled=kill_switch_enabled,
@@ -200,12 +207,6 @@ class RuntimeApp:
             persistence_service=app.persistence_service,
             telemetry_service=app.telemetry_service,
             position_service=app.position_service,
-        )
-        app.execution_service = ExecutionService(
-            name="execution",
-            execution_gateway=execution_gateway,
-            user_stream_gateway=user_stream_gateway,
-            event_bus=app.event_bus,
         )
 
         for name, service in (
@@ -247,12 +248,9 @@ class RuntimeApp:
     ) -> OrderSubmittedPayload | None:
         """Evaluate an order intent through runtime risk before execution."""
 
-        if self.risk_service is None or self.execution_service is None:
+        if self.risk_service is None:
             raise RuntimeError("Phase 4 runtime services are not configured")
-        decision = self.risk_service.evaluate_intent(intent)
-        if not decision.allowed:
-            return None
-        return await self.execution_service.submit_order_intent(intent)
+        return await self.risk_service.submit_order_intent(intent)
 
     async def _initialize_runtime_store(self) -> None:
         if self.runtime_store is None or self._runtime_store_initialized:

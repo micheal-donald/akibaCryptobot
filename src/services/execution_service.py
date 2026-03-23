@@ -90,7 +90,7 @@ class ExecutionService(BaseService):
     async def submit_order_intent(
         self, intent: OrderIntentPayload
     ) -> OrderSubmittedPayload:
-        """Submit an order intent and emit a normalized submission event."""
+        """Submit a risk-approved order intent and emit a normalized event."""
 
         existing = self._submitted_orders.get(intent.intent_id)
         if existing is not None:

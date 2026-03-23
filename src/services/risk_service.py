@@ -12,12 +12,14 @@ from typing import Iterable
 from domain.events import (
     EventMeta,
     OrderIntentPayload,
+    OrderSubmittedPayload,
     RiskBlockedPayload,
     RuntimeEvent,
 )
 from domain.state import PositionState, PositionStatus
 
 from .base import BaseService
+from .execution_service import ExecutionService
 
 
 @dataclass(slots=True)
@@ -33,6 +35,7 @@ class RiskService(BaseService):
     """Evaluate order intents before execution consumes them."""
 
     event_bus: asyncio.Queue[RuntimeEvent]
+    execution_service: ExecutionService | None = None
     position_source: object | None = None
     max_open_positions: int = 0
     kill_switch_enabled: bool = False
@@ -75,6 +78,21 @@ class RiskService(BaseService):
         """Return a snapshot of allow/block counts."""
 
         return dict(self._decision_counts)
+
+    async def submit_order_intent(
+        self,
+        intent: OrderIntentPayload,
+        *,
+        runtime_positions: Iterable[PositionState] | None = None,
+    ) -> OrderSubmittedPayload | None:
+        """Gate an intent and forward only approved requests to execution."""
+
+        decision = self.evaluate_intent(intent, runtime_positions=runtime_positions)
+        if not decision.allowed:
+            return None
+        if self.execution_service is None:
+            raise RuntimeError("risk service is not connected to execution service")
+        return await self.execution_service.submit_order_intent(intent)
 
     def _resolve_positions(
         self, runtime_positions: Iterable[PositionState] | None

@@ -257,6 +257,8 @@ def test_phase4_runtime_shell_blocks_intents_before_execution() -> None:
     assert store.initialize_calls == 1
     assert store.close_calls == 1
     assert [event.meta.event_type for event in store.events] == ["risk.blocked"]
+    assert app.telemetry_service is not None
+    assert app.telemetry_service.get_event_count("risk.blocked") == 1
 
 
 def test_phase4_runtime_shell_routes_allowed_intents_and_persists_later() -> None:
