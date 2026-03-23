@@ -10,7 +10,7 @@ REMOTE_SERVICE="${REMOTE_SERVICE:-akibabot.service}"
 REMOTE_PORT="${REMOTE_PORT:-8000}"
 DEPLOY_SHA="${DEPLOY_SHA:-$(git -C "$REPO_ROOT" rev-parse HEAD)}"
 
-TMP_DIR="${TMPDIR:-/tmp}/akiba_deploy_${DEPLOY_SHA:0:7}"
+TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/akiba_deploy_${DEPLOY_SHA:0:7}_XXXXXX")"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -18,11 +18,16 @@ cleanup() {
 
 trap cleanup EXIT
 
-mkdir -p "$TMP_DIR"
 git -C "$REPO_ROOT" archive --format=tar "$DEPLOY_SHA" | tar -xf - -C "$TMP_DIR"
 
-rsync -a \
+rsync -a --delete \
   -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=no" \
+  --exclude '.env' \
+  --exclude 'venv/' \
+  --exclude '.venv/' \
+  --exclude 'logs/' \
+  --exclude 'data/' \
+  --exclude '.deploy/' \
   "$TMP_DIR"/ \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/"
 
