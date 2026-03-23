@@ -1,15 +1,118 @@
-"""Minimal runtime shell for the phase 1 event-driven architecture."""
+"""Runtime shell for the event-driven architecture."""
 
 from __future__ import annotations
 
 import asyncio
+import logging
+import inspect
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from domain.events import RuntimeEvent
+from domain.events import (
+    OrderIntentPayload,
+    OrderSubmittedPayload,
+    ProtectionSubmittedPayload,
+    RuntimeEvent,
+)
+from ports.exchange import ExecutionGateway, UserStreamGateway
+from ports.persistence import RuntimeStore
+from services.execution_service import ExecutionService
+from services.persistence_service import PersistenceService
+from services.position_service import PositionService
+from services.risk_service import RiskService
+from services.telemetry_service import TelemetryService
 
 from .config import RuntimeConfig
 from .service_registry import AsyncService, ServiceRegistry
+
+
+@dataclass(slots=True)
+class RuntimeEventRouter:
+    """Drain runtime events into warm-path services without blocking execution."""
+
+    name: str
+    event_bus: asyncio.Queue[RuntimeEvent]
+    persistence_service: PersistenceService
+    telemetry_service: TelemetryService | None = None
+    position_service: PositionService | None = None
+    is_running: bool = field(default=False, init=False)
+    logger: logging.Logger = field(init=False, repr=False)
+    _consumer_task: asyncio.Task[None] | None = field(
+        default=None, init=False, repr=False
+    )
+
+    def __post_init__(self) -> None:
+        self.logger = logging.getLogger(f"akiba.runtime.service.{self.name}")
+
+    async def start(self) -> None:
+        if self.is_running:
+            return
+        self.is_running = True
+        if self._consumer_task is None or self._consumer_task.done():
+            self._consumer_task = asyncio.create_task(self._consume_events())
+
+    async def stop(self) -> None:
+        task = self._consumer_task
+        if task is None:
+            self.is_running = False
+            return
+        try:
+            await asyncio.wait_for(self.event_bus.join(), timeout=2.0)
+        except TimeoutError:
+            pass
+        self._consumer_task = None
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        self.is_running = False
+
+    async def _consume_events(self) -> None:
+        while True:
+            event = await self.event_bus.get()
+            try:
+                await self._route_event(event)
+            except Exception as exc:  # pragma: no cover - defensive logging
+                self.logger.warning("runtime event routing failed: %s", exc)
+            finally:
+                self.event_bus.task_done()
+
+    async def _route_event(self, event: RuntimeEvent) -> None:
+        if self.telemetry_service is not None:
+            self.telemetry_service.record_event(event)
+
+        if self.position_service is not None:
+            await self._route_position_event(event)
+
+        enqueued = self.persistence_service.enqueue_event(event)
+        if not enqueued and self.telemetry_service is not None:
+            self.telemetry_service.record_dropped_event(
+                "persistence",
+                event_type=event.meta.event_type,
+            )
+
+    async def _route_position_event(self, event: RuntimeEvent) -> None:
+        if event.meta.event_type in {"execution.order_update", "execution.fill"}:
+            await self.position_service.handle_execution_event(event)
+            return
+
+        if event.meta.event_type != "position.protective_submitted":
+            return
+
+        payload = event.payload
+        if not isinstance(payload, ProtectionSubmittedPayload):
+            return
+        if payload.status != "native_submitted":
+            return
+
+        self.position_service.mark_protective_orders(
+            payload.client_order_id,
+            payload.submitted_order_ids,
+            stop_loss=payload.stop_loss,
+            take_profit=payload.take_profit,
+            trailing_stop=payload.trailing_stop,
+        )
 
 
 @dataclass(slots=True)
@@ -20,9 +123,29 @@ class RuntimeApp:
     services: ServiceRegistry = field(default_factory=ServiceRegistry)
     event_bus: asyncio.Queue[RuntimeEvent] = field(init=False)
     is_running: bool = field(default=False, init=False)
+    runtime_store: RuntimeStore | None = field(default=None, init=False, repr=False)
+    risk_service: RiskService | None = field(default=None, init=False, repr=False)
+    execution_service: ExecutionService | None = field(
+        default=None, init=False, repr=False
+    )
+    persistence_service: PersistenceService | None = field(
+        default=None, init=False, repr=False
+    )
+    telemetry_service: TelemetryService | None = field(
+        default=None, init=False, repr=False
+    )
+    position_service: PositionService | None = field(
+        default=None, init=False, repr=False
+    )
+    event_router: RuntimeEventRouter | None = field(
+        default=None, init=False, repr=False
+    )
+    _runtime_store_initialized: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self.event_bus = asyncio.Queue(maxsize=self.config.event_bus_maxsize)
+        # Keep the runtime-owned event bus unbounded so execution never waits on
+        # warm-path persistence backpressure. Persistence has its own bounded queue.
+        self.event_bus = asyncio.Queue()
 
     @classmethod
     def build(
@@ -38,12 +161,73 @@ class RuntimeApp:
     def register_service(self, name: str, service: AsyncService) -> None:
         self.services.register(name, service)
 
+    @classmethod
+    def build_phase4(
+        cls,
+        config: RuntimeConfig,
+        *,
+        execution_gateway: ExecutionGateway,
+        runtime_store: RuntimeStore,
+        user_stream_gateway: UserStreamGateway | None = None,
+        max_open_positions: int = 0,
+        kill_switch_enabled: bool = False,
+    ) -> "RuntimeApp":
+        """Build the Phase 4 runtime shell with risk, execution, and persistence."""
+
+        app = cls(config=config)
+        app.runtime_store = runtime_store
+
+        app.position_service = PositionService(
+            name="position",
+            event_bus=app.event_bus,
+        )
+        app.risk_service = RiskService(
+            name="risk",
+            event_bus=app.event_bus,
+            position_source=app.position_service,
+            max_open_positions=max_open_positions,
+            kill_switch_enabled=kill_switch_enabled,
+        )
+        app.persistence_service = PersistenceService(
+            name="persistence",
+            runtime_store=runtime_store,
+            max_queue_size=config.queue_maxsize or 256,
+        )
+        app.telemetry_service = TelemetryService(name="telemetry")
+        app.event_router = RuntimeEventRouter(
+            name="runtime-router",
+            event_bus=app.event_bus,
+            persistence_service=app.persistence_service,
+            telemetry_service=app.telemetry_service,
+            position_service=app.position_service,
+        )
+        app.execution_service = ExecutionService(
+            name="execution",
+            execution_gateway=execution_gateway,
+            user_stream_gateway=user_stream_gateway,
+            event_bus=app.event_bus,
+        )
+
+        for name, service in (
+            ("risk", app.risk_service),
+            ("persistence", app.persistence_service),
+            ("telemetry", app.telemetry_service),
+            ("runtime-router", app.event_router),
+            ("position", app.position_service),
+            ("execution", app.execution_service),
+        ):
+            app.register_service(name, service)
+
+        return app
+
     async def start(self) -> None:
         if self.is_running:
             return
         try:
+            await self._initialize_runtime_store()
             await self.services.start_all()
         except Exception:
+            await self._close_runtime_store()
             self.is_running = False
             raise
         self.is_running = True
@@ -54,4 +238,41 @@ class RuntimeApp:
         try:
             await self.services.stop_all()
         finally:
+            await self._close_runtime_store()
             self.is_running = False
+
+    async def submit_order_intent(
+        self,
+        intent: OrderIntentPayload,
+    ) -> OrderSubmittedPayload | None:
+        """Evaluate an order intent through runtime risk before execution."""
+
+        if self.risk_service is None or self.execution_service is None:
+            raise RuntimeError("Phase 4 runtime services are not configured")
+        decision = self.risk_service.evaluate_intent(intent)
+        if not decision.allowed:
+            return None
+        return await self.execution_service.submit_order_intent(intent)
+
+    async def _initialize_runtime_store(self) -> None:
+        if self.runtime_store is None or self._runtime_store_initialized:
+            return
+        initialize = getattr(self.runtime_store, "initialize", None)
+        if initialize is None or not callable(initialize):
+            self._runtime_store_initialized = True
+            return
+        result = initialize()
+        if inspect.isawaitable(result):
+            await result
+        self._runtime_store_initialized = True
+
+    async def _close_runtime_store(self) -> None:
+        if self.runtime_store is None or not self._runtime_store_initialized:
+            return
+        close = getattr(self.runtime_store, "close", None)
+        self._runtime_store_initialized = False
+        if close is None or not callable(close):
+            return
+        result = close()
+        if inspect.isawaitable(result):
+            await result
