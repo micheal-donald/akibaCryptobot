@@ -21,6 +21,7 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Phase 2 Market Data Spec](specs/PHASE_2_MARKET_DATA_SHADOW_SPEC.md) | Websocket-first market-data runtime, bootstrap, and shadow-mode validation |
 | [Phase 3 Execution Spec](specs/PHASE_3_EXECUTION_POSITION_SPEC.md) | Execution service, position state, native protection, and fill-driven lifecycle |
 | [Phase 4 Risk/Persistence Spec](specs/PHASE_4_RISK_PERSISTENCE_SPEC.md) | Runtime risk gating, warm-path persistence, telemetry, and runtime cutover preparation |
+| [Phase 5 Signal/Strategy Spec](specs/PHASE_5_SIGNAL_STRATEGY_SPEC.md) | Runtime signal generation, strategy contracts, indicator caching, and entry-flow cutover |
 
 ---
 
