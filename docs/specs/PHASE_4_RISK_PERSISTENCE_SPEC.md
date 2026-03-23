@@ -359,10 +359,15 @@ Phase 4 is complete when all of the following are true:
 
 ### P4-05: Wire runtime services together
 
-- register `RiskService` and `PersistenceService` in the runtime shell
-- ensure `ExecutionService` only receives risk-approved intents
+- register `RiskService`, `PersistenceService`, and the runtime store in the runtime shell
+- ensure persistence receives runtime events without blocking execution/position services
 
-### P4-06: Add Phase 4 integration coverage
+### P4-06: Ensure execution receives only risk-approved intents
+
+- connect `RiskService` in front of `ExecutionService`
+- keep blocked intents visible through runtime events and telemetry
+
+### P4-07: Add Phase 4 integration coverage
 
 - blocked intent path
 - allowed intent path
