@@ -82,6 +82,8 @@ Rollout guidance:
 | `runtime_entries` | Runtime owns entries; legacy exit sweeps may still be used for compatibility |
 | `runtime_primary` | Runtime owns both entries and exits |
 
+For the full paper activation sequence, see [docs/DEPLOYMENT.md](/home/lekim/Projects/akibaCryptobot/docs/DEPLOYMENT.md#paper-activation-procedure). That guide shows the staged promotion path and rollback steps the operator should follow when moving from `legacy` to `shadow`, `runtime_entries`, and `runtime_primary`.
+
 > [!NOTE]
 > If `runtime_mode` is omitted, `shadow_mode` is used as the compatibility fallback: `true` resolves to `shadow`, `false` resolves to `runtime_entries`. When `runtime_mode` is set explicitly, it wins and `shadow_mode` is normalized to match it.
 

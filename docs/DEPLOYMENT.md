@@ -195,6 +195,59 @@ Handles FreqAI model re-training on schedule or manual trigger.
 
 Application runtime secrets live in the server-side `.env` file and are rendered by the deploy workflow from GitHub Actions secrets and variables. Deployment metadata such as `SERVER_IP` belongs in GitHub Actions configuration, not in the local project `.env`.
 
+### Paper Activation Procedure
+
+Phase 8 paper rollout is intentionally staged. Use the explicit runtime mode in `config/config.json` and promote one step at a time.
+
+Recommended activation path:
+
+1. **Start in `legacy`**
+   - Keep `runtime.runtime_mode` set to `legacy` while the classic loop remains authoritative.
+   - Verify `/api/status` and `/ws/status` report:
+     - `runtime_mode: legacy`
+     - `rollout_health: legacy`
+     - `rollout_recommended_action: stay_legacy`
+
+2. **Move to `shadow`**
+   - Set `runtime.runtime_mode` to `shadow`.
+   - Redeploy the pinned SHA.
+   - Verify the operator surfaces report:
+     - `runtime_mode: shadow`
+     - `state_source: shadow`
+     - `rollout_health: shadow_ready`
+     - `rollout_recommended_action: continue_shadow`
+   - Stay here until the runtime projections match the legacy view closely enough for promotion.
+
+3. **Promote to `runtime_entries`**
+   - Set `runtime.runtime_mode` to `runtime_entries`.
+   - Redeploy the pinned SHA.
+   - Verify:
+     - `runtime_owns_entries: true`
+     - `runtime_owns_exits: false`
+     - `rollout_health: promotion_ready`
+     - `rollout_recommended_action: promote_runtime_primary`
+   - At this stage the runtime owns new entries while legacy exit handling may still remain available for compatibility.
+
+4. **Promote to `runtime_primary`**
+   - Set `runtime.runtime_mode` to `runtime_primary`.
+   - Redeploy the pinned SHA.
+   - Verify:
+     - `runtime_owns_entries: true`
+     - `runtime_owns_exits: true`
+     - `rollout_health: promotion_ready`
+     - `rollout_recommended_action: stay_runtime_primary`
+
+Rollback path:
+
+1. Set `runtime.runtime_mode` back to `legacy`.
+2. Redeploy the pinned SHA.
+3. Confirm the operator surfaces return to:
+   - `runtime_mode: legacy`
+   - `rollout_health: legacy`
+   - `rollout_recommended_action: stay_legacy`
+
+Rollback should be the first response if runtime health degrades, rollout summaries report `rollback_recommended`, or operator verification fails after promotion.
+
 ### Vultr Bare-Metal Setup
 The bot runs as a systemd service (`akibabot.service`) on a Vultr Ubuntu instance.
 
