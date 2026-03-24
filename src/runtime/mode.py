@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 
 
-class RuntimeMode(StrEnum):
+class RuntimeMode(str, Enum):
     """Defines which runtime path owns trading decisions."""
 
     LEGACY = "legacy"
