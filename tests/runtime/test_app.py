@@ -6,6 +6,7 @@ import pytest
 
 from runtime.app import RuntimeApp
 from runtime.config import RuntimeConfig
+from runtime.mode import RuntimeMode
 from runtime.service_registry import ServiceRegistry
 
 
@@ -41,6 +42,7 @@ def test_runtime_config_can_be_built_from_mapping() -> None:
     assert config.event_bus_maxsize == 16
     assert config.housekeeping_interval_seconds == 30.0
     assert config.shadow_mode is False
+    assert config.runtime_mode is RuntimeMode.RUNTIME_ENTRIES
 
 
 def test_runtime_app_builds_event_bus_and_registry() -> None:

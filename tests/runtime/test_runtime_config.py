@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from runtime.config import RuntimeConfig
+from runtime.mode import RuntimeMode
 
 
 def test_runtime_config_from_mapping_supports_phase_two_fields() -> None:
@@ -32,6 +33,9 @@ def test_runtime_config_from_mapping_supports_phase_two_fields() -> None:
     assert config.sandbox_execution is True
     assert config.sandbox_market_data is False
     assert config.shadow_mode is False
+    assert config.runtime_mode is RuntimeMode.RUNTIME_ENTRIES
+    assert config.runtime_owns_entries is True
+    assert config.runtime_owns_exits is False
 
 
 def test_runtime_config_from_mapping_supports_legacy_nested_config() -> None:
@@ -53,6 +57,24 @@ def test_runtime_config_from_mapping_supports_legacy_nested_config() -> None:
     assert config.market_data_source == "binance"
     assert config.sandbox_execution is True
     assert config.sandbox_market_data is False
+
+
+def test_runtime_config_from_mapping_supports_explicit_runtime_mode() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "runtime": {
+                "symbols": ["BTC/USDT"],
+                "kline_intervals": ["1m"],
+                "runtime_mode": "runtime_primary",
+                "shadow_mode": True,
+            }
+        }
+    )
+
+    assert config.runtime_mode is RuntimeMode.RUNTIME_PRIMARY
+    assert config.shadow_mode is False
+    assert config.runtime_owns_entries is True
+    assert config.runtime_owns_exits is True
 
 
 def test_runtime_config_mirrors_queue_size_aliases() -> None:
