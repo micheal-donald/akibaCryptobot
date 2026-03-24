@@ -22,6 +22,7 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Phase 3 Execution Spec](specs/PHASE_3_EXECUTION_POSITION_SPEC.md) | Execution service, position state, native protection, and fill-driven lifecycle |
 | [Phase 4 Risk/Persistence Spec](specs/PHASE_4_RISK_PERSISTENCE_SPEC.md) | Runtime risk gating, warm-path persistence, telemetry, and runtime cutover preparation |
 | [Phase 5 Signal/Strategy Spec](specs/PHASE_5_SIGNAL_STRATEGY_SPEC.md) | Runtime signal generation, strategy contracts, indicator caching, and entry-flow cutover |
+| [LLM Agent Iteration Workflow](LLM_AGENT_ITERATION_WORKFLOW.md) | Reusable protocol for phased, spec-driven, worker-assisted development and deployment |
 
 ---
 
