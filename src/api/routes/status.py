@@ -3,28 +3,39 @@ Status & Health endpoints
 """
 
 from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
+
 from api.dependencies import get_bot
+from runtime.view_models import ProjectionSource
 
 router = APIRouter()
 
 
 @router.get("/health")
 async def health_check():
-    """Liveness probe — always returns OK if the server is up."""
+    """Liveness probe ? always returns OK if the server is up."""
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/status")
 async def get_status(bot=Depends(get_bot)):
-    """Get comprehensive bot status including circuit breaker state."""
+    """Get comprehensive bot status including runtime cutover state."""
     status_info = bot.get_status_info()
+    projection = bot.get_runtime_projection()
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active
     status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason
     status_info["strategy"] = bot.strategy_manager.active_strategy
     status_info["trading_mode"] = (
         "paper" if bot.config["exchange"].get("sandbox", True) else "live"
     )
+    status_info["state_source"] = projection.source.value
+    status_info["projected_active_positions"] = projection.active_position_count
+    status_info["projected_open_orders"] = projection.open_order_count
+    status_info["projected_pending_exits"] = projection.pending_exit_count
+    status_info["projected_rejected_orders"] = projection.rejected_order_count
+    if projection.source is ProjectionSource.RUNTIME_PROJECTION:
+        status_info["active_trades"] = projection.active_position_count
     return status_info
 
 

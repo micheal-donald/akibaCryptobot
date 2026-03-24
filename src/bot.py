@@ -23,6 +23,7 @@ from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
 from runtime.mode import RuntimeMode
+from runtime.projection import build_runtime_projection
 
 
 class AkibaCryptoBot:
@@ -778,6 +779,19 @@ class AkibaCryptoBot:
             "runtime_owns_entries": self.runtime_owns_entries,
             "runtime_owns_exits": self.runtime_owns_exits,
         }
+
+    def get_runtime_projection(self):
+        runtime_app = self.runtime_app
+        return build_runtime_projection(
+            runtime_mode=self.runtime_mode,
+            runtime_is_running=self.runtime_is_running,
+            position_source=(
+                None if runtime_app is None else runtime_app.position_service
+            ),
+            execution_source=(
+                None if runtime_app is None else runtime_app.execution_service
+            ),
+        )
 
     async def get_balance_info(self) -> Dict:
         """Get account balance for Telegram commands."""
