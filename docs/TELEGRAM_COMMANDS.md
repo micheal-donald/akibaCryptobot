@@ -35,7 +35,7 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 |---|---|
 | `/start` | Welcome message and bot info |
 | `/help` | List all available commands |
-| `/status` | Bot status — uptime, active trades or projected positions, runtime mode, and source-of-truth state |
+| `/status` | Bot status — uptime, active trades or projected positions, runtime mode, source-of-truth state, and rollout guidance |
 | `/config` | Current configuration summary |
 | `/reconcile` | Manual balance audit vs Exchange |
 
@@ -87,9 +87,13 @@ The bot sends these notifications automatically (when enabled in config):
 ━━━━━━━━━━━━━━━━━━━━━
 🟢 Running
 ⏱ Uptime: 2h 15m
-📈 Strategy: ensemble
-💼 Active Trades: 2/3
+💼 Active Trades: 2
 🔄 Trading Mode: paper
+⚙️ Runtime Mode: runtime_primary
+🧭 State Source: runtime_projection
+🟢 Runtime Healthy: yes
+📣 Rollout Health: promotion_ready
+➡️ Recommended Action: stay_runtime_primary
 ```
 
 ### Trade notification

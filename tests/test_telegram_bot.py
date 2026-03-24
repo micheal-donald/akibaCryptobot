@@ -135,6 +135,10 @@ async def test_cmd_status_uses_runtime_projection_counts():
     assert "Active Trades: 1" in message
     assert "Runtime Mode: runtime_primary" in message
     assert "State Source: runtime_projection" in message
+    assert "Runtime Healthy: yes" in message
+    assert "Rollout Health: promotion_ready" in message
+    assert "Rollout Recommended Action: stay_runtime_primary" in message
+    assert "Rollout Summary: Runtime primary ownership is healthy" in message
     assert "Projected Open Orders: 2" in message
     assert "Projected Pending Exits: 1" in message
 
@@ -156,6 +160,8 @@ async def test_cmd_trades_uses_runtime_projected_positions():
     assert "BTC/USDT: BUY 0.25 @ $65000.000000 [open]" in message
     assert "ETH/USDT" not in message
     assert "State Source: runtime_projection" in message
+    assert "Rollout Health: promotion_ready" in message
+    assert "Rollout Recommended Action: stay_runtime_primary" in message
 
 
 @pytest.mark.asyncio
@@ -172,6 +178,8 @@ async def test_cmd_trades_keeps_legacy_state_in_shadow_mode():
     assert "ETH/USDT: BUY 1.5 @ $3200.000000" in message
     assert "Shadow Projected Positions: 1" in message
     assert "State Source: shadow" in message
+    assert "Rollout Health: shadow_ready" in message
+    assert "Rollout Recommended Action: continue_shadow" in message
 
 
 @pytest.mark.asyncio
@@ -191,6 +199,7 @@ async def test_cmd_performance_uses_runtime_open_position_count():
     assert "Open Positions: 1" in message
     assert "Runtime Mode: runtime_primary" in message
     assert "State Source: runtime_projection" in message
+    assert "Rollout Health: promotion_ready" in message
 
 
 @pytest.mark.asyncio
@@ -210,3 +219,25 @@ async def test_cmd_metrics_uses_runtime_open_position_count():
     assert "Open Positions: 1" in message
     assert "Runtime Mode: runtime_primary" in message
     assert "State Source: runtime_projection" in message
+    assert "Rollout Health: promotion_ready" in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_status_shows_rollback_guidance_for_unhealthy_runtime():
+    projection = make_projection(
+        source=ProjectionSource.RUNTIME_PROJECTION,
+        runtime_mode="runtime_primary",
+    )
+    object.__setattr__(projection, "runtime_is_healthy", False)
+
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = FakeBot(projection)
+    update = FakeUpdate()
+
+    await notifier.cmd_status(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "Runtime Healthy: no" in message
+    assert "Rollout Health: rollback_recommended" in message
+    assert "Rollout Recommended Action: rollback_to_legacy" in message
+    assert "rollback to legacy is recommended" in message
