@@ -5,12 +5,78 @@ WebSocket streams for real-time data push to browser clients.
 import asyncio
 import logging
 from datetime import datetime
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from api.dependencies import bot_state
+from runtime.view_models import ProjectionSource
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+def _get_runtime_projection(bot):
+    projection_getter = getattr(bot, "get_runtime_projection", None)
+    if projection_getter is None:
+        return None
+    try:
+        return projection_getter()
+    except Exception as exc:
+        logger.error("WebSocket runtime projection lookup failed: %s", exc)
+        return None
+
+
+def _build_status_payload(bot):
+    status_info = bot.get_status_info()
+    projection = _get_runtime_projection(bot)
+
+    active_trades = status_info.get("active_trades", 0)
+    runtime_mode = status_info.get("runtime_mode", "legacy")
+    runtime_is_running = status_info.get("runtime_is_running", False)
+    runtime_owns_entries = status_info.get("runtime_owns_entries", False)
+    runtime_owns_exits = status_info.get("runtime_owns_exits", False)
+    state_source = ProjectionSource.LEGACY.value
+    projected_active_positions = 0
+    projected_open_orders = 0
+    projected_pending_exits = 0
+    projected_rejected_orders = 0
+
+    if projection is not None:
+        state_source = projection.source.value
+        runtime_mode = projection.runtime_mode
+        runtime_is_running = projection.runtime_is_running
+        runtime_owns_entries = projection.runtime_owns_entries
+        runtime_owns_exits = projection.runtime_owns_exits
+        projected_active_positions = projection.active_position_count
+        projected_open_orders = projection.open_order_count
+        projected_pending_exits = projection.pending_exit_count
+        projected_rejected_orders = projection.rejected_order_count
+
+        if projection.source is ProjectionSource.RUNTIME_PROJECTION:
+            active_trades = projection.active_position_count
+
+    return {
+        "type": "status",
+        "data": {
+            "is_running": status_info.get("is_running", True),
+            "uptime": status_info.get("uptime", "Unknown"),
+            "active_trades": active_trades,
+            "circuit_breaker_active": bot.circuit_breaker_active,
+            "circuit_breaker_reason": bot.circuit_breaker_reason,
+            "strategy": bot.strategy_manager.active_strategy,
+            "trading_mode": status_info.get("trading_mode", "paper"),
+            "runtime_mode": runtime_mode,
+            "runtime_is_running": runtime_is_running,
+            "runtime_owns_entries": runtime_owns_entries,
+            "runtime_owns_exits": runtime_owns_exits,
+            "state_source": state_source,
+            "projected_active_positions": projected_active_positions,
+            "projected_open_orders": projected_open_orders,
+            "projected_pending_exits": projected_pending_exits,
+            "projected_rejected_orders": projected_rejected_orders,
+            "timestamp": datetime.utcnow().isoformat(),
+        },
+    }
 
 
 @router.websocket("/ws/prices")
@@ -55,13 +121,7 @@ async def ws_status(websocket: WebSocket):
         while True:
             bot = bot_state.get("bot")
             if bot:
-                status_info = bot.get_status_info()
-                status_info["circuit_breaker_active"] = bot.circuit_breaker_active
-                status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason
-                status_info["strategy"] = bot.strategy_manager.active_strategy
-                status_info["timestamp"] = datetime.utcnow().isoformat()
-
-                await websocket.send_json({"type": "status", "data": status_info})
+                await websocket.send_json(_build_status_payload(bot))
 
             await asyncio.sleep(5)
     except WebSocketDisconnect:

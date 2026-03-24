@@ -154,7 +154,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Endpoint | Push Interval | Description |
 |---|---|---|
 | `ws://<host>:<port>/ws/prices` | 1 second | Real-time price ticks from the Binance exchange cache |
-| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates (trades count, circuit breaker, strategy) |
+| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with runtime mode, ownership, and projection metadata |
 
 **Message format** (`/ws/prices`):
 ```json
@@ -174,9 +174,19 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   "type": "status",
   "data": {
     "is_running": true,
-    "active_trades_count": 2,
+    "active_trades": 2,
     "circuit_breaker_active": false,
     "strategy": "ensemble",
+    "trading_mode": "paper",
+    "runtime_mode": "runtime_primary",
+    "runtime_is_running": true,
+    "runtime_owns_entries": true,
+    "runtime_owns_exits": true,
+    "state_source": "runtime_projection",
+    "projected_active_positions": 2,
+    "projected_open_orders": 1,
+    "projected_pending_exits": 1,
+    "projected_rejected_orders": 0,
     "timestamp": "2024-01-15T10:30:05"
   }
 }
