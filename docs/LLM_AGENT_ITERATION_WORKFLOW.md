@@ -113,6 +113,82 @@ The main thread must report at these checkpoints:
 
 If nothing has changed, report the actual current state instead of going silent.
 
+## Worker/Main-Thread Communication Contract
+
+The workflow requires an explicit communication protocol between the worker and the main thread.
+
+The worker must communicate back through one final bounded completion report for each assigned slice.
+The main thread must not assume a slice is done until that completion report is received or the worker has clearly failed.
+
+### Worker Completion Rules
+
+When a worker finishes a task, it must return a compact report with:
+
+- task id
+- completion status: `completed`, `blocked`, or `failed`
+- files changed
+- behavior added or changed
+- tests run and results
+- known risks, gaps, or follow-up notes
+
+If the worker made no changes, it must say so explicitly.
+
+### Required Worker Report Format
+
+Use this exact shape:
+
+```text
+Task: Pn-xx
+Status: completed|blocked|failed
+Files changed:
+- path
+
+Behavior:
+- short factual summary
+
+Tests:
+- command/result
+
+Risks:
+- none
+```
+
+### Main-Thread Handling Rules
+
+When the worker reports back, the main thread must:
+
+1. acknowledge receipt in-thread
+2. review the diff and claimed behavior
+3. rerun the relevant tests locally
+4. either accept, patch, or reject the slice
+5. report the decision in-thread before moving on
+
+The main thread must surface the worker result to the user even if the user did not ask for an update.
+
+### Polling and Waiting Rules
+
+- Do not assume a worker is done because enough time has passed.
+- Treat completion as real only when the worker returns a final status payload.
+- If polling shows no completion payload yet, report that exact state instead of guessing.
+- If the worker infrastructure is unavailable or the worker disappears, report that explicitly and then decide whether to retry, replace, or take over locally.
+
+### Worker Failure and Takeover Rules
+
+If the worker:
+
+- fails
+- disappears
+- cannot access the workspace correctly
+- or cannot return a valid completion report
+
+then the main thread must report one of these explicit states:
+
+- `worker failed, reissuing task`
+- `worker infrastructure unavailable, taking over locally`
+- `worker blocked, awaiting user decision`
+
+This avoids silent stalls and makes the ownership boundary explicit.
+
 ## Task Design Rules
 
 Every worker task must be:
@@ -219,6 +295,7 @@ Rules:
 - Work in bounded phase tasks.
 - Use one worker task at a time unless parallelism is clearly safe.
 - Let the worker run; do not take over locally unless the worker fails or the user asks.
+- Require every worker to return a final completion report with task id, files changed, behavior, tests, and risks.
 - Review every worker slice in the main thread.
 - Patch locally if needed.
 - Run focused tests, then relevant regression tests.
