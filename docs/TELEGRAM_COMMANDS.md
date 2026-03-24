@@ -35,7 +35,7 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 |---|---|
 | `/start` | Welcome message and bot info |
 | `/help` | List all available commands |
-| `/status` | Bot status — uptime, strategy, active trades, running state |
+| `/status` | Bot status — uptime, active trades or projected positions, runtime mode, and source-of-truth state |
 | `/config` | Current configuration summary |
 | `/reconcile` | Manual balance audit vs Exchange |
 
@@ -44,7 +44,7 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 | Command | Description |
 |---|---|
 | `/balance` | Live wallet balances from Binance |
-| `/trades` | List all currently open positions with entry details |
+| `/trades` | List open positions from the active source of truth, including runtime-projected positions during runtime-owned modes |
 | `/stop` | Pause the trading engine (stops scanning for new trades) |
 | `/resume` | Resume the trading engine |
 
@@ -52,7 +52,7 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 
 | Command | Description |
 |---|---|
-| `/performance` | Quick performance summary — total trades, win rate, PnL |
+| `/performance` | Quick performance summary — total trades, win rate, PnL, open positions, and runtime ownership context |
 | `/metrics` | Detailed metrics — Sharpe ratio, Sortino ratio, max drawdown, profit factor |
 | `/report` | Full formatted performance report |
 

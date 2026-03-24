@@ -1,9 +1,10 @@
 import os
-from typing import Dict
+from typing import Any, Dict
 import logging
 from datetime import datetime
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
+from runtime.view_models import ProjectionSource
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +164,81 @@ class TelegramNotifier:
 
         return application
 
+    def _get_runtime_projection(self):
+        """Return the current runtime projection for operator-facing commands."""
+        if not hasattr(self, "bot_instance"):
+            return None
+
+        projection_getter = getattr(self.bot_instance, "get_runtime_projection", None)
+        if projection_getter is None:
+            return None
+
+        try:
+            return projection_getter()
+        except Exception as exc:
+            logger.error("Failed to load runtime projection for Telegram: %s", exc)
+            return None
+
+    @staticmethod
+    def _projection_source_value(projection: Any) -> str:
+        if projection is None:
+            return ProjectionSource.LEGACY.value
+        source = getattr(projection, "source", None)
+        return getattr(source, "value", str(source or ProjectionSource.LEGACY.value))
+
+    @classmethod
+    def _uses_runtime_projection(cls, projection: Any) -> bool:
+        return (
+            cls._projection_source_value(projection)
+            == ProjectionSource.RUNTIME_PROJECTION.value
+        )
+
+    @classmethod
+    def _runtime_summary_lines(cls, projection: Any) -> list[str]:
+        if projection is None:
+            return []
+
+        return [
+            f"Runtime Mode: {getattr(projection, 'runtime_mode', 'legacy')}",
+            f"State Source: {cls._projection_source_value(projection)}",
+            f"Runtime Running: {'yes' if getattr(projection, 'runtime_is_running', False) else 'no'}",
+            f"Runtime Healthy: {'yes' if getattr(projection, 'runtime_is_healthy', True) else 'no'}",
+            f"Runtime Owns Entries: {getattr(projection, 'runtime_owns_entries', False)}",
+            f"Runtime Owns Exits: {getattr(projection, 'runtime_owns_exits', False)}",
+        ]
+
+    @staticmethod
+    def _format_trade_lines(trades_info: Any) -> list[str]:
+        if isinstance(trades_info, dict):
+            entries = trades_info.items()
+        else:
+            entries = ((trade.get("symbol", "UNKNOWN"), trade) for trade in trades_info)
+
+        lines = []
+        for symbol, trade in entries:
+            side = str(trade.get("side", "")).upper()
+            amount = trade.get("amount", 0)
+            entry = trade.get("entry_price")
+            status = trade.get("status")
+            entry_text = f"${entry:.6f}" if entry is not None else "n/a"
+            status_suffix = f" [{status}]" if status else ""
+            lines.append(f"{symbol}: {side} {amount} @ {entry_text}{status_suffix}")
+        return lines
+
+    @staticmethod
+    def _format_projected_trade_lines(projection: Any) -> list[str]:
+        lines = []
+        for position in getattr(projection, "positions", ()):
+            side = str(getattr(position, "side", "")).upper()
+            amount = getattr(position, "open_qty", 0)
+            entry = getattr(position, "avg_entry_price", None)
+            entry_text = f"${entry:.6f}" if entry is not None else "n/a"
+            status = getattr(position, "status", "unknown")
+            lines.append(
+                f"{position.symbol}: {side} {amount} @ {entry_text} [{status}]"
+            )
+        return lines
+
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command"""
         welcome_message = (
@@ -188,15 +264,34 @@ class TelegramNotifier:
     async def cmd_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /status command"""
         if hasattr(self, "bot_instance"):
-            status_info = self.bot_instance.get_status_info()
-            message = (
-                f"🤖 Bot Status: {self.bot_status}\n"
-                f"Active Trades: {status_info.get('active_trades', 0)}\n"
-                f"Daily PnL: ${status_info.get('daily_pnl', 0):.6f}\n"
-                f"Uptime: {status_info.get('uptime', 'Unknown')}"
-            )
+            try:
+                status_info = self.bot_instance.get_status_info()
+                projection = self._get_runtime_projection()
+                active_trades = status_info.get("active_trades", 0)
+                if self._uses_runtime_projection(projection):
+                    active_trades = getattr(projection, "active_position_count", 0)
+
+                lines = [
+                    f"Bot Status: {self.bot_status}",
+                    f"Active Trades: {active_trades}",
+                    f"Daily PnL: ${status_info.get('daily_pnl', 0):.6f}",
+                    f"Uptime: {status_info.get('uptime', 'Unknown')}",
+                ]
+
+                if projection is not None:
+                    lines.extend(self._runtime_summary_lines(projection))
+                    lines.append(
+                        f"Projected Open Orders: {getattr(projection, 'open_order_count', 0)}"
+                    )
+                    lines.append(
+                        f"Projected Pending Exits: {getattr(projection, 'pending_exit_count', 0)}"
+                    )
+
+                message = "\n".join(lines)
+            except Exception as e:
+                message = f"Error fetching status: {str(e)}"
         else:
-            message = f"🤖 Bot Status: {self.bot_status}\nNo detailed info available"
+            message = f"Bot Status: {self.bot_status}\nNo detailed info available"
 
         await update.message.reply_text(message)
 
@@ -220,20 +315,45 @@ class TelegramNotifier:
         """Handle /trades command"""
         if hasattr(self, "bot_instance"):
             try:
-                trades_info = self.bot_instance.get_active_trades()
-                if not trades_info:
-                    message = "📊 No active trades"
+                projection = self._get_runtime_projection()
+                if self._uses_runtime_projection(projection):
+                    trade_lines = self._format_projected_trade_lines(projection)
+                    if not trade_lines:
+                        lines = ["No active trades"]
+                    else:
+                        lines = ["Active Trades:", *trade_lines]
+                    lines.extend(self._runtime_summary_lines(projection))
+                    lines.append(
+                        f"Projected Open Orders: {getattr(projection, 'open_order_count', 0)}"
+                    )
+                    message = "\n".join(lines)
                 else:
-                    message = "📊 Active Trades:\n"
-                    for symbol, trade in trades_info.items():
-                        side = trade["side"].upper()
-                        amount = trade["amount"]
-                        entry = trade["entry_price"]
-                        message += f"{symbol}: {side} {amount} @ ${entry:.6f}\n"
+                    trades_info = self.bot_instance.get_active_trades()
+                    if not trades_info:
+                        lines = ["No active trades"]
+                    else:
+                        lines = [
+                            "Active Trades:",
+                            *self._format_trade_lines(trades_info),
+                        ]
+
+                    if (
+                        self._projection_source_value(projection)
+                        == ProjectionSource.SHADOW.value
+                    ):
+                        lines.append(
+                            f"Shadow Projected Positions: {getattr(projection, 'active_position_count', 0)}"
+                        )
+                        lines.append(
+                            f"Shadow Open Orders: {getattr(projection, 'open_order_count', 0)}"
+                        )
+                        lines.extend(self._runtime_summary_lines(projection))
+
+                    message = "\n".join(lines)
             except Exception as e:
-                message = f"❌ Error fetching trades: {str(e)}"
+                message = f"Error fetching trades: {str(e)}"
         else:
-            message = "❌ Bot instance not available"
+            message = "Bot instance not available"
 
         await update.message.reply_text(message)
 
@@ -355,26 +475,45 @@ class TelegramNotifier:
                         trade_store=self.bot_instance.trade_store
                     )
                 )
+                projection = self._get_runtime_projection()
 
-                pnl_emoji = (
-                    "📈"
+                pnl_state = (
+                    "profit"
                     if metrics["total_pnl"] > 0
-                    else "📉" if metrics["total_pnl"] < 0 else "➖"
+                    else "loss" if metrics["total_pnl"] < 0 else "flat"
                 )
+                open_positions = metrics.get("open_trades_count", 0)
+                if self._uses_runtime_projection(projection):
+                    open_positions = getattr(projection, "active_position_count", 0)
 
-                message = (
-                    f"📊 Performance Summary\n\n"
-                    f"💰 Balance: ${metrics['current_balance']:,.2f}\n"
-                    f"{pnl_emoji} Total P&L: ${metrics['total_pnl']:,.2f} ({metrics['total_return_percent']:.2f}%)\n\n"
-                    f"📈 Trades: {metrics['total_trades']}\n"
-                    f"✅ Win Rate: {metrics['win_rate']:.1f}%\n"
-                    f"⚡ Profit Factor: {metrics['profit_factor']:.2f}\n"
-                    f"📉 Max DD: {metrics['max_drawdown_percent']:.2f}%"
-                )
+                lines = [
+                    "Performance Summary",
+                    "",
+                    f"Balance: ${metrics['current_balance']:,.2f}",
+                    f"Total P&L ({pnl_state}): ${metrics['total_pnl']:,.2f} ({metrics['total_return_percent']:.2f}%)",
+                    "",
+                    f"Trades: {metrics['total_trades']}",
+                    f"Win Rate: {metrics['win_rate']:.1f}%",
+                    f"Profit Factor: {metrics['profit_factor']:.2f}",
+                    f"Max DD: {metrics['max_drawdown_percent']:.2f}%",
+                    f"Open Positions: {open_positions}",
+                ]
+
+                if projection is not None:
+                    if (
+                        self._projection_source_value(projection)
+                        == ProjectionSource.SHADOW.value
+                    ):
+                        lines.append(
+                            f"Shadow Projected Positions: {getattr(projection, 'active_position_count', 0)}"
+                        )
+                    lines.extend(self._runtime_summary_lines(projection))
+
+                message = "\n".join(lines)
             except Exception as e:
-                message = f"❌ Error fetching performance: {str(e)}"
+                message = f"Error fetching performance: {str(e)}"
         else:
-            message = "❌ Performance tracker not available"
+            message = "Performance tracker not available"
 
         await update.message.reply_text(message)
 
@@ -389,35 +528,56 @@ class TelegramNotifier:
                         trade_store=self.bot_instance.trade_store
                     )
                 )
+                projection = self._get_runtime_projection()
+                open_positions = metrics.get("open_trades_count", 0)
+                if self._uses_runtime_projection(projection):
+                    open_positions = getattr(projection, "active_position_count", 0)
 
-                message = (
-                    f"📊 Detailed Performance Metrics\n\n"
-                    f"💰 BALANCE\n"
-                    f"Initial: ${metrics['initial_balance']:,.2f}\n"
-                    f"Current: ${metrics['current_balance']:,.2f}\n"
-                    f"P&L: ${metrics['total_pnl']:,.2f} ({metrics['total_return_percent']:.2f}%)\n\n"
-                    f"📈 TRADES\n"
-                    f"Total: {metrics['total_trades']}\n"
-                    f"Winners: {metrics['winning_trades']}\n"
-                    f"Losers: {metrics['losing_trades']}\n"
-                    f"Win Rate: {metrics['win_rate']:.2f}%\n"
-                    f"Avg Win: ${metrics['average_win']:.2f}\n"
-                    f"Avg Loss: ${metrics['average_loss']:.2f}\n"
-                    f"W/L Ratio: {metrics['win_loss_ratio']:.2f}\n\n"
-                    f"⚖️ RISK METRICS\n"
-                    f"Sharpe Ratio: {metrics['sharpe_ratio']:.3f}\n"
-                    f"Sortino Ratio: {metrics['sortino_ratio']:.3f}\n"
-                    f"Profit Factor: {metrics['profit_factor']:.3f}\n"
-                    f"Expectancy: ${metrics['expectancy']:.2f}\n\n"
-                    f"📉 DRAWDOWN\n"
-                    f"Max DD: {metrics['max_drawdown_percent']:.2f}%\n"
-                    f"Current DD: {metrics['current_drawdown_percent']:.2f}%\n\n"
-                    f"📂 Open Positions: {metrics['open_trades_count']}"
-                )
+                lines = [
+                    "Detailed Performance Metrics",
+                    "",
+                    "BALANCE",
+                    f"Initial: ${metrics['initial_balance']:,.2f}",
+                    f"Current: ${metrics['current_balance']:,.2f}",
+                    f"P&L: ${metrics['total_pnl']:,.2f} ({metrics['total_return_percent']:.2f}%)",
+                    "",
+                    "TRADES",
+                    f"Total: {metrics['total_trades']}",
+                    f"Winners: {metrics['winning_trades']}",
+                    f"Losers: {metrics['losing_trades']}",
+                    f"Win Rate: {metrics['win_rate']:.2f}%",
+                    f"Avg Win: ${metrics['average_win']:.2f}",
+                    f"Avg Loss: ${metrics['average_loss']:.2f}",
+                    f"W/L Ratio: {metrics['win_loss_ratio']:.2f}",
+                    "",
+                    "RISK METRICS",
+                    f"Sharpe Ratio: {metrics['sharpe_ratio']:.3f}",
+                    f"Sortino Ratio: {metrics['sortino_ratio']:.3f}",
+                    f"Profit Factor: {metrics['profit_factor']:.3f}",
+                    f"Expectancy: ${metrics['expectancy']:.2f}",
+                    "",
+                    "DRAWDOWN",
+                    f"Max DD: {metrics['max_drawdown_percent']:.2f}%",
+                    f"Current DD: {metrics['current_drawdown_percent']:.2f}%",
+                    "",
+                    f"Open Positions: {open_positions}",
+                ]
+
+                if projection is not None:
+                    if (
+                        self._projection_source_value(projection)
+                        == ProjectionSource.SHADOW.value
+                    ):
+                        lines.append(
+                            f"Shadow Projected Positions: {getattr(projection, 'active_position_count', 0)}"
+                        )
+                    lines.extend(self._runtime_summary_lines(projection))
+
+                message = "\n".join(lines)
             except Exception as e:
-                message = f"❌ Error fetching metrics: {str(e)}"
+                message = f"Error fetching metrics: {str(e)}"
         else:
-            message = "❌ Performance tracker not available"
+            message = "Performance tracker not available"
 
         await update.message.reply_text(message)
 
