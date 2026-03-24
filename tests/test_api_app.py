@@ -3,6 +3,7 @@ import asyncio
 import pytest
 
 from api.app import shutdown_trading_bot
+from api.routes.status import get_status
 
 
 class FakeBot:
@@ -50,3 +51,39 @@ async def test_shutdown_trading_bot_cancels_when_task_does_not_exit():
 
     assert bot.stop_calls == 1
     assert trading_task.cancelled() is True
+
+
+class FakeStatusBot:
+    def __init__(self):
+        self.circuit_breaker_active = False
+        self.circuit_breaker_reason = ""
+        self.config = {"exchange": {"sandbox": True}}
+        self.strategy_manager = type(
+            "StrategyManager", (), {"active_strategy": "momentum"}
+        )()
+
+    def get_status_info(self):
+        return {
+            "active_trades": 0,
+            "daily_pnl": 0.0,
+            "uptime": "0:00:10",
+            "is_running": True,
+            "runtime_mode": "runtime_primary",
+            "runtime_is_running": True,
+            "runtime_owns_entries": True,
+            "runtime_owns_exits": True,
+        }
+
+
+@pytest.mark.asyncio
+async def test_status_route_includes_runtime_cutover_fields():
+    bot = FakeStatusBot()
+
+    payload = await get_status(bot=bot)
+
+    assert payload["runtime_mode"] == "runtime_primary"
+    assert payload["runtime_is_running"] is True
+    assert payload["runtime_owns_entries"] is True
+    assert payload["runtime_owns_exits"] is True
+    assert payload["strategy"] == "momentum"
+    assert payload["trading_mode"] == "paper"

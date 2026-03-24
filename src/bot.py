@@ -145,6 +145,13 @@ class AkibaCryptoBot:
     def runtime_owns_exits(self) -> bool:
         return self.runtime_mode.owns_exits
 
+    @property
+    def runtime_is_running(self) -> bool:
+        runtime_app = self.runtime_app
+        return bool(
+            runtime_app is not None and getattr(runtime_app, "is_running", False)
+        )
+
     def _build_runtime_handle(self):
         if self.runtime_config is None or not self.runtime_enabled:
             return None
@@ -756,6 +763,10 @@ class AkibaCryptoBot:
             "daily_pnl": 0.0,
             "uptime": str(uptime),
             "is_running": self.is_running,
+            "runtime_mode": self.runtime_mode.value,
+            "runtime_is_running": self.runtime_is_running,
+            "runtime_owns_entries": self.runtime_owns_entries,
+            "runtime_owns_exits": self.runtime_owns_exits,
         }
 
     async def get_balance_info(self) -> Dict:

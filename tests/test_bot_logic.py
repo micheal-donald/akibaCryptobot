@@ -380,3 +380,29 @@ async def test_cleanup_stops_runtime_before_exchange_teardown(bot):
     assert calls.index("runtime.stop") < calls.index("data_exchange.close")
     assert calls.index("runtime.stop") < calls.index("exchange.close")
     assert calls.index("runtime.stop") < calls.index("trade_store.close")
+
+
+def test_get_status_info_includes_runtime_cutover_fields(bot):
+    status = bot.get_status_info()
+
+    assert status["runtime_mode"] == "legacy"
+    assert status["runtime_is_running"] is False
+    assert status["runtime_owns_entries"] is False
+    assert status["runtime_owns_exits"] is False
+
+
+def test_get_status_info_reports_running_runtime(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_primary",
+        shadow_mode=False,
+    )
+    bot.runtime_app = MagicMock(is_running=True)
+
+    status = bot.get_status_info()
+
+    assert status["runtime_mode"] == "runtime_primary"
+    assert status["runtime_is_running"] is True
+    assert status["runtime_owns_entries"] is True
+    assert status["runtime_owns_exits"] is True
