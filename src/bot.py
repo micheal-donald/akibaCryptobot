@@ -21,6 +21,8 @@ from performance.metrics_tracker import PerformanceMetricsTracker
 from monitoring.reconciliation import ReconciliationManager
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
+from runtime.config import RuntimeConfig
+from runtime.mode import RuntimeMode
 
 
 class AkibaCryptoBot:
@@ -82,6 +84,11 @@ class AkibaCryptoBot:
         self.position_manager = PositionManager(self)
         self.opportunity_scanner = OpportunityScanner(self)
 
+        # Runtime supervisor (Phase 6): inactive unless explicitly configured.
+        self.runtime_config = self._load_runtime_config()
+        self.runtime_handle = None
+        self.runtime_app = None
+
         self.is_running = False
         self.start_time = datetime.now()
         self.last_update = datetime.now()
@@ -108,6 +115,133 @@ class AkibaCryptoBot:
     def load_config(config_path: str) -> Dict:
         with open(config_path, "r") as f:
             return json.load(f)
+
+    def _load_runtime_config(self) -> RuntimeConfig | None:
+        runtime_section = self.config.get("runtime")
+        if not isinstance(runtime_section, dict):
+            return None
+        if (
+            "runtime_mode" not in runtime_section
+            and "shadow_mode" not in runtime_section
+        ):
+            return None
+        return RuntimeConfig.from_mapping(self.config)
+
+    @property
+    def runtime_mode(self) -> RuntimeMode:
+        if self.runtime_config is None:
+            return RuntimeMode.LEGACY
+        return self.runtime_config.runtime_mode
+
+    @property
+    def runtime_enabled(self) -> bool:
+        return self.runtime_mode.runtime_enabled
+
+    @property
+    def runtime_owns_entries(self) -> bool:
+        return self.runtime_mode.owns_entries
+
+    @property
+    def runtime_owns_exits(self) -> bool:
+        return self.runtime_mode.owns_exits
+
+    def _build_runtime_handle(self):
+        if self.runtime_config is None or not self.runtime_enabled:
+            return None
+
+        from adapters.binance.bootstrap_gateway import BinanceBootstrapGateway
+        from adapters.binance.execution_gateway import BinanceExecutionGateway
+        from adapters.binance.user_data_gateway import BinanceUserDataGateway
+        from adapters.binance.ws_gateway import BinanceWebSocketGateway
+        from adapters.sqlite.runtime_store import SQLiteRuntimeStore
+        from runtime.app import RuntimeApp
+        from runtime.shadow import build_shadow_runtime
+        from strategies.runtime_adapter import LegacyStrategyRuntimeAdapter
+
+        market_data_gateway = BinanceWebSocketGateway(
+            api_key=self.exchange.api_key or "",
+            api_secret=self.exchange.secret_key or "",
+            testnet=self.runtime_config.sandbox_market_data,
+        )
+
+        if self.runtime_config.runtime_is_shadow:
+            return build_shadow_runtime(
+                self.runtime_config,
+                gateway=market_data_gateway,
+            )
+
+        active_strategy = self.strategy_manager.get_active_strategy()
+        if active_strategy is None:
+            raise RuntimeError("runtime-enabled bot requires an active strategy")
+
+        runtime_strategy = LegacyStrategyRuntimeAdapter(
+            active_strategy,
+            entry_quantity=0.0,
+            quantity_resolver=self._resolve_runtime_entry_quantity,
+        )
+        runtime_store = SQLiteRuntimeStore(
+            db_path=self.config.get("persistence", {}).get(
+                "runtime_db_path", "data/runtime.db"
+            )
+        )
+        execution_gateway = BinanceExecutionGateway(client=self.exchange)
+        user_stream_gateway = BinanceUserDataGateway(
+            api_key=self.exchange.api_key or "",
+            api_secret=self.exchange.secret_key or "",
+            testnet=self.runtime_config.sandbox_execution,
+        )
+        bootstrap_gateway = BinanceBootstrapGateway(client=self.data_exchange)
+        return RuntimeApp.build_phase5(
+            self.runtime_config,
+            market_data_gateway=market_data_gateway,
+            execution_gateway=execution_gateway,
+            runtime_store=runtime_store,
+            strategy=runtime_strategy,
+            market_data_bootstrap_gateway=bootstrap_gateway,
+            user_stream_gateway=user_stream_gateway,
+            max_open_positions=self.config.get("trading", {}).get("max_open_trades", 0),
+            kill_switch_enabled=self.circuit_breaker_active,
+        )
+
+    def _resolve_runtime_entry_quantity(self, snapshot, signal) -> float:
+        del signal
+        stake_amount = float(self.config.get("trading", {}).get("stake_amount", 0.0))
+        if stake_amount <= 0:
+            return 0.0
+        current_price = snapshot.last_price
+        if current_price is None and snapshot.closed_candles:
+            current_price = snapshot.closed_candles[-1].close
+        if current_price is None or current_price <= 0:
+            return 0.0
+        return stake_amount / current_price
+
+    async def _start_runtime_if_enabled(self) -> None:
+        if not self.runtime_enabled or self.runtime_handle is not None:
+            return
+
+        runtime_handle = self._build_runtime_handle()
+        if runtime_handle is None:
+            return
+
+        self.runtime_handle = runtime_handle
+        self.runtime_app = getattr(runtime_handle, "app", runtime_handle)
+        self.logger.info(
+            "Starting runtime supervisor in %s mode",
+            self.runtime_mode.value,
+        )
+        await runtime_handle.start()
+
+    async def _stop_runtime(self) -> None:
+        runtime_handle = self.runtime_handle
+        self.runtime_handle = None
+        self.runtime_app = None
+        if runtime_handle is None:
+            return
+        await self._run_cleanup_step(
+            "runtime.stop",
+            runtime_handle.stop(),
+            timeout=self.CLEANUP_NETWORK_TIMEOUT_SECONDS,
+        )
 
     def signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}, shutting down gracefully...")
@@ -200,6 +334,8 @@ class AkibaCryptoBot:
                 self.logger.info(
                     "Successfully connected to production Binance for market data"
                 )
+
+            await self._start_runtime_if_enabled()
 
             # Perform initial reconciliation check
             await self.reconciliation.reconcile()
@@ -312,6 +448,8 @@ class AkibaCryptoBot:
             await self._shutdown_telegram_fast()
 
         close_steps = []
+
+        await self._stop_runtime()
 
         if self.data_exchange and self.data_exchange is not self.exchange:
             close_steps.append(

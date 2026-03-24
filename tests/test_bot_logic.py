@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from bot import AkibaCryptoBot
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
+from runtime.config import RuntimeConfig
+from runtime.mode import RuntimeMode
 
 
 @pytest.fixture
@@ -62,6 +64,9 @@ def bot(mock_config):
         bot._stop_event = asyncio.Event()
         bot._cleanup_future = None
         bot.performance_tracker = MagicMock()
+        bot.runtime_config = None
+        bot.runtime_handle = None
+        bot.runtime_app = None
         bot.position_manager = PositionManager(bot)
         bot.opportunity_scanner = OpportunityScanner(bot)
         return bot
@@ -245,3 +250,80 @@ async def test_bug3_risk_manager_synced_on_restart(bot):
         take_profit=62000.0,
         order_id="abc",
     )
+
+
+class FakeRuntimeHandle:
+    def __init__(self, calls):
+        self.calls = calls
+        self.app = self
+
+    async def start(self):
+        self.calls.append("runtime.start")
+
+    async def stop(self):
+        self.calls.append("runtime.stop")
+
+
+def test_runtime_mode_defaults_to_legacy_without_explicit_config(bot):
+    bot.config.pop("runtime", None)
+    bot.runtime_config = bot._load_runtime_config()
+
+    assert bot.runtime_mode is RuntimeMode.LEGACY
+    assert bot.runtime_enabled is False
+    assert bot.runtime_owns_entries is False
+    assert bot.runtime_owns_exits is False
+
+
+@pytest.mark.asyncio
+async def test_start_runtime_if_enabled_starts_runtime_handle(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_entries",
+        shadow_mode=False,
+    )
+    calls = []
+    runtime_handle = FakeRuntimeHandle(calls)
+    bot._build_runtime_handle = MagicMock(return_value=runtime_handle)
+
+    await bot._start_runtime_if_enabled()
+
+    bot._build_runtime_handle.assert_called_once_with()
+    assert calls == ["runtime.start"]
+    assert bot.runtime_handle is runtime_handle
+    assert bot.runtime_app is runtime_handle
+
+
+@pytest.mark.asyncio
+async def test_cleanup_stops_runtime_before_exchange_teardown(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_entries",
+        shadow_mode=False,
+    )
+    calls = []
+    bot.runtime_handle = FakeRuntimeHandle(calls)
+    bot.runtime_app = bot.runtime_handle
+
+    async def record(label):
+        calls.append(label)
+
+    async def close_exchange():
+        await record("exchange.close")
+
+    async def close_data_exchange():
+        await record("data_exchange.close")
+
+    async def close_trade_store():
+        await record("trade_store.close")
+
+    bot.exchange.close = AsyncMock(side_effect=close_exchange)
+    bot.data_exchange.close = AsyncMock(side_effect=close_data_exchange)
+    bot.trade_store.close = AsyncMock(side_effect=close_trade_store)
+
+    await bot.cleanup()
+
+    assert calls.index("runtime.stop") < calls.index("data_exchange.close")
+    assert calls.index("runtime.stop") < calls.index("exchange.close")
+    assert calls.index("runtime.stop") < calls.index("trade_store.close")
