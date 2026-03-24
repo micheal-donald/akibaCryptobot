@@ -116,7 +116,11 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
     assert data["runtime_is_running"] is True
     assert data["runtime_owns_entries"] is True
     assert data["runtime_owns_exits"] is True
+    assert data["runtime_is_healthy"] is True
     assert data["state_source"] == "runtime_projection"
+    assert data["rollout_health"] == "promotion_ready"
+    assert data["rollout_recommended_action"] == "stay_runtime_primary"
+    assert "Runtime primary ownership is healthy" in data["rollout_summary"]
     assert data["projected_active_positions"] == 1
     assert data["projected_open_orders"] == 2
     assert data["projected_pending_exits"] == 1
@@ -142,6 +146,10 @@ async def test_ws_status_keeps_legacy_state_when_projection_missing(monkeypatch)
     assert data["runtime_is_running"] is False
     assert data["runtime_owns_entries"] is False
     assert data["runtime_owns_exits"] is False
+    assert data["runtime_is_healthy"] is True
     assert data["state_source"] == "legacy"
+    assert data["rollout_health"] == "legacy"
+    assert data["rollout_recommended_action"] == "stay_legacy"
+    assert "Legacy loop remains authoritative" in data["rollout_summary"]
     assert data["projected_active_positions"] == 0
     assert data["projected_open_orders"] == 0

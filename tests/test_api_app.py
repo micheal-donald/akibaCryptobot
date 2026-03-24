@@ -164,7 +164,11 @@ async def test_status_route_includes_runtime_cutover_fields():
     assert payload["runtime_is_running"] is True
     assert payload["runtime_owns_entries"] is True
     assert payload["runtime_owns_exits"] is True
+    assert payload["runtime_is_healthy"] is True
     assert payload["state_source"] == "runtime_projection"
+    assert payload["rollout_health"] == "promotion_ready"
+    assert payload["rollout_recommended_action"] == "stay_runtime_primary"
+    assert "Runtime primary ownership is healthy" in payload["rollout_summary"]
     assert payload["projected_active_positions"] == 1
     assert payload["projected_open_orders"] == 2
     assert payload["projected_pending_exits"] == 1
@@ -187,7 +191,35 @@ async def test_status_route_keeps_legacy_trade_count_in_shadow_mode():
 
     assert payload["active_trades"] == 1
     assert payload["state_source"] == "shadow"
+    assert payload["runtime_is_healthy"] is True
+    assert payload["rollout_health"] == "shadow_ready"
+    assert payload["rollout_recommended_action"] == "continue_shadow"
+    assert "validate before promotion" in payload["rollout_summary"]
     assert payload["projected_active_positions"] == 0
+
+
+@pytest.mark.asyncio
+async def test_status_route_marks_unhealthy_runtime_for_rollback():
+    bot = FakeStatusBot(
+        make_projection(
+            source=ProjectionSource.RUNTIME_PROJECTION,
+            runtime_mode="runtime_primary",
+            active_positions=(make_projected_position(),),
+        )
+    )
+    bot._projection = make_projection(
+        source=ProjectionSource.RUNTIME_PROJECTION,
+        runtime_mode="runtime_primary",
+        active_positions=(make_projected_position(),),
+    )
+    object.__setattr__(bot._projection, "runtime_is_healthy", False)
+
+    payload = await get_status(bot=bot)
+
+    assert payload["runtime_is_healthy"] is False
+    assert payload["rollout_health"] == "rollback_recommended"
+    assert payload["rollout_recommended_action"] == "rollback_to_legacy"
+    assert "rollback to legacy" in payload["rollout_summary"]
 
 
 @pytest.mark.asyncio

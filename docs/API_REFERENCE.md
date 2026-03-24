@@ -23,7 +23,14 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   "circuit_breaker_active": false,
   "circuit_breaker_reason": null,
   "strategy": "ensemble",
-  "trading_mode": "paper"
+  "trading_mode": "paper",
+  "runtime_mode": "runtime_primary",
+  "runtime_is_running": true,
+  "runtime_is_healthy": true,
+  "state_source": "runtime_projection",
+  "rollout_health": "promotion_ready",
+  "rollout_recommended_action": "stay_runtime_primary",
+  "rollout_summary": "Runtime primary ownership is healthy and ready for operator review."
 }
 ```
 
@@ -182,7 +189,11 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
     "runtime_is_running": true,
     "runtime_owns_entries": true,
     "runtime_owns_exits": true,
+    "runtime_is_healthy": true,
     "state_source": "runtime_projection",
+    "rollout_health": "promotion_ready",
+    "rollout_recommended_action": "stay_runtime_primary",
+    "rollout_summary": "Runtime primary ownership is healthy and ready for operator review.",
     "projected_active_positions": 2,
     "projected_open_orders": 1,
     "projected_pending_exits": 1,
