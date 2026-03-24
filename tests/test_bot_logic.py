@@ -126,6 +126,59 @@ async def test_feature_6_balance_cache(bot):
 
 
 @pytest.mark.asyncio
+async def test_trading_cycle_skips_legacy_scan_when_runtime_owns_entries(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_entries",
+        shadow_mode=False,
+    )
+    bot.exchange.get_balance.return_value = {"USDT": {"free": 1000, "used": 0}}
+    bot.update_market_data = AsyncMock()
+    bot.update_portfolio_value = AsyncMock()
+    bot.position_manager.manage_positions = AsyncMock()
+    bot.opportunity_scanner.scan_opportunities = AsyncMock()
+    bot.advanced_risk.check_circuit_breakers.return_value = (False, "")
+
+    await bot.trading_cycle()
+
+    bot.opportunity_scanner.scan_opportunities.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_scan_helpers_noop_when_runtime_owns_entries(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_entries",
+        shadow_mode=False,
+    )
+    bot.opportunity_scanner.scan_opportunities = AsyncMock()
+    bot.opportunity_scanner._process_pair = AsyncMock()
+
+    await bot.scan_opportunities()
+    await bot._process_pair("BTC/USDT")
+
+    bot.opportunity_scanner.scan_opportunities.assert_not_called()
+    bot.opportunity_scanner._process_pair.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_shadow_mode_still_allows_legacy_scanning(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="shadow",
+        shadow_mode=True,
+    )
+    bot.opportunity_scanner.scan_opportunities = AsyncMock()
+
+    await bot.scan_opportunities()
+
+    bot.opportunity_scanner.scan_opportunities.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
 async def test_feature_7_cooldown(bot):
     """Pairs on cooldown are skipped in _process_pair."""
     # Setup: recently closed trade with stop_loss — cooldown active

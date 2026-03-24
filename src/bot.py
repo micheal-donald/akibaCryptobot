@@ -643,8 +643,11 @@ class AkibaCryptoBot:
         if len(self.price_data_cache) >= 2:
             self.advanced_risk.calculate_correlations(self.price_data_cache)
 
-        # Look for new trading opportunities (only if circuit breaker is inactive)
-        if not self.circuit_breaker_active:
+        # Look for new trading opportunities only when the legacy path still
+        # owns entries and the circuit breaker is inactive.
+        if self.runtime_owns_entries:
+            self.logger.debug("Skipping legacy opportunity scan - runtime owns entries")
+        elif not self.circuit_breaker_active:
             await self.opportunity_scanner.scan_opportunities()
         else:
             self.logger.debug("Skipping opportunity scan - circuit breaker active")
@@ -719,9 +722,20 @@ class AkibaCryptoBot:
         await self.opportunity_scanner.place_trade(symbol, side, amount, entry_price)
 
     async def scan_opportunities(self):
+        if self.runtime_owns_entries:
+            self.logger.debug(
+                "Skipping legacy scan_opportunities call - runtime owns entries"
+            )
+            return
         await self.opportunity_scanner.scan_opportunities()
 
     async def _process_pair(self, pair: str):
+        if self.runtime_owns_entries:
+            self.logger.debug(
+                "Skipping legacy _process_pair call for %s - runtime owns entries",
+                pair,
+            )
+            return
         await self.opportunity_scanner._process_pair(pair)
 
     async def _check_spread(self, symbol: str) -> bool:
