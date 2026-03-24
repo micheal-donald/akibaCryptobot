@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from typing import cast
 
@@ -107,16 +107,26 @@ class MarketDataService(BaseService):
             self.logger.debug("Dropping market event with no symbol: %s", event.meta)
             return
 
-        if event.meta.event_type == "market.tick":
-            self._update_book_ticker(symbol, event)
-        elif event.meta.event_type in {"market.kline", "market.kline_closed"}:
-            self._update_kline(symbol, event)
+        normalized_event = event
+        if event.meta.symbol != symbol:
+            normalized_event = replace(
+                event,
+                meta=replace(event.meta, symbol=symbol),
+            )
 
-        await self.event_bus.put(event)
+        if normalized_event.meta.event_type == "market.tick":
+            self._update_book_ticker(symbol, normalized_event)
+        elif normalized_event.meta.event_type in {
+            "market.kline",
+            "market.kline_closed",
+        }:
+            self._update_kline(symbol, normalized_event)
+
+        await self.event_bus.put(normalized_event)
         for sink in self.event_sinks:
             if sink is self.event_bus:
                 continue
-            await sink.put(event)
+            await sink.put(normalized_event)
 
     def _register_gateway_callbacks(self) -> None:
         if self._callbacks_registered:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from domain.events import (
     EventMeta,
@@ -162,8 +162,8 @@ def make_config() -> RuntimeConfig:
 
 
 def make_kline_event() -> RuntimeEvent:
-    open_time = datetime(2026, 3, 24, 9, 0, tzinfo=timezone.utc)
-    close_time = datetime(2026, 3, 24, 9, 1, tzinfo=timezone.utc)
+    close_time = datetime.now(timezone.utc).replace(microsecond=0)
+    open_time = close_time - timedelta(minutes=1)
     return RuntimeEvent(
         meta=EventMeta(
             event_id="evt-kline-1",
