@@ -11,7 +11,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
-| `GET` | `/api/status` | Bot status: uptime, active trades, circuit breaker state, strategy, trading mode |
+| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, circuit breaker state, strategy, trading mode |
 | `GET` | `/api/reconcile` | Manually triggers a reconciliation check between DB and Exchange |
 
 **Example response** (`GET /api/status`):
@@ -19,18 +19,24 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 {
   "is_running": true,
   "uptime": "2h 15m",
-  "active_trades_count": 2,
+  "active_trades": 2,
   "circuit_breaker_active": false,
   "circuit_breaker_reason": null,
   "strategy": "ensemble",
   "trading_mode": "paper",
   "runtime_mode": "runtime_primary",
   "runtime_is_running": true,
+  "runtime_owns_entries": true,
+  "runtime_owns_exits": true,
   "runtime_is_healthy": true,
   "state_source": "runtime_projection",
   "rollout_health": "promotion_ready",
   "rollout_recommended_action": "stay_runtime_primary",
-  "rollout_summary": "Runtime primary ownership is healthy and ready for operator review."
+  "rollout_summary": "Runtime primary ownership is healthy and ready for operator review.",
+  "projected_active_positions": 2,
+  "projected_open_orders": 1,
+  "projected_pending_exits": 1,
+  "projected_rejected_orders": 0
 }
 ```
 
