@@ -643,8 +643,13 @@ class AkibaCryptoBot:
                         "✅ Circuit breaker deactivated - trading resumed"
                     )
 
-        # Check existing positions
-        await self.position_manager.manage_positions()
+        # Check existing positions only while the legacy path still owns exits.
+        if self.runtime_owns_exits:
+            self.logger.debug(
+                "Skipping legacy position management - runtime owns exits"
+            )
+        else:
+            await self.position_manager.manage_positions()
 
         # Update correlations for risk management (every cycle)
         if len(self.price_data_cache) >= 2:
@@ -721,6 +726,11 @@ class AkibaCryptoBot:
         await self.position_manager.close_position(symbol, reason)
 
     async def manage_positions(self):
+        if self.runtime_owns_exits:
+            self.logger.debug(
+                "Skipping legacy manage_positions call - runtime owns exits"
+            )
+            return
         await self.position_manager.manage_positions()
 
     async def place_trade(

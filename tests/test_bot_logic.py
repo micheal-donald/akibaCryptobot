@@ -146,6 +146,50 @@ async def test_trading_cycle_skips_legacy_scan_when_runtime_owns_entries(bot):
 
 
 @pytest.mark.asyncio
+async def test_trading_cycle_runtime_entries_keeps_legacy_position_management(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_entries",
+        shadow_mode=False,
+    )
+    bot.exchange.get_balance.return_value = {"USDT": {"free": 1000, "used": 0}}
+    bot.update_market_data = AsyncMock()
+    bot.update_portfolio_value = AsyncMock()
+    bot.position_manager.manage_positions = AsyncMock()
+    bot.opportunity_scanner.scan_opportunities = AsyncMock()
+    bot.advanced_risk.check_circuit_breakers.return_value = (False, "")
+
+    await bot.trading_cycle()
+
+    bot.position_manager.manage_positions.assert_awaited_once_with()
+    bot.opportunity_scanner.scan_opportunities.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_trading_cycle_skips_legacy_position_management_when_runtime_owns_exits(
+    bot,
+):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_primary",
+        shadow_mode=False,
+    )
+    bot.exchange.get_balance.return_value = {"USDT": {"free": 1000, "used": 0}}
+    bot.update_market_data = AsyncMock()
+    bot.update_portfolio_value = AsyncMock()
+    bot.position_manager.manage_positions = AsyncMock()
+    bot.opportunity_scanner.scan_opportunities = AsyncMock()
+    bot.advanced_risk.check_circuit_breakers.return_value = (False, "")
+
+    await bot.trading_cycle()
+
+    bot.position_manager.manage_positions.assert_not_called()
+    bot.opportunity_scanner.scan_opportunities.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_scan_helpers_noop_when_runtime_owns_entries(bot):
     bot.runtime_config = RuntimeConfig(
         symbols=("BTC/USDT",),
@@ -406,3 +450,18 @@ def test_get_status_info_reports_running_runtime(bot):
     assert status["runtime_is_running"] is True
     assert status["runtime_owns_entries"] is True
     assert status["runtime_owns_exits"] is True
+
+
+@pytest.mark.asyncio
+async def test_manage_positions_noop_when_runtime_owns_exits(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_primary",
+        shadow_mode=False,
+    )
+    bot.position_manager.manage_positions = AsyncMock()
+
+    await bot.manage_positions()
+
+    bot.position_manager.manage_positions.assert_not_called()
