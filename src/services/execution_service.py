@@ -6,7 +6,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, cast
-from enum import StrEnum
+from enum import Enum
 from uuid import uuid4
 
 from domain.events import (
@@ -25,7 +25,7 @@ from ports.exchange import ExecutionGateway, ProtectionIntent, UserStreamGateway
 from .base import BaseService
 
 
-class ProtectionStatus(StrEnum):
+class ProtectionStatus(str, Enum):
     """Runtime protection outcome for an entry order."""
 
     PENDING = "pending"

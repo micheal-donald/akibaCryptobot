@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from enum import StrEnum
+from enum import Enum
 
 
-class OrderStatus(StrEnum):
+class OrderStatus(str, Enum):
     """Canonical order lifecycle states for the runtime."""
 
     CREATED = "created"
@@ -22,7 +22,7 @@ class OrderStatus(StrEnum):
     ORPHANED = "orphaned"
 
 
-class PositionStatus(StrEnum):
+class PositionStatus(str, Enum):
     """Canonical position lifecycle states for the runtime."""
 
     NEW = "new"
