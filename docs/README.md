@@ -23,6 +23,7 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Phase 4 Risk/Persistence Spec](specs/PHASE_4_RISK_PERSISTENCE_SPEC.md) | Runtime risk gating, warm-path persistence, telemetry, and runtime cutover preparation |
 | [Phase 5 Signal/Strategy Spec](specs/PHASE_5_SIGNAL_STRATEGY_SPEC.md) | Runtime signal generation, strategy contracts, indicator caching, and entry-flow cutover |
 | [Phase 6 Runtime Cutover Spec](specs/PHASE_6_RUNTIME_CUTOVER_SPEC.md) | Runtime ownership modes, bot-supervisor cutover, and controlled legacy-loop carve-out |
+| [Phase 7 Runtime Compatibility Spec](specs/PHASE_7_RUNTIME_COMPATIBILITY_SPEC.md) | Runtime projection layer, runtime-aware API/Telegram surfaces, and paper-primary operator rollout |
 | [LLM Agent Iteration Workflow](LLM_AGENT_ITERATION_WORKFLOW.md) | Reusable protocol for phased, spec-driven, worker-assisted development and deployment |
 
 ---
