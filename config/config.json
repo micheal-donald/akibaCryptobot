@@ -23,6 +23,10 @@
     "stake_amount": 0.05,
     "stake_currency": "USDT"
   },
+  "runtime": {
+    "runtime_mode": "legacy",
+    "shadow_mode": false
+  },
   "risk_management": {
     "max_position_size": 0.05,
     "max_daily_loss": 0.02,

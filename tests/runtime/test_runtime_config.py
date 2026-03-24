@@ -77,6 +77,48 @@ def test_runtime_config_from_mapping_supports_explicit_runtime_mode() -> None:
     assert config.runtime_owns_exits is True
 
 
+def test_runtime_config_from_mapping_honors_explicit_legacy_rollout_mode() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "runtime": {
+                "symbols": ["BTC/USDT"],
+                "kline_intervals": ["1m"],
+                "runtime_mode": "legacy",
+                "shadow_mode": True,
+            }
+        }
+    )
+
+    assert config.runtime_mode is RuntimeMode.LEGACY
+    assert config.shadow_mode is False
+    assert config.runtime_enabled is False
+    assert config.runtime_owns_entries is False
+    assert config.runtime_owns_exits is False
+
+
+def test_runtime_config_from_mapping_uses_shadow_fallback_when_mode_omitted() -> None:
+    config = RuntimeConfig.from_mapping({"runtime": {"shadow_mode": True}})
+
+    assert config.runtime_mode is RuntimeMode.SHADOW
+    assert config.shadow_mode is True
+    assert config.runtime_enabled is True
+    assert config.runtime_owns_entries is False
+    assert config.runtime_owns_exits is False
+
+
+def test_runtime_config_from_mapping_rejects_invalid_runtime_mode() -> None:
+    with pytest.raises(ValueError, match="unsupported runtime mode"):
+        RuntimeConfig.from_mapping(
+            {
+                "runtime": {
+                    "symbols": ["BTC/USDT"],
+                    "kline_intervals": ["1m"],
+                    "runtime_mode": "paper",
+                }
+            }
+        )
+
+
 def test_runtime_config_mirrors_queue_size_aliases() -> None:
     queue_config = RuntimeConfig(
         symbols=("BTC/USDT",), kline_intervals=("1m",), queue_maxsize=8

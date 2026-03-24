@@ -63,7 +63,12 @@ class RuntimeConfig:
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "RuntimeConfig":
-        """Create a runtime config from the existing nested config structure."""
+        """Create a runtime config from the existing nested config structure.
+
+        `runtime_mode` is the explicit rollout contract when present. `shadow_mode`
+        remains as compatibility fallback for older configs that have not yet set a
+        runtime mode.
+        """
 
         runtime_section = cls._as_mapping(data.get("runtime"))
         trading_section = cls._as_mapping(data.get("trading"))

@@ -53,6 +53,38 @@ AkibaCryptoBot is configured via two JSON files and environment variables.
 | `stake_amount` | float | `0.05` | Fraction of balance per trade |
 | `stake_currency` | string | `"USDT"` | Quote currency for sizing |
 
+### `runtime`
+
+The `runtime` section controls the rollout contract for the event-driven runtime.
+It is additive: if the section is omitted, the bot stays on the legacy loop.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `runtime_mode` | string | `"legacy"` when explicitly set | Explicit rollout mode: `legacy`, `shadow`, `runtime_entries`, `runtime_primary` |
+| `shadow_mode` | bool | `false` in the sample config | Compatibility fallback when `runtime_mode` is omitted; `true` keeps shadow semantics, `false` promotes to runtime entry ownership |
+| `symbols` | list | inherits from `trading.pairs` | Runtime-tracked symbols |
+| `kline_intervals` | list | inherits from `trading.timeframes` | Runtime candle intervals |
+| `market_data_source` | string | `"binance"` | Runtime market-data source |
+| `sandbox_execution` | bool | `false` | Runtime execution testnet toggle |
+| `sandbox_market_data` | bool | `false` | Runtime market-data testnet toggle |
+| `queue_maxsize` | int | `0` | Shared queue bound; `0` keeps the queue unbounded |
+| `event_bus_maxsize` | int | `0` | Alias for `queue_maxsize` |
+| `candle_history_limit` | int | `2048` | Rolling candle buffer length |
+| `stale_after_seconds` | float | `30.0` | Staleness cutoff for market data |
+| `housekeeping_interval_seconds` | float | `60.0` | Background housekeeping cadence |
+
+Rollout guidance:
+
+| Mode | Meaning |
+|---|---|
+| `legacy` | Keep the classic 60-second bot loop as the source of truth |
+| `shadow` | Run the runtime in read-only/shadow mode for comparison |
+| `runtime_entries` | Runtime owns entries; legacy exit sweeps may still be used for compatibility |
+| `runtime_primary` | Runtime owns both entries and exits |
+
+> [!NOTE]
+> If `runtime_mode` is omitted, `shadow_mode` is used as the compatibility fallback: `true` resolves to `shadow`, `false` resolves to `runtime_entries`. When `runtime_mode` is set explicitly, it wins and `shadow_mode` is normalized to match it.
+
 ### `risk_management`
 
 | Key | Type | Default | Description |
