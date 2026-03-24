@@ -14,13 +14,21 @@ from domain.events import (
     ProtectionSubmittedPayload,
     RuntimeEvent,
 )
-from ports.exchange import ExecutionGateway, UserStreamGateway
+from ports.exchange import (
+    ExecutionGateway,
+    MarketDataBootstrapGateway,
+    MarketDataGateway,
+    UserStreamGateway,
+)
 from ports.persistence import RuntimeStore
 from services.execution_service import ExecutionService
+from services.market_data_service import MarketDataService
 from services.persistence_service import PersistenceService
 from services.position_service import PositionService
+from services.signal_service import SignalService
 from services.risk_service import RiskService
 from services.telemetry_service import TelemetryService
+from strategies.contracts import RuntimeStrategy
 
 from .config import RuntimeConfig
 from .service_registry import AsyncService, ServiceRegistry
@@ -124,6 +132,13 @@ class RuntimeApp:
     event_bus: asyncio.Queue[RuntimeEvent] = field(init=False)
     is_running: bool = field(default=False, init=False)
     runtime_store: RuntimeStore | None = field(default=None, init=False, repr=False)
+    market_data_service: MarketDataService | None = field(
+        default=None, init=False, repr=False
+    )
+    signal_service: SignalService | None = field(default=None, init=False, repr=False)
+    signal_event_source: asyncio.Queue[RuntimeEvent] | None = field(
+        default=None, init=False, repr=False
+    )
     risk_service: RiskService | None = field(default=None, init=False, repr=False)
     execution_service: ExecutionService | None = field(
         default=None, init=False, repr=False
@@ -219,6 +234,54 @@ class RuntimeApp:
         ):
             app.register_service(name, service)
 
+        return app
+
+    @classmethod
+    def build_phase5(
+        cls,
+        config: RuntimeConfig,
+        *,
+        market_data_gateway: MarketDataGateway,
+        execution_gateway: ExecutionGateway,
+        runtime_store: RuntimeStore,
+        strategy: RuntimeStrategy,
+        market_data_bootstrap_gateway: MarketDataBootstrapGateway | None = None,
+        user_stream_gateway: UserStreamGateway | None = None,
+        max_open_positions: int = 0,
+        kill_switch_enabled: bool = False,
+    ) -> "RuntimeApp":
+        """Build the Phase 5 runtime shell with market-data and signal wiring."""
+
+        app = cls.build_phase4(
+            config,
+            execution_gateway=execution_gateway,
+            runtime_store=runtime_store,
+            user_stream_gateway=user_stream_gateway,
+            max_open_positions=max_open_positions,
+            kill_switch_enabled=kill_switch_enabled,
+        )
+        app.signal_event_source = asyncio.Queue()
+        app.market_data_service = MarketDataService(
+            name="market-data",
+            gateway=market_data_gateway,
+            runtime_config=config,
+            event_bus=app.event_bus,
+            bootstrap_gateway=market_data_bootstrap_gateway,
+            event_sinks=(app.signal_event_source,),
+        )
+        app.signal_service = SignalService(
+            name="signal",
+            strategy=strategy,
+            event_bus=app.event_bus,
+            event_source=app.signal_event_source,
+            market_state_source=app.market_data_service,
+            position_source=app.position_service,
+            risk_service=app.risk_service,
+            supported_timeframes=config.kline_intervals,
+        )
+
+        app.register_service("market-data", app.market_data_service)
+        app.register_service("signal", app.signal_service)
         return app
 
     async def start(self) -> None:

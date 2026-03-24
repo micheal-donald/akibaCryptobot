@@ -25,6 +25,7 @@ class MarketDataService(BaseService):
     runtime_config: RuntimeConfig
     event_bus: asyncio.Queue[RuntimeEvent]
     bootstrap_gateway: MarketDataBootstrapGateway | None = None
+    event_sinks: tuple[asyncio.Queue[RuntimeEvent], ...] = ()
     _symbol_states: dict[str, SymbolState] = field(default_factory=dict, init=False)
     _exchange_to_canonical: dict[str, str] = field(
         default_factory=dict, init=False, repr=False
@@ -112,6 +113,10 @@ class MarketDataService(BaseService):
             self._update_kline(symbol, event)
 
         await self.event_bus.put(event)
+        for sink in self.event_sinks:
+            if sink is self.event_bus:
+                continue
+            await sink.put(event)
 
     def _register_gateway_callbacks(self) -> None:
         if self._callbacks_registered:
