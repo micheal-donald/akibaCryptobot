@@ -29,8 +29,9 @@ class FakeWebSocket:
 
 
 class FakeStatusBot:
-    def __init__(self, projection=None):
+    def __init__(self, projection=None, *, configured_deployment_profile=None):
         self._projection = projection
+        self._configured_deployment_profile = configured_deployment_profile
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self.strategy_manager = type(
@@ -48,6 +49,29 @@ class FakeStatusBot:
 
     def get_runtime_projection(self):
         return self._projection
+
+    def get_runtime_visibility_info(self):
+        if self._projection is None:
+            return {
+                "configured_deployment_profile": self._configured_deployment_profile,
+                "effective_runtime_mode": "legacy",
+                "effective_runtime_enabled": False,
+                "effective_runtime_owns_entries": False,
+                "effective_runtime_owns_exits": False,
+                "runtime_mode_source": "legacy_default",
+            }
+        return {
+            "configured_deployment_profile": self._configured_deployment_profile,
+            "effective_runtime_mode": self._projection.runtime_mode,
+            "effective_runtime_enabled": self._projection.runtime_enabled,
+            "effective_runtime_owns_entries": self._projection.runtime_owns_entries,
+            "effective_runtime_owns_exits": self._projection.runtime_owns_exits,
+            "runtime_mode_source": (
+                "deployment_profile"
+                if self._configured_deployment_profile is not None
+                else "legacy_default"
+            ),
+        }
 
 
 def make_projection(
@@ -99,7 +123,8 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
             make_projection(
                 source=ProjectionSource.RUNTIME_PROJECTION,
                 runtime_mode="runtime_primary",
-            )
+            ),
+            configured_deployment_profile="paper_runtime_primary",
         ),
     )
     websocket = FakeWebSocket()
@@ -113,6 +138,8 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
     data = payload["data"]
     assert data["active_trades"] == 1
     assert data["runtime_mode"] == "runtime_primary"
+    assert data["configured_deployment_profile"] == "paper_runtime_primary"
+    assert data["effective_runtime_mode"] == "runtime_primary"
     assert data["runtime_is_running"] is True
     assert data["runtime_owns_entries"] is True
     assert data["runtime_owns_exits"] is True
@@ -143,6 +170,8 @@ async def test_ws_status_keeps_legacy_state_when_projection_missing(monkeypatch)
     data = payload["data"]
     assert data["active_trades"] == 3
     assert data["runtime_mode"] == "legacy"
+    assert data["configured_deployment_profile"] is None
+    assert data["effective_runtime_mode"] == "legacy"
     assert data["runtime_is_running"] is False
     assert data["runtime_owns_entries"] is False
     assert data["runtime_owns_exits"] is False

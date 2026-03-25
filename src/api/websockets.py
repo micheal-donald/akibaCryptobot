@@ -72,8 +72,18 @@ def _build_rollout_summary(projection):
     }
 
 
+def _inject_runtime_visibility(status_info, bot):
+    visibility_getter = getattr(bot, "get_runtime_visibility_info", None)
+    if not callable(visibility_getter):
+        return status_info
+
+    status_info.update(visibility_getter())
+    return status_info
+
+
 def _build_status_payload(bot):
     status_info = bot.get_status_info()
+    _inject_runtime_visibility(status_info, bot)
     projection = _get_runtime_projection(bot)
     rollout_summary = _build_rollout_summary(projection)
 
@@ -112,6 +122,25 @@ def _build_status_payload(bot):
             "circuit_breaker_reason": bot.circuit_breaker_reason,
             "strategy": bot.strategy_manager.active_strategy,
             "trading_mode": status_info.get("trading_mode", "paper"),
+            "configured_deployment_profile": status_info.get(
+                "configured_deployment_profile"
+            ),
+            "effective_runtime_mode": status_info.get(
+                "effective_runtime_mode", runtime_mode
+            ),
+            "effective_runtime_enabled": status_info.get(
+                "effective_runtime_enabled", runtime_mode != "legacy"
+            ),
+            "effective_runtime_owns_entries": status_info.get(
+                "effective_runtime_owns_entries", runtime_owns_entries
+            ),
+            "effective_runtime_owns_exits": status_info.get(
+                "effective_runtime_owns_exits", runtime_owns_exits
+            ),
+            "runtime_mode_source": status_info.get(
+                "runtime_mode_source",
+                "legacy_default" if runtime_mode == "legacy" else "runtime_mode",
+            ),
             "runtime_mode": runtime_mode,
             "runtime_is_running": runtime_is_running,
             "runtime_owns_entries": runtime_owns_entries,

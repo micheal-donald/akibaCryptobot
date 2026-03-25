@@ -24,6 +24,11 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   "circuit_breaker_reason": null,
   "strategy": "ensemble",
   "trading_mode": "paper",
+  "configured_deployment_profile": "paper_runtime_primary",
+  "effective_runtime_mode": "runtime_primary",
+  "effective_runtime_enabled": true,
+  "effective_runtime_owns_entries": true,
+  "effective_runtime_owns_exits": true,
   "runtime_mode": "runtime_primary",
   "runtime_is_running": true,
   "runtime_owns_entries": true,
@@ -167,7 +172,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Endpoint | Push Interval | Description |
 |---|---|---|
 | `ws://<host>:<port>/ws/prices` | 1 second | Real-time price ticks from the Binance exchange cache |
-| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with runtime mode, ownership, and projection metadata |
+| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with deployment profile, effective runtime mode, ownership, and projection metadata |
 
 **Message format** (`/ws/prices`):
 ```json
@@ -191,6 +196,11 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
     "circuit_breaker_active": false,
     "strategy": "ensemble",
     "trading_mode": "paper",
+    "configured_deployment_profile": "paper_runtime_primary",
+    "effective_runtime_mode": "runtime_primary",
+    "effective_runtime_enabled": true,
+    "effective_runtime_owns_entries": true,
+    "effective_runtime_owns_exits": true,
     "runtime_mode": "runtime_primary",
     "runtime_is_running": true,
     "runtime_owns_entries": true,

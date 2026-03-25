@@ -30,6 +30,23 @@ def setup_logging(debug=False):
     return logging.getLogger(__name__)
 
 
+def log_runtime_visibility(logger, bot):
+    """Log the selected deployment profile and effective runtime ownership."""
+
+    visibility = bot.get_runtime_visibility_info()
+    logger.info(
+        "Deployment profile=%s effective_runtime_mode=%s "
+        "effective_runtime_enabled=%s effective_runtime_owns_entries=%s "
+        "effective_runtime_owns_exits=%s runtime_mode_source=%s",
+        visibility["configured_deployment_profile"],
+        visibility["effective_runtime_mode"],
+        visibility["effective_runtime_enabled"],
+        visibility["effective_runtime_owns_entries"],
+        visibility["effective_runtime_owns_exits"],
+        visibility["runtime_mode_source"],
+    )
+
+
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
@@ -130,6 +147,7 @@ def main():
                 logger.info(f"Strategy '{args.strategy}' already active from config")
 
             logger.info(f"Active strategy: {bot.strategy_manager.active_strategy}")
+            log_runtime_visibility(logger, bot)
             await bot.start()
 
         try:

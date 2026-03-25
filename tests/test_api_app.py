@@ -115,8 +115,14 @@ def make_projected_position(symbol: str = "BTC/USDT") -> ProjectedPositionView:
 
 
 class FakeStatusBot:
-    def __init__(self, projection: RuntimeProjection):
+    def __init__(
+        self,
+        projection: RuntimeProjection,
+        *,
+        configured_deployment_profile: str | None = None,
+    ):
         self._projection = projection
+        self._configured_deployment_profile = configured_deployment_profile
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self.config = {"exchange": {"sandbox": True}}
@@ -137,6 +143,20 @@ class FakeStatusBot:
             "runtime_owns_exits": self._projection.runtime_owns_exits,
         }
 
+    def get_runtime_visibility_info(self):
+        return {
+            "configured_deployment_profile": self._configured_deployment_profile,
+            "effective_runtime_mode": self._projection.runtime_mode,
+            "effective_runtime_enabled": self._projection.runtime_enabled,
+            "effective_runtime_owns_entries": self._projection.runtime_owns_entries,
+            "effective_runtime_owns_exits": self._projection.runtime_owns_exits,
+            "runtime_mode_source": (
+                "deployment_profile"
+                if self._configured_deployment_profile is not None
+                else "legacy_default"
+            ),
+        }
+
     def get_runtime_projection(self) -> RuntimeProjection:
         return self._projection
 
@@ -154,13 +174,18 @@ async def test_status_route_includes_runtime_cutover_fields():
             open_order_count=2,
             pending_exit_count=1,
             rejected_order_count=1,
-        )
+        ),
+        configured_deployment_profile="paper_runtime_primary",
     )
 
     payload = await get_status(bot=bot)
 
     assert payload["active_trades"] == 1
     assert payload["runtime_mode"] == "runtime_primary"
+    assert payload["configured_deployment_profile"] == "paper_runtime_primary"
+    assert payload["effective_runtime_mode"] == "runtime_primary"
+    assert payload["effective_runtime_owns_entries"] is True
+    assert payload["effective_runtime_owns_exits"] is True
     assert payload["runtime_is_running"] is True
     assert payload["runtime_owns_entries"] is True
     assert payload["runtime_owns_exits"] is True
@@ -184,13 +209,16 @@ async def test_status_route_keeps_legacy_trade_count_in_shadow_mode():
             source=ProjectionSource.SHADOW,
             runtime_mode="shadow",
             active_positions=(),
-        )
+        ),
+        configured_deployment_profile="paper_shadow",
     )
 
     payload = await get_status(bot=bot)
 
     assert payload["active_trades"] == 1
     assert payload["state_source"] == "shadow"
+    assert payload["configured_deployment_profile"] == "paper_shadow"
+    assert payload["effective_runtime_mode"] == "shadow"
     assert payload["runtime_is_healthy"] is True
     assert payload["rollout_health"] == "shadow_ready"
     assert payload["rollout_recommended_action"] == "continue_shadow"

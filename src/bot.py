@@ -132,6 +132,27 @@ class AkibaCryptoBot:
             return None
         return RuntimeConfig.from_mapping(self.config)
 
+    def get_runtime_visibility_info(self) -> Dict[str, object]:
+        """Return the selected deployment profile and effective runtime ownership."""
+
+        runtime_config = self.runtime_config
+        configured_deployment_profile = None
+        if runtime_config is not None:
+            configured_deployment_profile = runtime_config.deployment_profile_name
+
+        return {
+            "configured_deployment_profile": configured_deployment_profile,
+            "effective_runtime_mode": self.runtime_mode.value,
+            "effective_runtime_enabled": self.runtime_enabled,
+            "effective_runtime_owns_entries": self.runtime_owns_entries,
+            "effective_runtime_owns_exits": self.runtime_owns_exits,
+            "runtime_mode_source": (
+                "deployment_profile"
+                if configured_deployment_profile is not None
+                else "runtime_mode" if runtime_config is not None else "legacy_default"
+            ),
+        }
+
     @property
     def runtime_mode(self) -> RuntimeMode:
         if self.runtime_config is None:
@@ -243,6 +264,20 @@ class AkibaCryptoBot:
         )
         await runtime_handle.start()
 
+    def _log_runtime_visibility(self) -> None:
+        visibility = self.get_runtime_visibility_info()
+        self.logger.info(
+            "Runtime deployment profile=%s effective_runtime_mode=%s "
+            "effective_runtime_enabled=%s effective_runtime_owns_entries=%s "
+            "effective_runtime_owns_exits=%s runtime_mode_source=%s",
+            visibility["configured_deployment_profile"],
+            visibility["effective_runtime_mode"],
+            visibility["effective_runtime_enabled"],
+            visibility["effective_runtime_owns_entries"],
+            visibility["effective_runtime_owns_exits"],
+            visibility["runtime_mode_source"],
+        )
+
     def _validate_runtime_startup(self) -> None:
         if self.runtime_config is None:
             return
@@ -275,6 +310,7 @@ class AkibaCryptoBot:
         runtime_config = self._load_runtime_config()
         if runtime_config is not None:
             self.runtime_config = runtime_config
+        self._log_runtime_visibility()
         self._validate_runtime_startup()
         self.is_running = True
         self._stop_event.clear()
@@ -784,12 +820,25 @@ class AkibaCryptoBot:
     def get_status_info(self) -> Dict:
         """Get bot status information for Telegram commands."""
         uptime = datetime.now() - self.start_time
+        visibility_info = self.get_runtime_visibility_info()
         return {
             "active_trades": len(self.active_trades),
             "daily_pnl": 0.0,
             "uptime": str(uptime),
             "is_running": self.is_running,
             "runtime_mode": self.runtime_mode.value,
+            "configured_deployment_profile": visibility_info[
+                "configured_deployment_profile"
+            ],
+            "effective_runtime_mode": visibility_info["effective_runtime_mode"],
+            "effective_runtime_enabled": visibility_info["effective_runtime_enabled"],
+            "effective_runtime_owns_entries": visibility_info[
+                "effective_runtime_owns_entries"
+            ],
+            "effective_runtime_owns_exits": visibility_info[
+                "effective_runtime_owns_exits"
+            ],
+            "runtime_mode_source": visibility_info["runtime_mode_source"],
             "runtime_is_running": self.runtime_is_running,
             "runtime_owns_entries": self.runtime_owns_entries,
             "runtime_owns_exits": self.runtime_owns_exits,

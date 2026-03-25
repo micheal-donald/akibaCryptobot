@@ -101,6 +101,14 @@ class RuntimeConfig:
             object.__setattr__(self, "runtime_mode", resolved_runtime_mode)
             object.__setattr__(self, "shadow_mode", resolved_runtime_mode.shadow_only)
 
+    @property
+    def deployment_profile_name(self) -> str | None:
+        """Return the reviewed deployment profile name when one is configured."""
+
+        if self.deployment_profile is None:
+            return None
+        return self.deployment_profile.value
+
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "RuntimeConfig":
         """Create a runtime config from the existing nested config structure.

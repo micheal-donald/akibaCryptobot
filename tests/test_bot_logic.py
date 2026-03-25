@@ -469,6 +469,10 @@ def test_get_status_info_includes_runtime_cutover_fields(bot):
     status = bot.get_status_info()
 
     assert status["runtime_mode"] == "legacy"
+    assert status["configured_deployment_profile"] is None
+    assert status["effective_runtime_mode"] == "legacy"
+    assert status["effective_runtime_owns_entries"] is False
+    assert status["effective_runtime_owns_exits"] is False
     assert status["runtime_is_running"] is False
     assert status["runtime_owns_entries"] is False
     assert status["runtime_owns_exits"] is False
@@ -478,6 +482,7 @@ def test_get_status_info_reports_running_runtime(bot):
     bot.runtime_config = RuntimeConfig(
         symbols=("BTC/USDT",),
         kline_intervals=("1m",),
+        deployment_profile="paper_runtime_primary",
         runtime_mode="runtime_primary",
         shadow_mode=False,
     )
@@ -486,9 +491,30 @@ def test_get_status_info_reports_running_runtime(bot):
     status = bot.get_status_info()
 
     assert status["runtime_mode"] == "runtime_primary"
+    assert status["configured_deployment_profile"] == "paper_runtime_primary"
+    assert status["effective_runtime_mode"] == "runtime_primary"
+    assert status["effective_runtime_owns_entries"] is True
+    assert status["effective_runtime_owns_exits"] is True
     assert status["runtime_is_running"] is True
     assert status["runtime_owns_entries"] is True
     assert status["runtime_owns_exits"] is True
+
+
+def test_get_runtime_visibility_info_reports_profile_and_source(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        deployment_profile="paper_shadow",
+    )
+
+    visibility = bot.get_runtime_visibility_info()
+
+    assert visibility["configured_deployment_profile"] == "paper_shadow"
+    assert visibility["effective_runtime_mode"] == "shadow"
+    assert visibility["effective_runtime_enabled"] is True
+    assert visibility["effective_runtime_owns_entries"] is False
+    assert visibility["effective_runtime_owns_exits"] is False
+    assert visibility["runtime_mode_source"] == "deployment_profile"
 
 
 @pytest.mark.asyncio
