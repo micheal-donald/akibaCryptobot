@@ -371,6 +371,45 @@ def test_runtime_mode_defaults_to_legacy_without_explicit_config(bot):
     assert bot.runtime_owns_exits is False
 
 
+def test_runtime_config_loads_when_deployment_profile_present(bot):
+    bot.config["runtime"] = {"deployment_profile": "paper_shadow"}
+    bot.runtime_config = bot._load_runtime_config()
+
+    assert bot.runtime_config is not None
+    assert bot.runtime_config.deployment_profile.value == "paper_shadow"
+    assert bot.runtime_mode is RuntimeMode.SHADOW
+
+
+def test_runtime_config_override_only_does_not_activate_runtime(bot):
+    bot.config["runtime"] = {"allow_live_runtime": True}
+    bot.runtime_config = bot._load_runtime_config()
+
+    assert bot.runtime_config is None
+    assert bot.runtime_mode is RuntimeMode.LEGACY
+
+
+@pytest.mark.asyncio
+async def test_start_rejects_live_runtime_modes_without_override(bot):
+    bot.config["exchange"]["sandbox"] = False
+    bot.config["runtime"] = {"runtime_mode": "runtime_entries"}
+
+    with pytest.raises(ValueError, match="exchange\\.sandbox"):
+        await bot.start()
+
+
+def test_validate_runtime_startup_allows_live_legacy_without_override(bot):
+    bot.config["exchange"]["sandbox"] = False
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        deployment_profile="live_legacy",
+        runtime_mode="legacy",
+        shadow_mode=False,
+    )
+
+    bot._validate_runtime_startup()
+
+
 @pytest.mark.asyncio
 async def test_start_runtime_if_enabled_starts_runtime_handle(bot):
     bot.runtime_config = RuntimeConfig(

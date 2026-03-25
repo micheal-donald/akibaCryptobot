@@ -25,6 +25,7 @@ class RuntimeConfig:
     market_data_source: str = "binance"
     sandbox_execution: bool = False
     sandbox_market_data: bool = False
+    allow_live_runtime: bool | str = False
     deployment_profile: DeploymentProfile | str | None = None
     runtime_mode: RuntimeMode | str | None = None
     shadow_mode: bool | None = None
@@ -54,6 +55,11 @@ class RuntimeConfig:
         if not normalized_market_data_source:
             raise ValueError("market_data_source must not be empty")
         object.__setattr__(self, "market_data_source", normalized_market_data_source)
+        object.__setattr__(
+            self,
+            "allow_live_runtime",
+            self._coerce_bool(self.allow_live_runtime, default=False),
+        )
 
         deployment_profile = self._resolve_deployment_profile(
             self.deployment_profile,
@@ -164,6 +170,10 @@ class RuntimeConfig:
                 if "shadow_mode" in runtime_section
                 else None
             ),
+            allow_live_runtime=cls._coerce_bool(
+                runtime_section.get("allow_live_runtime"),
+                default=False,
+            ),
         )
 
     @classmethod
@@ -250,11 +260,11 @@ class RuntimeConfig:
         shadow_mode: bool | None,
     ) -> RuntimeMode:
         if value is None:
-            return (
-                RuntimeMode.SHADOW
-                if shadow_mode is not False
-                else RuntimeMode.RUNTIME_ENTRIES
-            )
+            if shadow_mode is True:
+                return RuntimeMode.SHADOW
+            if shadow_mode is False:
+                return RuntimeMode.RUNTIME_ENTRIES
+            return RuntimeMode.LEGACY
         return RuntimeMode.parse(value)
 
     @staticmethod
@@ -264,6 +274,26 @@ class RuntimeConfig:
         if value is None:
             return None
         return DeploymentProfile.parse(value)
+
+    def validate_startup(self, *, exchange_sandbox: bool) -> None:
+        """Raise a readable error when a live runtime-owned mode is unsafe."""
+
+        if exchange_sandbox or not self.runtime_enabled:
+            return
+        if self.allow_live_runtime:
+            return
+
+        deployment_profile = (
+            f", deployment_profile={self.deployment_profile.value!r}"
+            if self.deployment_profile is not None
+            else ""
+        )
+        raise ValueError(
+            "Refusing to start runtime-owned mode on a live exchange config: "
+            f"runtime_mode={self.runtime_mode.value!r}{deployment_profile}. "
+            "Set exchange.sandbox=true for paper/testnet or set "
+            "runtime.allow_live_runtime=true to opt in explicitly."
+        )
 
     @staticmethod
     def _resolve_market_data_source(

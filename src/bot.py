@@ -121,9 +121,13 @@ class AkibaCryptoBot:
         runtime_section = self.config.get("runtime")
         if not isinstance(runtime_section, dict):
             return None
-        if (
-            "runtime_mode" not in runtime_section
-            and "shadow_mode" not in runtime_section
+        if not any(
+            key in runtime_section
+            for key in (
+                "deployment_profile",
+                "runtime_mode",
+                "shadow_mode",
+            )
         ):
             return None
         return RuntimeConfig.from_mapping(self.config)
@@ -239,6 +243,13 @@ class AkibaCryptoBot:
         )
         await runtime_handle.start()
 
+    def _validate_runtime_startup(self) -> None:
+        if self.runtime_config is None:
+            return
+        self.runtime_config.validate_startup(
+            exchange_sandbox=self.config["exchange"].get("sandbox", True)
+        )
+
     async def _stop_runtime(self) -> None:
         runtime_handle = self.runtime_handle
         self.runtime_handle = None
@@ -261,6 +272,10 @@ class AkibaCryptoBot:
 
     async def start(self):
         self.logger.info("Starting AkibaCryptoBot...")
+        runtime_config = self._load_runtime_config()
+        if runtime_config is not None:
+            self.runtime_config = runtime_config
+        self._validate_runtime_startup()
         self.is_running = True
         self._stop_event.clear()
         if self._cleanup_future is not None and self._cleanup_future.done():

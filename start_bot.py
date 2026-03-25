@@ -134,6 +134,9 @@ def main():
 
         try:
             asyncio.run(run_bot())
+        except ValueError as e:
+            logger.error(f"Startup validation failed: {e}")
+            raise SystemExit(1) from e
         except KeyboardInterrupt:
             logger.info("Received keyboard interrupt, shutting down...")
         finally:

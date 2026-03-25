@@ -63,6 +63,7 @@ It is additive: if the section is omitted, the bot stays on the legacy loop.
 | `deployment_profile` | string | `"paper_legacy"` in the sample config | Reviewed deployment profile: `paper_legacy`, `paper_shadow`, `paper_runtime_entries`, `paper_runtime_primary`, `live_legacy` |
 | `runtime_mode` | string | compatibility-only | Explicit rollout mode. When `deployment_profile` is present, this must match the profile-derived effective mode |
 | `shadow_mode` | bool | compatibility-only | Legacy fallback when `runtime_mode` is omitted. When `deployment_profile` is present, this must match the profile-derived shadow semantics if provided |
+| `allow_live_runtime` | bool | `false` | Explicit override for live exchange configs. Required for `shadow`, `runtime_entries`, and `runtime_primary` when `exchange.sandbox` is `false`. Does not activate the runtime by itself |
 | `symbols` | list | inherits from `trading.pairs` | Runtime-tracked symbols |
 | `kline_intervals` | list | inherits from `trading.timeframes` | Runtime candle intervals |
 | `market_data_source` | string | `"binance"` | Runtime market-data source |
@@ -92,6 +93,8 @@ For the full paper activation sequence, see [docs/DEPLOYMENT.md](/home/lekim/Pro
 
 > [!NOTE]
 > `deployment_profile` is the reviewed deployment surface and is preferred for paper rollout promotion. If it is set, the config layer derives the effective runtime mode from the profile and rejects contradictory `runtime_mode` or `shadow_mode` values. If `deployment_profile` is omitted, `runtime_mode` remains the explicit rollout mode and `shadow_mode` is the compatibility fallback: `true` resolves to `shadow`, `false` resolves to `runtime_entries`. When `runtime_mode` is set explicitly, it wins and `shadow_mode` is normalized to match it.
+>
+> Live exchange deployments reject runtime-owned modes by default. `live_legacy` is allowed without any extra flag, but `shadow`, `runtime_entries`, and `runtime_primary` require `runtime.allow_live_runtime=true` when `exchange.sandbox=false`. Setting `allow_live_runtime` alone does not activate the runtime.
 
 ### `risk_management`
 

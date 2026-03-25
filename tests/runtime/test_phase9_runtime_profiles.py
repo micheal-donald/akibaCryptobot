@@ -58,6 +58,35 @@ def test_phase9_profile_allows_matching_compatibility_inputs() -> None:
     assert config.shadow_mode is False
 
 
+def test_phase9_live_legacy_profile_stays_allowed_on_live_exchange() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "exchange": {"sandbox": False},
+            "runtime": {
+                "deployment_profile": "live_legacy",
+            },
+        }
+    )
+
+    assert config.deployment_profile is DeploymentProfile.LIVE_LEGACY
+    assert config.runtime_mode is RuntimeMode.LEGACY
+    config.validate_startup(exchange_sandbox=False)
+
+
+def test_phase9_live_runtime_profile_requires_explicit_override() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "exchange": {"sandbox": False},
+            "runtime": {
+                "deployment_profile": "paper_runtime_primary",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="allow_live_runtime"):
+        config.validate_startup(exchange_sandbox=False)
+
+
 @pytest.mark.parametrize(
     ("runtime_mode", "shadow_mode", "match"),
     [

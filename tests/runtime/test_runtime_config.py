@@ -78,6 +78,36 @@ def test_runtime_config_from_mapping_supports_explicit_runtime_mode() -> None:
     assert config.runtime_owns_exits is True
 
 
+def test_runtime_config_from_mapping_supports_live_runtime_override() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "runtime": {
+                "runtime_mode": "runtime_primary",
+                "allow_live_runtime": "true",
+            }
+        }
+    )
+
+    assert config.allow_live_runtime is True
+    config.validate_startup(exchange_sandbox=False)
+
+
+def test_runtime_config_from_mapping_does_not_activate_runtime_from_override_only() -> (
+    None
+):
+    config = RuntimeConfig.from_mapping(
+        {
+            "runtime": {
+                "allow_live_runtime": True,
+            }
+        }
+    )
+
+    assert config.allow_live_runtime is True
+    assert config.runtime_mode is RuntimeMode.LEGACY
+    assert config.runtime_enabled is False
+
+
 def test_runtime_config_from_mapping_honors_explicit_legacy_rollout_mode() -> None:
     config = RuntimeConfig.from_mapping(
         {
@@ -95,6 +125,35 @@ def test_runtime_config_from_mapping_honors_explicit_legacy_rollout_mode() -> No
     assert config.runtime_enabled is False
     assert config.runtime_owns_entries is False
     assert config.runtime_owns_exits is False
+
+
+def test_runtime_config_validate_startup_rejects_live_runtime_modes_by_default() -> (
+    None
+):
+    config = RuntimeConfig.from_mapping(
+        {
+            "exchange": {"sandbox": False},
+            "runtime": {
+                "runtime_mode": "runtime_entries",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="runtime_entries"):
+        config.validate_startup(exchange_sandbox=False)
+
+
+def test_runtime_config_validate_startup_allows_live_legacy_without_override() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "exchange": {"sandbox": False},
+            "runtime": {
+                "deployment_profile": "live_legacy",
+            },
+        }
+    )
+
+    config.validate_startup(exchange_sandbox=False)
 
 
 def test_runtime_config_from_mapping_uses_shadow_fallback_when_mode_omitted() -> None:

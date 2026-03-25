@@ -248,6 +248,9 @@ Rollback path:
 
 Rollback should be the first response if runtime health degrades, rollout summaries report `rollback_recommended`, or operator verification fails after promotion.
 
+> [!IMPORTANT]
+> Live exchange deployments keep the legacy loop as the safe default. If `exchange.sandbox` is `false`, runtime-owned modes (`shadow`, `runtime_entries`, `runtime_primary`) will fail fast unless `runtime.allow_live_runtime=true` is set explicitly. `live_legacy` remains allowed without the override.
+
 ### Vultr Bare-Metal Setup
 The bot runs as a systemd service (`akibabot.service`) on a Vultr Ubuntu instance.
 
