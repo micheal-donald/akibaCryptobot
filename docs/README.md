@@ -25,6 +25,7 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Phase 6 Runtime Cutover Spec](specs/PHASE_6_RUNTIME_CUTOVER_SPEC.md) | Runtime ownership modes, bot-supervisor cutover, and controlled legacy-loop carve-out |
 | [Phase 7 Runtime Compatibility Spec](specs/PHASE_7_RUNTIME_COMPATIBILITY_SPEC.md) | Runtime projection layer, runtime-aware API/Telegram surfaces, and paper-primary operator rollout |
 | [Phase 8 Paper-Primary Activation Spec](specs/PHASE_8_PAPER_PRIMARY_ACTIVATION_SPEC.md) | Runtime rollout config, paper-primary activation, rollback control, and operator rollout visibility |
+| [Phase 9 Paper Default and Live Guards Spec](specs/PHASE_9_PAPER_DEFAULT_AND_LIVE_GUARDS_SPEC.md) | Deployment profiles for paper runtime rollout, startup guardrails for live deployments, and paper-default cutover |
 | [LLM Agent Iteration Workflow](LLM_AGENT_ITERATION_WORKFLOW.md) | Reusable protocol for phased, spec-driven, worker-assisted development and deployment |
 
 ---
