@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from .mode import RuntimeMode
+from .mode import DeploymentProfile, RuntimeMode
 
 
 @dataclass(slots=True, frozen=True)
@@ -25,8 +25,9 @@ class RuntimeConfig:
     market_data_source: str = "binance"
     sandbox_execution: bool = False
     sandbox_market_data: bool = False
+    deployment_profile: DeploymentProfile | str | None = None
     runtime_mode: RuntimeMode | str | None = None
-    shadow_mode: bool = True
+    shadow_mode: bool | None = None
 
     def __post_init__(self) -> None:
         if self.candle_history_limit <= 0:
@@ -54,12 +55,45 @@ class RuntimeConfig:
             raise ValueError("market_data_source must not be empty")
         object.__setattr__(self, "market_data_source", normalized_market_data_source)
 
-        resolved_runtime_mode = self._resolve_runtime_mode(
-            self.runtime_mode,
-            shadow_mode=self.shadow_mode,
+        deployment_profile = self._resolve_deployment_profile(
+            self.deployment_profile,
         )
-        object.__setattr__(self, "runtime_mode", resolved_runtime_mode)
-        object.__setattr__(self, "shadow_mode", resolved_runtime_mode.shadow_only)
+        if deployment_profile is not None:
+            expected_runtime_mode = deployment_profile.runtime_mode
+            expected_shadow_mode = deployment_profile.shadow_mode
+
+            if self.runtime_mode is not None:
+                configured_runtime_mode = RuntimeMode.parse(self.runtime_mode)
+                if configured_runtime_mode is not expected_runtime_mode:
+                    raise ValueError(
+                        "deployment_profile "
+                        f"{deployment_profile.value!r} conflicts with runtime_mode "
+                        f"{configured_runtime_mode.value!r}"
+                    )
+
+            if self.shadow_mode is not None:
+                configured_shadow_mode = self._coerce_bool(
+                    self.shadow_mode,
+                    default=expected_shadow_mode,
+                )
+                if configured_shadow_mode is not expected_shadow_mode:
+                    raise ValueError(
+                        "deployment_profile "
+                        f"{deployment_profile.value!r} conflicts with shadow_mode "
+                        f"{configured_shadow_mode!r}"
+                    )
+
+            object.__setattr__(self, "deployment_profile", deployment_profile)
+            object.__setattr__(self, "runtime_mode", expected_runtime_mode)
+            object.__setattr__(self, "shadow_mode", expected_shadow_mode)
+        else:
+            resolved_runtime_mode = self._resolve_runtime_mode(
+                self.runtime_mode,
+                shadow_mode=self.shadow_mode,
+            )
+            object.__setattr__(self, "deployment_profile", None)
+            object.__setattr__(self, "runtime_mode", resolved_runtime_mode)
+            object.__setattr__(self, "shadow_mode", resolved_runtime_mode.shadow_only)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> "RuntimeConfig":
@@ -123,10 +157,12 @@ class RuntimeConfig:
                 trading_section.get("sandbox_market_data"),
                 default=False,
             ),
+            deployment_profile=runtime_section.get("deployment_profile"),
             runtime_mode=runtime_section.get("runtime_mode"),
-            shadow_mode=cls._coerce_bool(
-                runtime_section.get("shadow_mode"),
-                default=True,
+            shadow_mode=(
+                cls._coerce_bool(runtime_section.get("shadow_mode"), default=True)
+                if "shadow_mode" in runtime_section
+                else None
             ),
         )
 
@@ -211,11 +247,23 @@ class RuntimeConfig:
     def _resolve_runtime_mode(
         value: RuntimeMode | str | None,
         *,
-        shadow_mode: bool,
+        shadow_mode: bool | None,
     ) -> RuntimeMode:
         if value is None:
-            return RuntimeMode.SHADOW if shadow_mode else RuntimeMode.RUNTIME_ENTRIES
+            return (
+                RuntimeMode.SHADOW
+                if shadow_mode is not False
+                else RuntimeMode.RUNTIME_ENTRIES
+            )
         return RuntimeMode.parse(value)
+
+    @staticmethod
+    def _resolve_deployment_profile(
+        value: DeploymentProfile | str | None,
+    ) -> DeploymentProfile | None:
+        if value is None:
+            return None
+        return DeploymentProfile.parse(value)
 
     @staticmethod
     def _resolve_market_data_source(

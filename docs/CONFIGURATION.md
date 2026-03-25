@@ -60,8 +60,9 @@ It is additive: if the section is omitted, the bot stays on the legacy loop.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `runtime_mode` | string | `"legacy"` when explicitly set | Explicit rollout mode: `legacy`, `shadow`, `runtime_entries`, `runtime_primary` |
-| `shadow_mode` | bool | `false` in the sample config | Compatibility fallback when `runtime_mode` is omitted; `true` keeps shadow semantics, `false` promotes to runtime entry ownership |
+| `deployment_profile` | string | `"paper_legacy"` in the sample config | Reviewed deployment profile: `paper_legacy`, `paper_shadow`, `paper_runtime_entries`, `paper_runtime_primary`, `live_legacy` |
+| `runtime_mode` | string | compatibility-only | Explicit rollout mode. When `deployment_profile` is present, this must match the profile-derived effective mode |
+| `shadow_mode` | bool | compatibility-only | Legacy fallback when `runtime_mode` is omitted. When `deployment_profile` is present, this must match the profile-derived shadow semantics if provided |
 | `symbols` | list | inherits from `trading.pairs` | Runtime-tracked symbols |
 | `kline_intervals` | list | inherits from `trading.timeframes` | Runtime candle intervals |
 | `market_data_source` | string | `"binance"` | Runtime market-data source |
@@ -77,6 +78,11 @@ Rollout guidance:
 
 | Mode | Meaning |
 |---|---|
+| `paper_legacy` | Paper/testnet deployment profile that keeps the classic 60-second bot loop as the source of truth |
+| `paper_shadow` | Paper/testnet deployment profile that runs the runtime in read-only/shadow mode for comparison |
+| `paper_runtime_entries` | Paper/testnet deployment profile where the runtime owns entries and legacy exit sweeps may still be used for compatibility |
+| `paper_runtime_primary` | Paper/testnet deployment profile where the runtime owns both entries and exits |
+| `live_legacy` | Live deployment profile that maps to the legacy loop |
 | `legacy` | Keep the classic 60-second bot loop as the source of truth |
 | `shadow` | Run the runtime in read-only/shadow mode for comparison |
 | `runtime_entries` | Runtime owns entries; legacy exit sweeps may still be used for compatibility |
@@ -85,7 +91,7 @@ Rollout guidance:
 For the full paper activation sequence, see [docs/DEPLOYMENT.md](/home/lekim/Projects/akibaCryptobot/docs/DEPLOYMENT.md#paper-activation-procedure). That guide shows the staged promotion path and rollback steps the operator should follow when moving from `legacy` to `shadow`, `runtime_entries`, and `runtime_primary`.
 
 > [!NOTE]
-> If `runtime_mode` is omitted, `shadow_mode` is used as the compatibility fallback: `true` resolves to `shadow`, `false` resolves to `runtime_entries`. When `runtime_mode` is set explicitly, it wins and `shadow_mode` is normalized to match it.
+> `deployment_profile` is the reviewed deployment surface and is preferred for paper rollout promotion. If it is set, the config layer derives the effective runtime mode from the profile and rejects contradictory `runtime_mode` or `shadow_mode` values. If `deployment_profile` is omitted, `runtime_mode` remains the explicit rollout mode and `shadow_mode` is the compatibility fallback: `true` resolves to `shadow`, `false` resolves to `runtime_entries`. When `runtime_mode` is set explicitly, it wins and `shadow_mode` is normalized to match it.
 
 ### `risk_management`
 

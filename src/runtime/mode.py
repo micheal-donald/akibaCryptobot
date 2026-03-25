@@ -5,6 +5,40 @@ from __future__ import annotations
 from enum import Enum
 
 
+class DeploymentProfile(str, Enum):
+    """Reviewed deployment profiles for runtime rollout selection."""
+
+    PAPER_LEGACY = "paper_legacy"
+    PAPER_SHADOW = "paper_shadow"
+    PAPER_RUNTIME_ENTRIES = "paper_runtime_entries"
+    PAPER_RUNTIME_PRIMARY = "paper_runtime_primary"
+    LIVE_LEGACY = "live_legacy"
+
+    @classmethod
+    def parse(cls, value: "DeploymentProfile | str") -> "DeploymentProfile":
+        if isinstance(value, cls):
+            return value
+        normalized = str(value).strip().lower()
+        try:
+            return cls(normalized)
+        except ValueError as exc:
+            raise ValueError(f"unsupported deployment profile: {value!r}") from exc
+
+    @property
+    def runtime_mode(self) -> "RuntimeMode":
+        return {
+            DeploymentProfile.PAPER_LEGACY: RuntimeMode.LEGACY,
+            DeploymentProfile.PAPER_SHADOW: RuntimeMode.SHADOW,
+            DeploymentProfile.PAPER_RUNTIME_ENTRIES: RuntimeMode.RUNTIME_ENTRIES,
+            DeploymentProfile.PAPER_RUNTIME_PRIMARY: RuntimeMode.RUNTIME_PRIMARY,
+            DeploymentProfile.LIVE_LEGACY: RuntimeMode.LEGACY,
+        }[self]
+
+    @property
+    def shadow_mode(self) -> bool:
+        return self is DeploymentProfile.PAPER_SHADOW
+
+
 class RuntimeMode(str, Enum):
     """Defines which runtime path owns trading decisions."""
 
@@ -57,6 +91,7 @@ def runtime_is_shadow(mode: RuntimeMode | str) -> bool:
 
 
 __all__ = [
+    "DeploymentProfile",
     "RuntimeMode",
     "runtime_enabled",
     "runtime_is_shadow",

@@ -33,6 +33,7 @@ def test_runtime_config_from_mapping_supports_phase_two_fields() -> None:
     assert config.sandbox_execution is True
     assert config.sandbox_market_data is False
     assert config.shadow_mode is False
+    assert config.deployment_profile is None
     assert config.runtime_mode is RuntimeMode.RUNTIME_ENTRIES
     assert config.runtime_owns_entries is True
     assert config.runtime_owns_exits is False

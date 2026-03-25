@@ -24,6 +24,7 @@
     "stake_currency": "USDT"
   },
   "runtime": {
+    "deployment_profile": "paper_legacy",
     "runtime_mode": "legacy",
     "shadow_mode": false
   },
