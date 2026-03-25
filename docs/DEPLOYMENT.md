@@ -68,6 +68,30 @@ python start_bot.py --strategy momentum
 - **API docs:** http://localhost:8000/docs
 - **Health check:** http://localhost:8000/api/health
 
+### 5. Apply a Reviewed Deployment Profile
+
+Paper rollout promotion should be done locally and reviewed in git before the pinned SHA is deployed. Use the profile helper to keep the explicit compatibility fields synchronized:
+
+```bash
+python scripts/set_runtime_profile.py paper_shadow
+git diff -- config/config.json
+```
+
+Promotion path:
+
+1. Run `python scripts/set_runtime_profile.py paper_shadow`.
+2. Review the diff in `config/config.json`.
+3. Repeat with `paper_runtime_entries` or `paper_runtime_primary` when the staged rollout is ready.
+4. Deploy the reviewed commit at a pinned SHA.
+
+Rollback path:
+
+1. Run `python scripts/set_runtime_profile.py paper_legacy`.
+2. Review the diff in `config/config.json`.
+3. Deploy the reviewed rollback commit at the pinned SHA you want to restore.
+
+The helper only mutates the local config file. It does not add a server-side config mutator, and it keeps the deployment profile, runtime mode, and shadow compatibility flag aligned so the resulting change is easy to audit.
+
 ---
 
 ## Docker Deployment
@@ -247,6 +271,8 @@ Rollback path:
    - `rollout_recommended_action: stay_legacy`
 
 Rollback should be the first response if runtime health degrades, rollout summaries report `rollback_recommended`, or operator verification fails after promotion.
+
+For Phase 9, prefer the reviewed deployment profile helper above instead of editing these fields individually. The same rollout order applies, but the profile helper keeps the config explicit and makes the diff easier to review before deployment.
 
 > [!IMPORTANT]
 > Live exchange deployments keep the legacy loop as the safe default. If `exchange.sandbox` is `false`, runtime-owned modes (`shadow`, `runtime_entries`, `runtime_primary`) will fail fast unless `runtime.allow_live_runtime=true` is set explicitly. `live_legacy` remains allowed without the override.
