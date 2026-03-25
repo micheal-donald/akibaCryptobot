@@ -31,36 +31,59 @@ rsync -a --delete \
   "$TMP_DIR"/ \
   "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/"
 
-ssh -T -i "$SSH_KEY" -o StrictHostKeyChecking=no "${REMOTE_USER}@${REMOTE_HOST}" bash -s <<EOF
+REMOTE_ENV="DEPLOY_SHA=$(printf '%q' "$DEPLOY_SHA") REMOTE_APP_DIR=$(printf '%q' "$REMOTE_APP_DIR") REMOTE_SERVICE=$(printf '%q' "$REMOTE_SERVICE") REMOTE_PORT=$(printf '%q' "$REMOTE_PORT")"
+
+ssh -T -i "$SSH_KEY" -o StrictHostKeyChecking=no "${REMOTE_USER}@${REMOTE_HOST}" "${REMOTE_ENV} bash -s" <<'EOF'
 set -euo pipefail
 
-mkdir -p "${REMOTE_APP_DIR}/.deploy"
-printf '%s\n' "${DEPLOY_SHA}" > "${REMOTE_APP_DIR}/.deploy/current_sha"
-systemctl restart "${REMOTE_SERVICE}"
+wait_for_json() {
+  local label="$1"
+  local url="$2"
+  local deadline=$((SECONDS + 180))
+  local response_file
 
-deadline=\$((SECONDS + 180))
-until systemctl is-active --quiet "${REMOTE_SERVICE}"; do
+  response_file="$(mktemp)"
+  while true; do
+    if curl -fsS "$url" -o "$response_file" >/dev/null 2>&1; then
+      cat "$response_file"
+      rm -f "$response_file"
+      return 0
+    fi
+
+    if (( SECONDS >= deadline )); then
+      echo "${label} endpoint did not become ready in time: ${url}" >&2
+      systemctl status "$REMOTE_SERVICE" --no-pager || true
+      journalctl -u "$REMOTE_SERVICE" -n 50 --no-pager || true
+      rm -f "$response_file"
+      return 1
+    fi
+
+    sleep 2
+  done
+}
+
+mkdir -p "$REMOTE_APP_DIR/.deploy"
+echo "Deploy SHA: $DEPLOY_SHA"
+printf '%s\n' "$DEPLOY_SHA" > "$REMOTE_APP_DIR/.deploy/current_sha"
+systemctl restart "$REMOTE_SERVICE"
+
+deadline=$((SECONDS + 180))
+until systemctl is-active --quiet "$REMOTE_SERVICE"; do
   if (( SECONDS >= deadline )); then
-    systemctl status "${REMOTE_SERVICE}" --no-pager || true
-    journalctl -u "${REMOTE_SERVICE}" -n 50 --no-pager || true
+    systemctl status "$REMOTE_SERVICE" --no-pager || true
+    journalctl -u "$REMOTE_SERVICE" -n 50 --no-pager || true
     exit 1
   fi
   sleep 2
 done
 
-until curl -fsS "http://127.0.0.1:${REMOTE_PORT}/api/health" >/dev/null; do
-  if (( SECONDS >= deadline )); then
-    systemctl status "${REMOTE_SERVICE}" --no-pager || true
-    journalctl -u "${REMOTE_SERVICE}" -n 50 --no-pager || true
-    exit 1
-  fi
-  sleep 2
-done
+health_json="$(wait_for_json "health" "http://127.0.0.1:$REMOTE_PORT/api/health")"
+status_json="$(wait_for_json "status" "http://127.0.0.1:$REMOTE_PORT/api/status")"
 
 echo "--- HEALTH ---"
-curl -fsS "http://127.0.0.1:${REMOTE_PORT}/api/health"
+printf '%s\n' "$health_json"
 echo
 echo "--- STATUS ---"
-curl -fsS "http://127.0.0.1:${REMOTE_PORT}/api/status"
+printf '%s\n' "$status_json"
 echo
 EOF
