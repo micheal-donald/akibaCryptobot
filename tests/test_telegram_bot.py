@@ -241,3 +241,29 @@ async def test_cmd_status_shows_rollback_guidance_for_unhealthy_runtime():
     assert "Rollout Health: rollback_recommended" in message
     assert "Rollout Recommended Action: rollback_to_legacy" in message
     assert "rollback to legacy is recommended" in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_status_shows_runtime_startup_pending():
+    projection = make_projection(
+        source=ProjectionSource.SHADOW,
+        runtime_mode="shadow",
+    )
+    object.__setattr__(projection, "runtime_is_running", False)
+    object.__setattr__(projection, "runtime_is_healthy", False)
+    object.__setattr__(projection, "runtime_start_status", "starting")
+    object.__setattr__(projection, "runtime_start_pending", True)
+
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = FakeBot(projection)
+    update = FakeUpdate()
+
+    await notifier.cmd_status(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "Runtime Running: no" in message
+    assert "Runtime Start Status: starting" in message
+    assert "Runtime Start Pending: True" in message
+    assert "Rollout Health: startup_pending" in message
+    assert "Rollout Recommended Action: wait_for_runtime" in message
+    assert "startup is still in progress" in message

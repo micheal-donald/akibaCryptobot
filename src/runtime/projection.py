@@ -45,6 +45,7 @@ def build_runtime_projection(
     *,
     runtime_mode: RuntimeMode | str,
     runtime_is_running: bool,
+    runtime_start_status: str | None = None,
     position_source: PositionStateSource | None = None,
     execution_source: OrderStateSource | None = None,
 ) -> RuntimeProjection:
@@ -56,6 +57,12 @@ def build_runtime_projection(
     )
     orders = tuple(_project_order(state) for state in _sorted_orders(execution_source))
     runtime_enabled = mode.runtime_enabled
+    start_status = _resolve_runtime_start_status(
+        runtime_enabled=runtime_enabled,
+        runtime_is_running=runtime_is_running,
+        runtime_start_status=runtime_start_status,
+    )
+    start_pending = runtime_enabled and start_status in {"configured", "starting"}
 
     return RuntimeProjection(
         source=_projection_source(mode),
@@ -63,6 +70,8 @@ def build_runtime_projection(
         runtime_enabled=runtime_enabled,
         runtime_is_running=runtime_is_running,
         runtime_is_healthy=(not runtime_enabled) or runtime_is_running,
+        runtime_start_status=start_status,
+        runtime_start_pending=start_pending,
         runtime_owns_entries=mode.owns_entries,
         runtime_owns_exits=mode.owns_exits,
         active_position_count=sum(
@@ -93,6 +102,22 @@ def _projection_source(mode: RuntimeMode) -> ProjectionSource:
     if mode.owns_entries or mode.owns_exits:
         return ProjectionSource.RUNTIME_PROJECTION
     return ProjectionSource.LEGACY
+
+
+def _resolve_runtime_start_status(
+    *,
+    runtime_enabled: bool,
+    runtime_is_running: bool,
+    runtime_start_status: str | None,
+) -> str:
+    if not runtime_enabled:
+        return "disabled"
+    if runtime_is_running:
+        return "running"
+    if runtime_start_status is None:
+        return "configured"
+    normalized = str(runtime_start_status).strip().lower()
+    return normalized or "configured"
 
 
 def _sorted_positions(source: PositionStateSource | None) -> tuple[PositionState, ...]:

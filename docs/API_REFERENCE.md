@@ -31,6 +31,8 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   "effective_runtime_owns_exits": true,
   "runtime_mode": "runtime_primary",
   "runtime_is_running": true,
+  "runtime_start_status": "running",
+  "runtime_start_pending": false,
   "runtime_owns_entries": true,
   "runtime_owns_exits": true,
   "runtime_is_healthy": true,
@@ -203,6 +205,8 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
     "effective_runtime_owns_exits": true,
     "runtime_mode": "runtime_primary",
     "runtime_is_running": true,
+    "runtime_start_status": "running",
+    "runtime_start_pending": false,
     "runtime_owns_entries": true,
     "runtime_owns_exits": true,
     "runtime_is_healthy": true,
@@ -218,6 +222,16 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   }
 }
 ```
+
+During a fresh runtime rollout, `/api/status` and `/ws/status` can briefly report:
+
+- `runtime_is_running=false`
+- `runtime_start_status="configured"` or `"starting"`
+- `runtime_start_pending=true`
+- `rollout_health="startup_pending"`
+- `rollout_recommended_action="wait_for_runtime"`
+
+That state means the runtime is still warming up. It is not, by itself, a rollback signal.
 
 ---
 

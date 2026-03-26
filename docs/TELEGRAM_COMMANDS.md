@@ -92,9 +92,19 @@ The bot sends these notifications automatically (when enabled in config):
 ⚙️ Runtime Mode: runtime_primary
 🧭 State Source: runtime_projection
 🟢 Runtime Healthy: yes
+🚦 Runtime Start Status: running
 📣 Rollout Health: promotion_ready
 ➡️ Recommended Action: stay_runtime_primary
 ```
+
+During a fresh `paper_shadow` rollout, `/status` may briefly report:
+
+- `Runtime Running: no`
+- `Runtime Start Status: configured` or `starting`
+- `Rollout Health: startup_pending`
+- `Recommended Action: wait_for_runtime`
+
+That means the runtime is still warming up. It is not a rollback signal by itself.
 
 ### Trade notification
 ```

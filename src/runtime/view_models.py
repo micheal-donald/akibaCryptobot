@@ -76,6 +76,8 @@ class RuntimeProjection:
     rejected_order_count: int
     positions: tuple[ProjectedPositionView, ...]
     orders: tuple[ProjectedOrderView, ...]
+    runtime_start_status: str = "disabled"
+    runtime_start_pending: bool = False
 
 
 __all__ = [

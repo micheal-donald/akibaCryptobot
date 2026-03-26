@@ -89,6 +89,9 @@ class AkibaCryptoBot:
         self.runtime_config = self._load_runtime_config()
         self.runtime_handle = None
         self.runtime_app = None
+        self._runtime_start_status = (
+            "configured" if self.runtime_enabled else "disabled"
+        )
 
         self.is_running = False
         self.start_time = datetime.now()
@@ -178,6 +181,18 @@ class AkibaCryptoBot:
             runtime_app is not None and getattr(runtime_app, "is_running", False)
         )
 
+    @property
+    def runtime_start_status(self) -> str:
+        if not self.runtime_enabled:
+            return "disabled"
+        if self.runtime_is_running:
+            return "running"
+        return getattr(self, "_runtime_start_status", "configured")
+
+    @property
+    def runtime_start_pending(self) -> bool:
+        return self.runtime_start_status in {"configured", "starting"}
+
     def _build_runtime_handle(self):
         if self.runtime_config is None or not self.runtime_enabled:
             return None
@@ -252,8 +267,10 @@ class AkibaCryptoBot:
         if not self.runtime_enabled or self.runtime_handle is not None:
             return
 
+        self._runtime_start_status = "starting"
         runtime_handle = self._build_runtime_handle()
         if runtime_handle is None:
+            self._runtime_start_status = "failed"
             return
 
         self.runtime_handle = runtime_handle
@@ -262,7 +279,14 @@ class AkibaCryptoBot:
             "Starting runtime supervisor in %s mode",
             self.runtime_mode.value,
         )
-        await runtime_handle.start()
+        try:
+            await runtime_handle.start()
+        except Exception:
+            self.runtime_handle = None
+            self.runtime_app = None
+            self._runtime_start_status = "failed"
+            raise
+        self._runtime_start_status = "running"
 
     def _log_runtime_visibility(self) -> None:
         visibility = self.get_runtime_visibility_info()
@@ -296,6 +320,7 @@ class AkibaCryptoBot:
             runtime_handle.stop(),
             timeout=self.CLEANUP_NETWORK_TIMEOUT_SECONDS,
         )
+        self._runtime_start_status = "stopped"
 
     def signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}, shutting down gracefully...")
@@ -310,6 +335,9 @@ class AkibaCryptoBot:
         runtime_config = self._load_runtime_config()
         if runtime_config is not None:
             self.runtime_config = runtime_config
+        self._runtime_start_status = (
+            "configured" if self.runtime_enabled else "disabled"
+        )
         self._log_runtime_visibility()
         self._validate_runtime_startup()
         self.is_running = True
@@ -840,6 +868,8 @@ class AkibaCryptoBot:
             ],
             "runtime_mode_source": visibility_info["runtime_mode_source"],
             "runtime_is_running": self.runtime_is_running,
+            "runtime_start_status": self.runtime_start_status,
+            "runtime_start_pending": self.runtime_start_pending,
             "runtime_owns_entries": self.runtime_owns_entries,
             "runtime_owns_exits": self.runtime_owns_exits,
         }
@@ -849,6 +879,7 @@ class AkibaCryptoBot:
         return build_runtime_projection(
             runtime_mode=self.runtime_mode,
             runtime_is_running=self.runtime_is_running,
+            runtime_start_status=self.runtime_start_status,
             position_source=(
                 None if runtime_app is None else runtime_app.position_service
             ),

@@ -182,3 +182,35 @@ async def test_ws_status_keeps_legacy_state_when_projection_missing(monkeypatch)
     assert "Legacy loop remains authoritative" in data["rollout_summary"]
     assert data["projected_active_positions"] == 0
     assert data["projected_open_orders"] == 0
+
+
+@pytest.mark.asyncio
+async def test_ws_status_reports_runtime_startup_pending(monkeypatch):
+    projection = make_projection(
+        source=ProjectionSource.SHADOW,
+        runtime_mode="shadow",
+    )
+    object.__setattr__(projection, "runtime_is_running", False)
+    object.__setattr__(projection, "runtime_is_healthy", False)
+    object.__setattr__(projection, "runtime_start_status", "starting")
+    object.__setattr__(projection, "runtime_start_pending", True)
+    monkeypatch.setitem(
+        bot_state,
+        "bot",
+        FakeStatusBot(
+            projection,
+            configured_deployment_profile="paper_shadow",
+        ),
+    )
+    websocket = FakeWebSocket()
+
+    await ws_status(websocket)
+
+    data = websocket.sent[0]["data"]
+    assert data["runtime_mode"] == "shadow"
+    assert data["runtime_is_running"] is False
+    assert data["runtime_start_status"] == "starting"
+    assert data["runtime_start_pending"] is True
+    assert data["rollout_health"] == "startup_pending"
+    assert data["rollout_recommended_action"] == "wait_for_runtime"
+    assert "startup is still in progress" in data["rollout_summary"]

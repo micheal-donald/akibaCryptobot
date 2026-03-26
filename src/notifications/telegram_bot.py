@@ -5,6 +5,7 @@ from datetime import datetime
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from runtime.view_models import ProjectionSource
+from runtime.rollout import build_rollout_summary
 
 logger = logging.getLogger(__name__)
 
@@ -203,6 +204,8 @@ class TelegramNotifier:
             f"State Source: {cls._projection_source_value(projection)}",
             f"Runtime Running: {'yes' if getattr(projection, 'runtime_is_running', False) else 'no'}",
             f"Runtime Healthy: {'yes' if getattr(projection, 'runtime_is_healthy', True) else 'no'}",
+            f"Runtime Start Status: {getattr(projection, 'runtime_start_status', 'disabled')}",
+            f"Runtime Start Pending: {getattr(projection, 'runtime_start_pending', False)}",
             f"Runtime Owns Entries: {getattr(projection, 'runtime_owns_entries', False)}",
             f"Runtime Owns Exits: {getattr(projection, 'runtime_owns_exits', False)}",
         ]
@@ -211,43 +214,12 @@ class TelegramNotifier:
     def _rollout_summary_lines(cls, projection: Any) -> list[str]:
         if projection is None:
             return []
-
-        runtime_is_healthy = getattr(projection, "runtime_is_healthy", True)
-        runtime_owns_entries = getattr(projection, "runtime_owns_entries", False)
-        runtime_owns_exits = getattr(projection, "runtime_owns_exits", False)
-        state_source = cls._projection_source_value(projection)
-
-        if state_source == ProjectionSource.LEGACY.value:
-            rollout_health = "legacy"
-            recommended_action = "stay_legacy"
-            rollout_summary = "Legacy loop remains authoritative."
-        elif not runtime_is_healthy:
-            rollout_health = "rollback_recommended"
-            recommended_action = "rollback_to_legacy"
-            rollout_summary = "Runtime is unhealthy; rollback to legacy is recommended."
-        elif runtime_owns_exits:
-            rollout_health = "promotion_ready"
-            recommended_action = "stay_runtime_primary"
-            rollout_summary = (
-                "Runtime primary ownership is healthy and ready for operator review."
-            )
-        elif runtime_owns_entries:
-            rollout_health = "promotion_ready"
-            recommended_action = "promote_runtime_primary"
-            rollout_summary = (
-                "Runtime entry ownership is healthy and ready for promotion."
-            )
-        else:
-            rollout_health = "shadow_ready"
-            recommended_action = "continue_shadow"
-            rollout_summary = (
-                "Runtime is healthy in shadow mode; validate before promotion."
-            )
+        rollout = build_rollout_summary(projection)
 
         return [
-            f"Rollout Health: {rollout_health}",
-            f"Rollout Recommended Action: {recommended_action}",
-            f"Rollout Summary: {rollout_summary}",
+            f"Rollout Health: {rollout['rollout_health']}",
+            f"Rollout Recommended Action: {rollout['rollout_recommended_action']}",
+            f"Rollout Summary: {rollout['rollout_summary']}",
         ]
 
     @staticmethod

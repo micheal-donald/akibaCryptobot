@@ -251,6 +251,30 @@ async def test_status_route_marks_unhealthy_runtime_for_rollback():
 
 
 @pytest.mark.asyncio
+async def test_status_route_marks_runtime_startup_pending():
+    bot = FakeStatusBot(
+        make_projection(
+            source=ProjectionSource.SHADOW,
+            runtime_mode="shadow",
+        ),
+        configured_deployment_profile="paper_shadow",
+    )
+    object.__setattr__(bot._projection, "runtime_is_running", False)
+    object.__setattr__(bot._projection, "runtime_is_healthy", False)
+    object.__setattr__(bot._projection, "runtime_start_status", "starting")
+    object.__setattr__(bot._projection, "runtime_start_pending", True)
+
+    payload = await get_status(bot=bot)
+
+    assert payload["runtime_is_running"] is False
+    assert payload["runtime_start_status"] == "starting"
+    assert payload["runtime_start_pending"] is True
+    assert payload["rollout_health"] == "startup_pending"
+    assert payload["rollout_recommended_action"] == "wait_for_runtime"
+    assert "startup is still in progress" in payload["rollout_summary"]
+
+
+@pytest.mark.asyncio
 async def test_trades_route_uses_runtime_projection_when_runtime_owns_state():
     bot = FakeStatusBot(
         make_projection(

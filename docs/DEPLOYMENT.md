@@ -102,7 +102,7 @@ Use the same command pattern for every paper profile. Replace `<SHA>` with the r
 
 | Step | Local profile command | Deploy command | Expected `/api/status` values |
 |---|---|---|---|
-| `paper_shadow` | `python scripts/set_runtime_profile.py paper_shadow` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_shadow --expected-effective-mode shadow` | `configured_deployment_profile=paper_shadow`, `effective_runtime_mode=shadow`, `effective_runtime_enabled=true`, `effective_runtime_owns_entries=false`, `effective_runtime_owns_exits=false`, `runtime_mode=shadow`, `state_source=shadow`, `rollout_health=shadow_ready`, `rollout_recommended_action=continue_shadow` |
+| `paper_shadow` | `python scripts/set_runtime_profile.py paper_shadow` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_shadow --expected-effective-mode shadow` | `configured_deployment_profile=paper_shadow`, `effective_runtime_mode=shadow`, `effective_runtime_enabled=true`, `effective_runtime_owns_entries=false`, `effective_runtime_owns_exits=false`, `runtime_mode=shadow`, `state_source=shadow`, initial `rollout_health=startup_pending` / `rollout_recommended_action=wait_for_runtime`, then `rollout_health=shadow_ready` / `rollout_recommended_action=continue_shadow` once startup settles |
 | `paper_runtime_entries` | `python scripts/set_runtime_profile.py paper_runtime_entries` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_runtime_entries --expected-effective-mode runtime_entries` | `configured_deployment_profile=paper_runtime_entries`, `effective_runtime_mode=runtime_entries`, `effective_runtime_enabled=true`, `effective_runtime_owns_entries=true`, `effective_runtime_owns_exits=false`, `runtime_mode=runtime_entries`, `state_source=runtime_projection`, `rollout_health=promotion_ready`, `rollout_recommended_action=promote_runtime_primary` |
 | `paper_runtime_primary` | `python scripts/set_runtime_profile.py paper_runtime_primary` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_runtime_primary --expected-effective-mode runtime_primary` | `configured_deployment_profile=paper_runtime_primary`, `effective_runtime_mode=runtime_primary`, `effective_runtime_enabled=true`, `effective_runtime_owns_entries=true`, `effective_runtime_owns_exits=true`, `runtime_mode=runtime_primary`, `state_source=runtime_projection`, `rollout_health=promotion_ready`, `rollout_recommended_action=stay_runtime_primary` |
 | `paper_legacy` rollback | `python scripts/set_runtime_profile.py paper_legacy` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_legacy --expected-effective-mode legacy` | `configured_deployment_profile=paper_legacy`, `effective_runtime_mode=legacy`, `effective_runtime_enabled=false`, `effective_runtime_owns_entries=false`, `effective_runtime_owns_exits=false`, `runtime_mode=legacy`, `state_source=legacy`, `rollout_health=legacy`, `rollout_recommended_action=stay_legacy` |
@@ -124,10 +124,10 @@ Use this exact sequence for the first real paper promotion:
    - `effective_runtime_owns_exits=false`
    - `runtime_mode=shadow`
    - `state_source=shadow`
-   - `rollout_health=shadow_ready`
-   - `rollout_recommended_action=continue_shadow`
+   - first: `runtime_start_pending=true`, `runtime_start_status=configured|starting`, `rollout_health=startup_pending`, `rollout_recommended_action=wait_for_runtime`
+   - then, after startup completes: `runtime_start_pending=false`, `runtime_start_status=running`, `rollout_health=shadow_ready`, `rollout_recommended_action=continue_shadow`
 
-If any of those fields are wrong after restart, roll back immediately with the same pattern on `paper_legacy`:
+Do not roll back while the runtime is still in `startup_pending`. Roll back only if startup settles and `/api/status` still reports `rollback_recommended` or another unexpected profile/mode value. If rollback is required, use the same pattern on `paper_legacy`:
 
 ```bash
 python scripts/set_runtime_profile.py paper_legacy

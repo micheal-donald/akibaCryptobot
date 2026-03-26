@@ -178,3 +178,17 @@ def test_runtime_projection_marks_shadow_mode_source() -> None:
     assert projection.runtime_is_healthy is True
     assert projection.runtime_owns_entries is False
     assert projection.runtime_owns_exits is False
+
+
+def test_runtime_projection_marks_runtime_startup_pending() -> None:
+    projection = build_runtime_projection(
+        runtime_mode="shadow",
+        runtime_is_running=False,
+        runtime_start_status="starting",
+    )
+
+    assert projection.source is ProjectionSource.SHADOW
+    assert projection.runtime_is_running is False
+    assert projection.runtime_is_healthy is False
+    assert projection.runtime_start_status == "starting"
+    assert projection.runtime_start_pending is True

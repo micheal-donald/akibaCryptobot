@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from api.dependencies import bot_state
+from runtime.rollout import build_rollout_summary
 from runtime.view_models import ProjectionSource
 
 router = APIRouter()
@@ -26,52 +27,6 @@ def _get_runtime_projection(bot):
         return None
 
 
-def _build_rollout_summary(projection):
-    runtime_is_healthy = getattr(projection, "runtime_is_healthy", True)
-    runtime_owns_entries = getattr(projection, "runtime_owns_entries", False)
-    runtime_owns_exits = getattr(projection, "runtime_owns_exits", False)
-    state_source = getattr(projection, "source", ProjectionSource.LEGACY).value
-
-    if state_source == ProjectionSource.LEGACY.value:
-        return {
-            "runtime_is_healthy": runtime_is_healthy,
-            "rollout_health": "legacy",
-            "rollout_recommended_action": "stay_legacy",
-            "rollout_summary": "Legacy loop remains authoritative.",
-        }
-
-    if not runtime_is_healthy:
-        return {
-            "runtime_is_healthy": runtime_is_healthy,
-            "rollout_health": "rollback_recommended",
-            "rollout_recommended_action": "rollback_to_legacy",
-            "rollout_summary": "Runtime is unhealthy; rollback to legacy is recommended.",
-        }
-
-    if runtime_owns_exits:
-        return {
-            "runtime_is_healthy": runtime_is_healthy,
-            "rollout_health": "promotion_ready",
-            "rollout_recommended_action": "stay_runtime_primary",
-            "rollout_summary": "Runtime primary ownership is healthy and ready for operator review.",
-        }
-
-    if runtime_owns_entries:
-        return {
-            "runtime_is_healthy": runtime_is_healthy,
-            "rollout_health": "promotion_ready",
-            "rollout_recommended_action": "promote_runtime_primary",
-            "rollout_summary": "Runtime entry ownership is healthy and ready for promotion.",
-        }
-
-    return {
-        "runtime_is_healthy": runtime_is_healthy,
-        "rollout_health": "shadow_ready",
-        "rollout_recommended_action": "continue_shadow",
-        "rollout_summary": "Runtime is healthy in shadow mode; validate before promotion.",
-    }
-
-
 def _inject_runtime_visibility(status_info, bot):
     visibility_getter = getattr(bot, "get_runtime_visibility_info", None)
     if not callable(visibility_getter):
@@ -85,11 +40,13 @@ def _build_status_payload(bot):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
     projection = _get_runtime_projection(bot)
-    rollout_summary = _build_rollout_summary(projection)
+    rollout_summary = build_rollout_summary(projection)
 
     active_trades = status_info.get("active_trades", 0)
     runtime_mode = status_info.get("runtime_mode", "legacy")
     runtime_is_running = status_info.get("runtime_is_running", False)
+    runtime_start_status = status_info.get("runtime_start_status", "disabled")
+    runtime_start_pending = status_info.get("runtime_start_pending", False)
     runtime_owns_entries = status_info.get("runtime_owns_entries", False)
     runtime_owns_exits = status_info.get("runtime_owns_exits", False)
     state_source = ProjectionSource.LEGACY.value
@@ -102,6 +59,8 @@ def _build_status_payload(bot):
         state_source = projection.source.value
         runtime_mode = projection.runtime_mode
         runtime_is_running = projection.runtime_is_running
+        runtime_start_status = projection.runtime_start_status
+        runtime_start_pending = projection.runtime_start_pending
         runtime_owns_entries = projection.runtime_owns_entries
         runtime_owns_exits = projection.runtime_owns_exits
         projected_active_positions = projection.active_position_count
@@ -143,6 +102,8 @@ def _build_status_payload(bot):
             ),
             "runtime_mode": runtime_mode,
             "runtime_is_running": runtime_is_running,
+            "runtime_start_status": runtime_start_status,
+            "runtime_start_pending": runtime_start_pending,
             "runtime_owns_entries": runtime_owns_entries,
             "runtime_owns_exits": runtime_owns_exits,
             "state_source": state_source,

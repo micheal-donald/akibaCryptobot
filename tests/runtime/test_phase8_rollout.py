@@ -137,6 +137,29 @@ def make_projection(
             "rollback_to_legacy",
             "runtime_projection",
         ),
+        (
+            RuntimeProjection(
+                source=ProjectionSource.SHADOW,
+                runtime_mode="shadow",
+                runtime_enabled=True,
+                runtime_is_running=False,
+                runtime_is_healthy=False,
+                runtime_owns_entries=False,
+                runtime_owns_exits=False,
+                active_position_count=1,
+                protected_position_count=0,
+                pending_exit_count=1,
+                open_order_count=2,
+                rejected_order_count=0,
+                positions=(make_position(),),
+                orders=(),
+                runtime_start_status="starting",
+                runtime_start_pending=True,
+            ),
+            "startup_pending",
+            "wait_for_runtime",
+            "shadow",
+        ),
     ],
 )
 async def test_phase8_activation_status_checklist(
@@ -166,4 +189,7 @@ async def test_phase8_activation_status_checklist(
         assert payload["runtime_owns_exits"] is True
 
     if not projection.runtime_is_healthy:
-        assert "rollback to legacy" in payload["rollout_summary"]
+        if projection.runtime_start_pending:
+            assert "startup is still in progress" in payload["rollout_summary"]
+        else:
+            assert "rollback to legacy" in payload["rollout_summary"]
