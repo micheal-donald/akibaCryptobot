@@ -92,6 +92,16 @@ Rollback path:
 
 The helper only mutates the local config file. It does not add a server-side config mutator, and it keeps the deployment profile, runtime mode, and shadow compatibility flag aligned so the resulting change is easy to audit.
 
+The direct deploy helper, `scripts/deploy_snapshot.sh`, can optionally verify the post-restart status payload before it prints success output:
+
+```bash
+bash scripts/deploy_snapshot.sh \
+  --expected-profile paper_shadow \
+  --expected-effective-mode shadow
+```
+
+When either flag is supplied, deploy verification fails if `/api/status` does not report the expected `configured_deployment_profile` or `effective_runtime_mode`. If neither flag is supplied, the helper keeps the previous health-only deploy behavior.
+
 ---
 
 ## Docker Deployment
