@@ -39,6 +39,8 @@ python scripts/set_runtime_profile.py paper_legacy  # rollback
 
 After running the helper, review the local diff before you deploy. The helper updates `runtime.deployment_profile`, `runtime.runtime_mode`, and `runtime.shadow_mode` together so the config stays reviewable and unambiguous.
 
+The deployed server should then reflect the same values in `/api/status` through `configured_deployment_profile`, `effective_runtime_mode`, `effective_runtime_enabled`, `effective_runtime_owns_entries`, and `effective_runtime_owns_exits`.
+
 ---
 
 ## `config/config.json`

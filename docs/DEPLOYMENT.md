@@ -77,22 +77,16 @@ python scripts/set_runtime_profile.py paper_shadow
 git diff -- config/config.json
 ```
 
-Promotion path:
+Recommended paper promotion and rollback flow:
 
-1. Run `python scripts/set_runtime_profile.py paper_shadow`.
-2. Review the diff in `config/config.json`.
-3. Repeat with `paper_runtime_entries` or `paper_runtime_primary` when the staged rollout is ready.
-4. Deploy the reviewed commit at a pinned SHA.
-
-Rollback path:
-
-1. Run `python scripts/set_runtime_profile.py paper_legacy`.
-2. Review the diff in `config/config.json`.
-3. Deploy the reviewed rollback commit at the pinned SHA you want to restore.
+1. Apply the reviewed profile locally with `python scripts/set_runtime_profile.py <profile>`.
+2. Review and commit the resulting `config/config.json` change.
+3. Deploy that reviewed commit at a pinned SHA with `scripts/deploy_snapshot.sh`.
+4. Check `/api/health` for liveness and `/api/status` for profile/mode assertions.
 
 The helper only mutates the local config file. It does not add a server-side config mutator, and it keeps the deployment profile, runtime mode, and shadow compatibility flag aligned so the resulting change is easy to audit.
 
-The direct deploy helper, `scripts/deploy_snapshot.sh`, can optionally verify the post-restart status payload before it prints success output:
+The direct deploy helper, `scripts/deploy_snapshot.sh`, can verify the post-restart status payload before it prints success output. Pass the expected profile and effective mode for the deployment you are promoting:
 
 ```bash
 bash scripts/deploy_snapshot.sh \
@@ -101,6 +95,19 @@ bash scripts/deploy_snapshot.sh \
 ```
 
 When either flag is supplied, deploy verification fails if `/api/status` does not report the expected `configured_deployment_profile` or `effective_runtime_mode`. If neither flag is supplied, the helper keeps the previous health-only deploy behavior.
+
+#### Promotion and Rollback Runbook
+
+Use the same command pattern for every paper profile. Replace `<SHA>` with the reviewed commit you intend to deploy.
+
+| Step | Local profile command | Deploy command | Expected `/api/status` values |
+|---|---|---|---|
+| `paper_shadow` | `python scripts/set_runtime_profile.py paper_shadow` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_shadow --expected-effective-mode shadow` | `configured_deployment_profile=paper_shadow`, `effective_runtime_mode=shadow`, `effective_runtime_enabled=true`, `effective_runtime_owns_entries=false`, `effective_runtime_owns_exits=false`, `runtime_mode=shadow`, `state_source=shadow`, `rollout_health=shadow_ready`, `rollout_recommended_action=continue_shadow` |
+| `paper_runtime_entries` | `python scripts/set_runtime_profile.py paper_runtime_entries` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_runtime_entries --expected-effective-mode runtime_entries` | `configured_deployment_profile=paper_runtime_entries`, `effective_runtime_mode=runtime_entries`, `effective_runtime_enabled=true`, `effective_runtime_owns_entries=true`, `effective_runtime_owns_exits=false`, `runtime_mode=runtime_entries`, `state_source=runtime_projection`, `rollout_health=promotion_ready`, `rollout_recommended_action=promote_runtime_primary` |
+| `paper_runtime_primary` | `python scripts/set_runtime_profile.py paper_runtime_primary` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_runtime_primary --expected-effective-mode runtime_primary` | `configured_deployment_profile=paper_runtime_primary`, `effective_runtime_mode=runtime_primary`, `effective_runtime_enabled=true`, `effective_runtime_owns_entries=true`, `effective_runtime_owns_exits=true`, `runtime_mode=runtime_primary`, `state_source=runtime_projection`, `rollout_health=promotion_ready`, `rollout_recommended_action=stay_runtime_primary` |
+| `paper_legacy` rollback | `python scripts/set_runtime_profile.py paper_legacy` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile paper_legacy --expected-effective-mode legacy` | `configured_deployment_profile=paper_legacy`, `effective_runtime_mode=legacy`, `effective_runtime_enabled=false`, `effective_runtime_owns_entries=false`, `effective_runtime_owns_exits=false`, `runtime_mode=legacy`, `state_source=legacy`, `rollout_health=legacy`, `rollout_recommended_action=stay_legacy` |
+
+`/api/health` only proves the process is live. A successful health check does not prove the expected deployment profile or runtime mode. Treat the deploy as successful only when the health check passes and `/api/status` reports the expected profile and mode fields above.
 
 ---
 
@@ -231,58 +238,21 @@ Application runtime secrets live in the server-side `.env` file and are rendered
 
 ### Paper Activation Procedure
 
-Phase 8 paper rollout is intentionally staged. Use the explicit runtime mode in `config/config.json` and promote one step at a time.
+Phase 10 makes the paper path explicit through reviewed deployment profiles. Use the same helper/deploy/status sequence shown above for every rollout step:
 
-Recommended activation path:
+1. `paper_shadow`
+2. `paper_runtime_entries`
+3. `paper_runtime_primary`
+4. `paper_legacy` rollback
 
-1. **Start in `legacy`**
-   - Keep `runtime.runtime_mode` set to `legacy` while the classic loop remains authoritative.
-   - Verify `/api/status` and `/ws/status` report:
-     - `runtime_mode: legacy`
-     - `rollout_health: legacy`
-     - `rollout_recommended_action: stay_legacy`
+Each step should be verified in two phases:
 
-2. **Move to `shadow`**
-   - Set `runtime.runtime_mode` to `shadow`.
-   - Redeploy the pinned SHA.
-   - Verify the operator surfaces report:
-     - `runtime_mode: shadow`
-     - `state_source: shadow`
-     - `rollout_health: shadow_ready`
-     - `rollout_recommended_action: continue_shadow`
-   - Stay here until the runtime projections match the legacy view closely enough for promotion.
+1. `GET /api/health` only confirms the service started.
+2. `GET /api/status` confirms the intended profile and runtime mode actually came up.
 
-3. **Promote to `runtime_entries`**
-   - Set `runtime.runtime_mode` to `runtime_entries`.
-   - Redeploy the pinned SHA.
-   - Verify:
-     - `runtime_owns_entries: true`
-     - `runtime_owns_exits: false`
-     - `rollout_health: promotion_ready`
-     - `rollout_recommended_action: promote_runtime_primary`
-   - At this stage the runtime owns new entries while legacy exit handling may still remain available for compatibility.
+For this phase, the profile/mode assertions are the source of truth. A healthy process with the wrong `configured_deployment_profile` or `effective_runtime_mode` is still a failed deploy.
 
-4. **Promote to `runtime_primary`**
-   - Set `runtime.runtime_mode` to `runtime_primary`.
-   - Redeploy the pinned SHA.
-   - Verify:
-     - `runtime_owns_entries: true`
-     - `runtime_owns_exits: true`
-     - `rollout_health: promotion_ready`
-     - `rollout_recommended_action: stay_runtime_primary`
-
-Rollback path:
-
-1. Set `runtime.runtime_mode` back to `legacy`.
-2. Redeploy the pinned SHA.
-3. Confirm the operator surfaces return to:
-   - `runtime_mode: legacy`
-   - `rollout_health: legacy`
-   - `rollout_recommended_action: stay_legacy`
-
-Rollback should be the first response if runtime health degrades, rollout summaries report `rollback_recommended`, or operator verification fails after promotion.
-
-For Phase 9, prefer the reviewed deployment profile helper above instead of editing these fields individually. The same rollout order applies, but the profile helper keeps the config explicit and makes the diff easier to review before deployment.
+Rollback should be the first response if runtime health degrades, rollout summaries report `rollback_recommended`, or the status payload does not match the expected profile/mode pair after promotion.
 
 > [!IMPORTANT]
 > Live exchange deployments keep the legacy loop as the safe default. If `exchange.sandbox` is `false`, runtime-owned modes (`shadow`, `runtime_entries`, `runtime_primary`) will fail fast unless `runtime.allow_live_runtime=true` is set explicitly. `live_legacy` remains allowed without the override.
