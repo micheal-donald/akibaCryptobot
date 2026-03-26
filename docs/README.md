@@ -27,6 +27,11 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Phase 8 Paper-Primary Activation Spec](specs/PHASE_8_PAPER_PRIMARY_ACTIVATION_SPEC.md) | Runtime rollout config, paper-primary activation, rollback control, and operator rollout visibility |
 | [Phase 9 Paper Default and Live Guards Spec](specs/PHASE_9_PAPER_DEFAULT_AND_LIVE_GUARDS_SPEC.md) | Deployment profiles for paper runtime rollout, startup guardrails for live deployments, and paper-default cutover |
 | [Phase 10 Profile-Aware Deploy Spec](specs/PHASE_10_PROFILE_AWARE_DEPLOY_SPEC.md) | Profile-aware deploy verification, deterministic deploy output, and paper-promotion runbook support |
+| [Phase 11 Live Runtime Activation Spec](specs/PHASE_11_LIVE_RUNTIME_ACTIVATION_SPEC.md) | Reviewed live rollout profiles, live canary progression, and runtime activation guardrails |
+| [Phase 12 Low-Latency Event Plane Spec](specs/PHASE_12_LOW_LATENCY_EVENT_PLANE_SPEC.md) | Hot-path latency budgets, incremental event processing, and runtime event capture/replay |
+| [Phase 13 Order Book and Replay Spec](specs/PHASE_13_ORDER_BOOK_AND_REPLAY_SPEC.md) | Local order-book state, depth capture/replay, and microstructure feature groundwork |
+| [Phase 14 Native Hot Path Spec](specs/PHASE_14_NATIVE_HOT_PATH_SPEC.md) | Native control-plane boundary, IPC contracts, and shadow validation for hot-path extraction |
+| [Phase 15 HFT Infrastructure and Strategy Spec](specs/PHASE_15_HFT_INFRASTRUCTURE_AND_STRATEGY_SPEC.md) | HFT operating modes, latency SLOs, strategy families, and infrastructure/runbook requirements |
 | [LLM Agent Iteration Workflow](LLM_AGENT_ITERATION_WORKFLOW.md) | Reusable protocol for phased, spec-driven, worker-assisted development and deployment |
 
 ---
