@@ -109,6 +109,32 @@ Use the same command pattern for every paper profile. Replace `<SHA>` with the r
 
 `/api/health` only proves the process is live. A successful health check does not prove the expected deployment profile or runtime mode. Treat the deploy as successful only when the health check passes and `/api/status` reports the expected profile and mode fields above.
 
+#### First `paper_shadow` Promotion Runbook
+
+Use this exact sequence for the first real paper promotion:
+
+1. Apply the reviewed profile locally: `python scripts/set_runtime_profile.py paper_shadow`
+2. Review and commit the config diff: `git diff -- config/config.json`, then `git add config/config.json && git commit -m "deploy: paper_shadow promotion"`
+3. Deploy the reviewed commit at a pinned SHA: `DEPLOY_SHA=$(git rev-parse HEAD) bash scripts/deploy_snapshot.sh --expected-profile paper_shadow --expected-effective-mode shadow`
+4. Verify `/api/status` reports these values:
+   - `configured_deployment_profile=paper_shadow`
+   - `effective_runtime_mode=shadow`
+   - `effective_runtime_enabled=true`
+   - `effective_runtime_owns_entries=false`
+   - `effective_runtime_owns_exits=false`
+   - `runtime_mode=shadow`
+   - `state_source=shadow`
+   - `rollout_health=shadow_ready`
+   - `rollout_recommended_action=continue_shadow`
+
+If any of those fields are wrong after restart, roll back immediately with the same pattern on `paper_legacy`:
+
+```bash
+python scripts/set_runtime_profile.py paper_legacy
+git add config/config.json && git commit -m "deploy: paper_legacy rollback"
+DEPLOY_SHA=$(git rev-parse HEAD) bash scripts/deploy_snapshot.sh --expected-profile paper_legacy --expected-effective-mode legacy
+```
+
 ---
 
 ## Docker Deployment
