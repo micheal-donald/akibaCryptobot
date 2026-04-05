@@ -236,7 +236,10 @@ class TelemetryService(BaseService):
     ) -> float | None:
         if start is None or observed_at is None:
             return None
-        return (observed_at - start).total_seconds() * 1000.0
+        age_ms = (observed_at - start).total_seconds() * 1000.0
+        if age_ms < 0:
+            return None
+        return age_ms
 
     @staticmethod
     def _now() -> datetime:

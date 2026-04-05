@@ -88,6 +88,29 @@ def test_telemetry_service_records_age_and_queue_snapshots() -> None:
     ] == pytest.approx(250.0)
 
 
+def test_telemetry_service_ignores_negative_exchange_age_samples() -> None:
+    telemetry = TelemetryService(name="telemetry")
+    event = make_event(event_id="evt-negative")
+    invalid_received = event.meta.ts_exchange - timedelta(seconds=1)
+    invalid_event = RuntimeEvent(
+        meta=EventMeta(
+            event_id=event.meta.event_id,
+            event_type=event.meta.event_type,
+            source=event.meta.source,
+            symbol=event.meta.symbol,
+            ts_exchange=event.meta.ts_exchange,
+            ts_received=invalid_received,
+        ),
+        payload=event.payload,
+    )
+
+    telemetry.record_event(invalid_event, observed_at=invalid_received)
+
+    snapshot = telemetry.get_snapshot()
+    assert snapshot["latency"]["exchange_age_ms"]["count"] == 0
+    assert telemetry.get_metric_count("exchange_age_sample.market.kline") == 0
+
+
 @pytest.mark.asyncio
 async def test_runtime_event_router_records_queue_lag_and_persistence_depth() -> None:
     event_bus: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
