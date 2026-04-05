@@ -138,6 +138,7 @@ main() {
     --exclude '.venv/' \
     --exclude 'logs/' \
     --exclude 'data/' \
+    --exclude 'models/' \
     --exclude '.deploy/' \
     "$TMP_DIR"/ \
     "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_APP_DIR}/"

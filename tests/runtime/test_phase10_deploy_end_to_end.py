@@ -117,6 +117,9 @@ exit 0
         bin_dir / "rsync",
         """#!/usr/bin/env bash
 set -euo pipefail
+if [[ -n "${FAKE_RSYNC_ARGS_FILE:-}" ]]; then
+  printf '%s\n' "$@" >"$FAKE_RSYNC_ARGS_FILE"
+fi
 exit 0
 """,
     )
@@ -156,6 +159,7 @@ def _run_deploy(
         "EXPECTED_EFFECTIVE_RUNTIME_MODE": expected_effective_mode,
         "FAKE_STATUS_CONFIGURED_PROFILE": configured_profile,
         "FAKE_STATUS_EFFECTIVE_MODE": effective_mode,
+        "FAKE_RSYNC_ARGS_FILE": str(tmp_path / "rsync-args.txt"),
     }
 
     return subprocess.run(
@@ -183,6 +187,7 @@ def test_deploy_snapshot_verifies_successful_profile_and_mode(
         configured_profile="paper_runtime_primary",
         effective_mode="runtime_primary",
     )
+    rsync_args = (tmp_path / "rsync-args.txt").read_text(encoding="utf-8").splitlines()
 
     assert result.returncode == 0
     assert f"Deploy SHA: {deploy_sha}" in result.stdout
@@ -190,6 +195,7 @@ def test_deploy_snapshot_verifies_successful_profile_and_mode(
     assert "--- STATUS ---" in result.stdout
     assert '"configured_deployment_profile":"paper_runtime_primary"' in result.stdout
     assert '"effective_runtime_mode":"runtime_primary"' in result.stdout
+    assert "models/" in rsync_args
     assert result.stderr == ""
 
 

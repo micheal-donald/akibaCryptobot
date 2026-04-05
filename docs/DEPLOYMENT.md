@@ -96,6 +96,8 @@ bash scripts/deploy_snapshot.sh \
 
 When either flag is supplied, deploy verification fails if `/api/status` does not report the expected `configured_deployment_profile` or `effective_runtime_mode`. If neither flag is supplied, the helper keeps the previous health-only deploy behavior.
 
+Snapshot deploys intentionally preserve server-side `models/` artifacts. The pinned code deploy is sourced from `git archive`, while trained FreqAI joblib files are runtime artifacts that may be produced outside git. Preserving `models/` keeps code deploys from wiping the currently active model set; model refresh remains a separate training/deployment step.
+
 #### Promotion and Rollback Runbook
 
 Use the same command pattern for every paper profile. Replace `<SHA>` with the reviewed commit you intend to deploy.
