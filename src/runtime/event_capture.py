@@ -131,6 +131,18 @@ class RuntimeEventCaptureBuffer:
     def get_serialized_records(self) -> tuple[dict[str, object], ...]:
         return tuple(record.as_dict() for record in self._records)
 
+    def to_json_lines(self) -> tuple[str, ...]:
+        return tuple(record.to_json() for record in self._records)
+
+    def write_jsonl(self, path: str | Path) -> Path:
+        output_path = Path(path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            "".join(f"{line}\n" for line in self.to_json_lines()),
+            encoding="utf-8",
+        )
+        return output_path
+
     def clear(self) -> None:
         self._records.clear()
 

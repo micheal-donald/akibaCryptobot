@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 
 from domain.events import EventMeta, KlinePayload, RuntimeEvent
@@ -132,6 +133,24 @@ def test_runtime_event_capture_buffer_exposes_serialized_records() -> None:
             },
         },
     )
+
+
+def test_runtime_event_capture_buffer_writes_jsonl(tmp_path) -> None:
+    buffer = RuntimeEventCaptureBuffer(max_records=4)
+    first = make_kline_event(event_id="evt-jsonl-a", minute=6)
+    second = make_kline_event(event_id="evt-jsonl-b", minute=7)
+
+    buffer.capture(first, captured_at=first.meta.ts_received)
+    buffer.capture(second, captured_at=second.meta.ts_received)
+
+    output_path = buffer.write_jsonl(tmp_path / "capture.jsonl")
+    lines = output_path.read_text(encoding="utf-8").splitlines()
+
+    assert len(lines) == 2
+    assert [json.loads(line)["event_id"] for line in lines] == [
+        "evt-jsonl-a",
+        "evt-jsonl-b",
+    ]
 
 
 async def _run_router_capture() -> tuple[dict[str, object], ...]:
