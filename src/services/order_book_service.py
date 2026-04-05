@@ -28,6 +28,11 @@ class OrderBookSnapshot:
     exchange_timestamp: datetime | None
     received_at: datetime | None
     updated_at: datetime
+    is_stale: bool = False
+    is_gap_detected: bool = False
+    is_sequence_valid: bool = True
+    last_sequence_delta: int | None = None
+    sequence_issue: str | None = None
 
     @property
     def best_bid(self) -> OrderBookLevel | None:
@@ -58,6 +63,11 @@ class _OrderBookState:
     bids: dict[float, float] = field(default_factory=dict)
     asks: dict[float, float] = field(default_factory=dict)
     sequence: int | None = None
+    is_stale: bool = False
+    is_gap_detected: bool = False
+    is_sequence_valid: bool = True
+    last_sequence_delta: int | None = None
+    sequence_issue: str | None = None
     exchange_timestamp: datetime | None = None
     received_at: datetime | None = None
     updated_at: datetime | None = None
@@ -79,6 +89,11 @@ class _OrderBookState:
             level.price: level.quantity for level in asks if level.quantity > 0
         }
         self.sequence = sequence
+        self.is_stale = False
+        self.is_gap_detected = False
+        self.is_sequence_valid = True
+        self.last_sequence_delta = None
+        self.sequence_issue = None
         self.exchange_timestamp = exchange_timestamp
         self.received_at = received_at
         self.updated_at = updated_at or received_at or datetime.now(timezone.utc)
@@ -94,14 +109,15 @@ class _OrderBookState:
         received_at: datetime | None = None,
     ) -> None:
         levels = self._levels_for_side(side)
+        self._update_sequence_state(sequence)
         if quantity <= 0:
             levels.pop(price, None)
         else:
             levels[price] = quantity
-        self.sequence = sequence if sequence is not None else self.sequence
         self.exchange_timestamp = exchange_timestamp or self.exchange_timestamp
         self.received_at = received_at or self.received_at
         self.updated_at = received_at or datetime.now(timezone.utc)
+        self.is_stale = False
 
     def snapshot(self, *, depth: int | None = None) -> OrderBookSnapshot:
         depth = None if depth is None or depth <= 0 else depth
@@ -121,7 +137,44 @@ class _OrderBookState:
             exchange_timestamp=self.exchange_timestamp,
             received_at=self.received_at,
             updated_at=self.updated_at or datetime.now(timezone.utc),
+            is_stale=self.is_stale,
+            is_gap_detected=self.is_gap_detected,
+            is_sequence_valid=self.is_sequence_valid,
+            last_sequence_delta=self.last_sequence_delta,
+            sequence_issue=self.sequence_issue,
         )
+
+    def mark_stale(self) -> None:
+        self.is_stale = True
+
+    def _update_sequence_state(self, sequence: int | None) -> None:
+        if sequence is None:
+            return
+        previous = self.sequence
+        self.sequence = sequence
+        if previous is None:
+            self.is_sequence_valid = True
+            self.is_gap_detected = False
+            self.last_sequence_delta = None
+            self.sequence_issue = None
+            return
+
+        delta = sequence - previous
+        self.last_sequence_delta = delta
+        if delta == 1:
+            self.is_sequence_valid = True
+            self.is_gap_detected = False
+            self.sequence_issue = None
+            return
+
+        self.is_sequence_valid = False
+        self.is_gap_detected = delta > 1
+        if delta > 1:
+            self.sequence_issue = "gap"
+        elif delta == 0:
+            self.sequence_issue = "duplicate"
+        else:
+            self.sequence_issue = "non_monotonic"
 
     def _levels_for_side(self, side: str) -> dict[float, float]:
         normalized = side.lower()
@@ -198,6 +251,10 @@ class OrderBookService(BaseService):
         )
         return state.snapshot(depth=self.default_depth_window)
 
+    def mark_stale(self, symbol: str) -> None:
+        state = self._states.setdefault(symbol, _OrderBookState(symbol=symbol))
+        state.mark_stale()
+
     def get_snapshot(
         self, symbol: str, *, depth: int | None = None
     ) -> OrderBookSnapshot | None:
@@ -222,6 +279,31 @@ class OrderBookService(BaseService):
         if snapshot is None:
             return None
         return snapshot.bids, snapshot.asks
+
+    def get_state_health(self, symbol: str) -> dict[str, object] | None:
+        state = self._states.get(symbol)
+        if state is None:
+            return None
+        return {
+            "symbol": symbol,
+            "sequence": state.sequence,
+            "is_stale": state.is_stale,
+            "is_gap_detected": state.is_gap_detected,
+            "is_sequence_valid": state.is_sequence_valid,
+            "last_sequence_delta": state.last_sequence_delta,
+            "sequence_issue": state.sequence_issue,
+            "updated_at": (
+                state.updated_at.isoformat() if state.updated_at is not None else None
+            ),
+            "exchange_timestamp": (
+                state.exchange_timestamp.isoformat()
+                if state.exchange_timestamp is not None
+                else None
+            ),
+            "received_at": (
+                state.received_at.isoformat() if state.received_at is not None else None
+            ),
+        }
 
     def symbols(self) -> tuple[str, ...]:
         return tuple(self._states)

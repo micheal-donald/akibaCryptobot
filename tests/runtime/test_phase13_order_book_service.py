@@ -105,6 +105,56 @@ def test_order_book_service_updates_and_removes_levels() -> None:
     assert snapshot.asks == (OrderBookLevel(price=601.0, quantity=3.5),)
 
 
+def test_order_book_service_detects_sequence_gaps_and_duplicates() -> None:
+    service = build_service()
+
+    service.replace_snapshot(
+        "SOLUSDT",
+        bids=[(140.0, 1.0)],
+        asks=[(140.5, 1.0)],
+        sequence=10,
+    )
+    service.apply_level_update("SOLUSDT", "bid", 140.0, 1.1, sequence=11)
+    service.apply_level_update("SOLUSDT", "bid", 139.5, 2.0, sequence=13)
+
+    health = service.get_state_health("SOLUSDT")
+    assert health is not None
+    assert health["sequence"] == 13
+    assert health["is_sequence_valid"] is False
+    assert health["is_gap_detected"] is True
+    assert health["last_sequence_delta"] == 2
+    assert health["sequence_issue"] == "gap"
+
+    service.apply_level_update("SOLUSDT", "ask", 141.0, 0.5, sequence=13)
+    health = service.get_state_health("SOLUSDT")
+    assert health is not None
+    assert health["is_sequence_valid"] is False
+    assert health["is_gap_detected"] is False
+    assert health["last_sequence_delta"] == 0
+    assert health["sequence_issue"] == "duplicate"
+
+
+def test_order_book_service_marks_and_clears_stale_state() -> None:
+    service = build_service()
+    service.replace_snapshot(
+        "XRPUSDT",
+        bids=[(0.5, 1000.0)],
+        asks=[(0.5005, 900.0)],
+        sequence=1,
+    )
+
+    service.mark_stale("XRPUSDT")
+    health = service.get_state_health("XRPUSDT")
+    assert health is not None
+    assert health["is_stale"] is True
+
+    service.apply_level_update("XRPUSDT", "bid", 0.5, 1100.0, sequence=2)
+    health = service.get_state_health("XRPUSDT")
+    assert health is not None
+    assert health["is_stale"] is False
+    assert health["is_sequence_valid"] is True
+
+
 def test_order_book_service_returns_none_for_missing_symbols() -> None:
     service = build_service()
 
