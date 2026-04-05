@@ -29,7 +29,13 @@ class FakeWebSocket:
 
 
 class FakeStatusBot:
-    def __init__(self, projection=None, *, configured_deployment_profile=None):
+    def __init__(
+        self,
+        projection=None,
+        *,
+        configured_deployment_profile=None,
+        trading_mode="paper",
+    ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
         self.circuit_breaker_active = False
@@ -37,6 +43,7 @@ class FakeStatusBot:
         self.strategy_manager = type(
             "StrategyManager", (), {"active_strategy": "ensemble"}
         )()
+        self._trading_mode = trading_mode
 
     def get_status_info(self):
         return {
@@ -44,7 +51,7 @@ class FakeStatusBot:
             "daily_pnl": 12.34,
             "uptime": "0:10:00",
             "is_running": True,
-            "trading_mode": "paper",
+            "trading_mode": self._trading_mode,
         }
 
     def get_runtime_projection(self):
@@ -145,6 +152,8 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
     assert data["runtime_owns_exits"] is True
     assert data["runtime_is_healthy"] is True
     assert data["state_source"] == "runtime_projection"
+    assert data["rollout_environment"] == "paper"
+    assert data["rollout_stage"] == "primary"
     assert data["rollout_health"] == "promotion_ready"
     assert data["rollout_recommended_action"] == "stay_runtime_primary"
     assert "Runtime primary ownership is healthy" in data["rollout_summary"]
@@ -177,6 +186,8 @@ async def test_ws_status_keeps_legacy_state_when_projection_missing(monkeypatch)
     assert data["runtime_owns_exits"] is False
     assert data["runtime_is_healthy"] is True
     assert data["state_source"] == "legacy"
+    assert data["rollout_environment"] == "paper"
+    assert data["rollout_stage"] == "legacy"
     assert data["rollout_health"] == "legacy"
     assert data["rollout_recommended_action"] == "stay_legacy"
     assert "Legacy loop remains authoritative" in data["rollout_summary"]
@@ -211,6 +222,35 @@ async def test_ws_status_reports_runtime_startup_pending(monkeypatch):
     assert data["runtime_is_running"] is False
     assert data["runtime_start_status"] == "starting"
     assert data["runtime_start_pending"] is True
+    assert data["rollout_environment"] == "paper"
+    assert data["rollout_stage"] == "shadow"
     assert data["rollout_health"] == "startup_pending"
     assert data["rollout_recommended_action"] == "wait_for_runtime"
     assert "startup is still in progress" in data["rollout_summary"]
+
+
+@pytest.mark.asyncio
+async def test_ws_status_distinguishes_live_canary_rollout(monkeypatch):
+    monkeypatch.setitem(
+        bot_state,
+        "bot",
+        FakeStatusBot(
+            make_projection(
+                source=ProjectionSource.SHADOW,
+                runtime_mode="shadow",
+            ),
+            configured_deployment_profile="live_shadow",
+            trading_mode="live",
+        ),
+    )
+    websocket = FakeWebSocket()
+
+    await ws_status(websocket)
+
+    data = websocket.sent[0]["data"]
+    assert data["trading_mode"] == "live"
+    assert data["rollout_environment"] == "live"
+    assert data["rollout_stage"] == "canary"
+    assert data["rollout_health"] == "shadow_ready"
+    assert data["rollout_recommended_action"] == "promote_live_runtime_entries"
+    assert "Live runtime shadow canary is healthy" in data["rollout_summary"]

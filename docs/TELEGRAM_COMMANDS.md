@@ -106,6 +106,15 @@ During a fresh `paper_shadow` rollout, `/status` may briefly report:
 
 That means the runtime is still warming up. It is not a rollback signal by itself.
 
+When a reviewed live profile is active, `/status` also reports the rollout environment and stage explicitly. Typical live values are:
+
+- `Deployment Profile: live_shadow`
+- `Rollout Environment: live`
+- `Rollout Stage: canary`
+- `Rollout Recommended Action: promote_live_runtime_entries` or `promote_live_runtime_primary`
+
+If live runtime health degrades, the recommended action becomes `rollback_to_live_legacy`.
+
 ### Trade notification
 ```
 📈 NEW TRADE — BUY

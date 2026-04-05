@@ -120,16 +120,18 @@ class FakeStatusBot:
         projection: RuntimeProjection,
         *,
         configured_deployment_profile: str | None = None,
+        trading_mode: str = "paper",
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
-        self.config = {"exchange": {"sandbox": True}}
+        self.config = {"exchange": {"sandbox": trading_mode != "live"}}
         self.strategy_manager = type(
             "StrategyManager", (), {"active_strategy": "ensemble"}
         )()
         self._active_trades = [{"symbol": "BTC/USDT"}]
+        self._trading_mode = trading_mode
 
     def get_status_info(self):
         return {
@@ -137,6 +139,7 @@ class FakeStatusBot:
             "daily_pnl": 0.0,
             "uptime": "0:00:10",
             "is_running": True,
+            "trading_mode": self._trading_mode,
             "runtime_mode": self._projection.runtime_mode,
             "runtime_is_running": self._projection.runtime_is_running,
             "runtime_owns_entries": self._projection.runtime_owns_entries,
@@ -191,6 +194,8 @@ async def test_status_route_includes_runtime_cutover_fields():
     assert payload["runtime_owns_exits"] is True
     assert payload["runtime_is_healthy"] is True
     assert payload["state_source"] == "runtime_projection"
+    assert payload["rollout_environment"] == "paper"
+    assert payload["rollout_stage"] == "primary"
     assert payload["rollout_health"] == "promotion_ready"
     assert payload["rollout_recommended_action"] == "stay_runtime_primary"
     assert "Runtime primary ownership is healthy" in payload["rollout_summary"]
@@ -220,6 +225,8 @@ async def test_status_route_keeps_legacy_trade_count_in_shadow_mode():
     assert payload["configured_deployment_profile"] == "paper_shadow"
     assert payload["effective_runtime_mode"] == "shadow"
     assert payload["runtime_is_healthy"] is True
+    assert payload["rollout_environment"] == "paper"
+    assert payload["rollout_stage"] == "shadow"
     assert payload["rollout_health"] == "shadow_ready"
     assert payload["rollout_recommended_action"] == "continue_shadow"
     assert "validate before promotion" in payload["rollout_summary"]
@@ -245,6 +252,7 @@ async def test_status_route_marks_unhealthy_runtime_for_rollback():
     payload = await get_status(bot=bot)
 
     assert payload["runtime_is_healthy"] is False
+    assert payload["rollout_environment"] == "paper"
     assert payload["rollout_health"] == "rollback_recommended"
     assert payload["rollout_recommended_action"] == "rollback_to_legacy"
     assert "rollback to legacy" in payload["rollout_summary"]
@@ -269,9 +277,54 @@ async def test_status_route_marks_runtime_startup_pending():
     assert payload["runtime_is_running"] is False
     assert payload["runtime_start_status"] == "starting"
     assert payload["runtime_start_pending"] is True
+    assert payload["rollout_environment"] == "paper"
     assert payload["rollout_health"] == "startup_pending"
     assert payload["rollout_recommended_action"] == "wait_for_runtime"
     assert "startup is still in progress" in payload["rollout_summary"]
+
+
+@pytest.mark.asyncio
+async def test_status_route_distinguishes_live_canary_rollout():
+    bot = FakeStatusBot(
+        make_projection(
+            source=ProjectionSource.SHADOW,
+            runtime_mode="shadow",
+        ),
+        configured_deployment_profile="live_shadow",
+        trading_mode="live",
+    )
+
+    payload = await get_status(bot=bot)
+
+    assert payload["trading_mode"] == "live"
+    assert payload["configured_deployment_profile"] == "live_shadow"
+    assert payload["rollout_environment"] == "live"
+    assert payload["rollout_stage"] == "canary"
+    assert payload["rollout_health"] == "shadow_ready"
+    assert payload["rollout_recommended_action"] == "promote_live_runtime_entries"
+    assert "Live runtime shadow canary is healthy" in payload["rollout_summary"]
+
+
+@pytest.mark.asyncio
+async def test_status_route_uses_live_rollback_guidance():
+    bot = FakeStatusBot(
+        make_projection(
+            source=ProjectionSource.RUNTIME_PROJECTION,
+            runtime_mode="runtime_primary",
+            active_positions=(make_projected_position(),),
+        ),
+        configured_deployment_profile="live_runtime_primary",
+        trading_mode="live",
+    )
+    object.__setattr__(bot._projection, "runtime_is_healthy", False)
+
+    payload = await get_status(bot=bot)
+
+    assert payload["rollout_environment"] == "live"
+    assert payload["rollout_stage"] == "primary"
+    assert payload["rollout_health"] == "rollback_recommended"
+    assert payload["rollout_recommended_action"] == "rollback_to_live_legacy"
+    assert "rollback to live_legacy" in payload["rollout_summary"]
 
 
 @pytest.mark.asyncio

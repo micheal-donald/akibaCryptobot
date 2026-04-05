@@ -36,6 +36,8 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   "runtime_owns_entries": true,
   "runtime_owns_exits": true,
   "runtime_is_healthy": true,
+  "rollout_environment": "paper",
+  "rollout_stage": "primary",
   "state_source": "runtime_projection",
   "rollout_health": "promotion_ready",
   "rollout_recommended_action": "stay_runtime_primary",
@@ -210,6 +212,8 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
     "runtime_owns_entries": true,
     "runtime_owns_exits": true,
     "runtime_is_healthy": true,
+    "rollout_environment": "paper",
+    "rollout_stage": "primary",
     "state_source": "runtime_projection",
     "rollout_health": "promotion_ready",
     "rollout_recommended_action": "stay_runtime_primary",
@@ -232,6 +236,13 @@ During a fresh runtime rollout, `/api/status` and `/ws/status` can briefly repor
 - `rollout_recommended_action="wait_for_runtime"`
 
 That state means the runtime is still warming up. It is not, by itself, a rollback signal.
+
+When a reviewed live profile is active, the same surfaces expose:
+
+- `rollout_environment="live"`
+- `rollout_stage="canary"` for `live_shadow` and `live_runtime_entries`
+- `rollout_stage="primary"` for `live_runtime_primary`
+- live-specific actions such as `promote_live_runtime_entries`, `promote_live_runtime_primary`, `stay_live_runtime_primary`, and `rollback_to_live_legacy`
 
 ---
 

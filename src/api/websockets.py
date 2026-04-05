@@ -40,7 +40,11 @@ def _build_status_payload(bot):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
     projection = _get_runtime_projection(bot)
-    rollout_summary = build_rollout_summary(projection)
+    rollout_summary = build_rollout_summary(
+        projection,
+        configured_deployment_profile=status_info.get("configured_deployment_profile"),
+        trading_mode=status_info.get("trading_mode", "paper"),
+    )
 
     active_trades = status_info.get("active_trades", 0)
     runtime_mode = status_info.get("runtime_mode", "legacy")

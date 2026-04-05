@@ -211,16 +211,81 @@ class TelegramNotifier:
         ]
 
     @classmethod
-    def _rollout_summary_lines(cls, projection: Any) -> list[str]:
+    def _rollout_summary_lines(
+        cls,
+        projection: Any,
+        *,
+        configured_deployment_profile: str | None = None,
+        trading_mode: str | None = None,
+    ) -> list[str]:
         if projection is None:
             return []
-        rollout = build_rollout_summary(projection)
+        rollout = build_rollout_summary(
+            projection,
+            configured_deployment_profile=configured_deployment_profile,
+            trading_mode=trading_mode,
+        )
 
-        return [
-            f"Rollout Health: {rollout['rollout_health']}",
-            f"Rollout Recommended Action: {rollout['rollout_recommended_action']}",
-            f"Rollout Summary: {rollout['rollout_summary']}",
-        ]
+        lines = []
+        if configured_deployment_profile:
+            lines.append(f"Deployment Profile: {configured_deployment_profile}")
+
+        lines.extend(
+            [
+                f"Rollout Environment: {rollout['rollout_environment']}",
+                f"Rollout Stage: {rollout['rollout_stage']}",
+                f"Rollout Health: {rollout['rollout_health']}",
+                f"Rollout Recommended Action: {rollout['rollout_recommended_action']}",
+                f"Rollout Summary: {rollout['rollout_summary']}",
+            ]
+        )
+        return lines
+
+    def _get_runtime_visibility_info(self) -> Dict[str, Any]:
+        if not hasattr(self, "bot_instance"):
+            return {}
+
+        visibility_getter = getattr(
+            self.bot_instance, "get_runtime_visibility_info", None
+        )
+        if not callable(visibility_getter):
+            return {}
+
+        try:
+            visibility = visibility_getter()
+        except Exception as exc:
+            logger.error("Failed to load runtime visibility for Telegram: %s", exc)
+            return {}
+
+        if isinstance(visibility, dict):
+            return visibility
+        return {}
+
+    def _resolve_trading_mode(self, status_info: Dict[str, Any] | None = None) -> str:
+        if isinstance(status_info, dict) and status_info.get("trading_mode"):
+            return str(status_info["trading_mode"])
+        if hasattr(self, "bot_instance"):
+            config = getattr(self.bot_instance, "config", None)
+            exchange = config.get("exchange", {}) if isinstance(config, dict) else {}
+            return "paper" if exchange.get("sandbox", True) else "live"
+        return "paper"
+
+    @classmethod
+    def _rollout_summary_for_visibility(
+        cls,
+        projection: Any,
+        *,
+        visibility: Dict[str, Any] | None = None,
+        trading_mode: str | None = None,
+    ) -> list[str]:
+        visibility = visibility or {}
+        return cls._rollout_summary_lines(
+            projection,
+            configured_deployment_profile=visibility.get(
+                "configured_deployment_profile"
+            ),
+            trading_mode=trading_mode,
+        )
 
     @staticmethod
     def _format_trade_lines(trades_info: Any) -> list[str]:
@@ -294,8 +359,15 @@ class TelegramNotifier:
                 ]
 
                 if projection is not None:
+                    visibility = self._get_runtime_visibility_info()
                     lines.extend(self._runtime_summary_lines(projection))
-                    lines.extend(self._rollout_summary_lines(projection))
+                    lines.extend(
+                        self._rollout_summary_for_visibility(
+                            projection,
+                            visibility=visibility,
+                            trading_mode=self._resolve_trading_mode(status_info),
+                        )
+                    )
                     lines.append(
                         f"Projected Open Orders: {getattr(projection, 'open_order_count', 0)}"
                     )
@@ -332,6 +404,8 @@ class TelegramNotifier:
         if hasattr(self, "bot_instance"):
             try:
                 projection = self._get_runtime_projection()
+                visibility = self._get_runtime_visibility_info()
+                trading_mode = self._resolve_trading_mode()
                 if self._uses_runtime_projection(projection):
                     trade_lines = self._format_projected_trade_lines(projection)
                     if not trade_lines:
@@ -339,7 +413,13 @@ class TelegramNotifier:
                     else:
                         lines = ["Active Trades:", *trade_lines]
                     lines.extend(self._runtime_summary_lines(projection))
-                    lines.extend(self._rollout_summary_lines(projection))
+                    lines.extend(
+                        self._rollout_summary_for_visibility(
+                            projection,
+                            visibility=visibility,
+                            trading_mode=trading_mode,
+                        )
+                    )
                     lines.append(
                         f"Projected Open Orders: {getattr(projection, 'open_order_count', 0)}"
                     )
@@ -365,7 +445,13 @@ class TelegramNotifier:
                             f"Shadow Open Orders: {getattr(projection, 'open_order_count', 0)}"
                         )
                         lines.extend(self._runtime_summary_lines(projection))
-                        lines.extend(self._rollout_summary_lines(projection))
+                        lines.extend(
+                            self._rollout_summary_for_visibility(
+                                projection,
+                                visibility=visibility,
+                                trading_mode=trading_mode,
+                            )
+                        )
 
                     message = "\n".join(lines)
             except Exception as e:
@@ -494,6 +580,7 @@ class TelegramNotifier:
                     )
                 )
                 projection = self._get_runtime_projection()
+                visibility = self._get_runtime_visibility_info()
 
                 pnl_state = (
                     "profit"
@@ -526,7 +613,13 @@ class TelegramNotifier:
                             f"Shadow Projected Positions: {getattr(projection, 'active_position_count', 0)}"
                         )
                     lines.extend(self._runtime_summary_lines(projection))
-                    lines.extend(self._rollout_summary_lines(projection))
+                    lines.extend(
+                        self._rollout_summary_for_visibility(
+                            projection,
+                            visibility=visibility,
+                            trading_mode=self._resolve_trading_mode(),
+                        )
+                    )
 
                 message = "\n".join(lines)
             except Exception as e:
@@ -548,6 +641,7 @@ class TelegramNotifier:
                     )
                 )
                 projection = self._get_runtime_projection()
+                visibility = self._get_runtime_visibility_info()
                 open_positions = metrics.get("open_trades_count", 0)
                 if self._uses_runtime_projection(projection):
                     open_positions = getattr(projection, "active_position_count", 0)
@@ -591,7 +685,13 @@ class TelegramNotifier:
                             f"Shadow Projected Positions: {getattr(projection, 'active_position_count', 0)}"
                         )
                     lines.extend(self._runtime_summary_lines(projection))
-                    lines.extend(self._rollout_summary_lines(projection))
+                    lines.extend(
+                        self._rollout_summary_for_visibility(
+                            projection,
+                            visibility=visibility,
+                            trading_mode=self._resolve_trading_mode(),
+                        )
+                    )
 
                 message = "\n".join(lines)
             except Exception as e:

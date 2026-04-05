@@ -34,12 +34,16 @@ async def get_status(bot=Depends(get_bot)):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
     projection = bot.get_runtime_projection()
-    rollout_summary = build_rollout_summary(projection)
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active
     status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason
     status_info["strategy"] = bot.strategy_manager.active_strategy
     status_info["trading_mode"] = (
         "paper" if bot.config["exchange"].get("sandbox", True) else "live"
+    )
+    rollout_summary = build_rollout_summary(
+        projection,
+        configured_deployment_profile=status_info.get("configured_deployment_profile"),
+        trading_mode=status_info["trading_mode"],
     )
     status_info["state_source"] = projection.source.value
     status_info["runtime_mode"] = projection.runtime_mode

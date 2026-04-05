@@ -92,20 +92,44 @@ def make_projection(
 
 
 class FakeBot:
-    def __init__(self, projection: RuntimeProjection):
+    def __init__(
+        self,
+        projection: RuntimeProjection,
+        *,
+        configured_deployment_profile: str | None = None,
+        trading_mode: str = "paper",
+    ):
         self._projection = projection
         self.trade_store = object()
         self.performance_tracker = FakePerformanceTracker()
+        self._configured_deployment_profile = configured_deployment_profile
+        self.config = {"exchange": {"sandbox": trading_mode != "live"}}
+        self._trading_mode = trading_mode
 
     def get_status_info(self):
         return {
             "active_trades": 3,
             "daily_pnl": 12.34,
             "uptime": "0:10:00",
+            "trading_mode": self._trading_mode,
         }
 
     def get_runtime_projection(self) -> RuntimeProjection:
         return self._projection
+
+    def get_runtime_visibility_info(self):
+        return {
+            "configured_deployment_profile": self._configured_deployment_profile,
+            "effective_runtime_mode": self._projection.runtime_mode,
+            "effective_runtime_enabled": self._projection.runtime_enabled,
+            "effective_runtime_owns_entries": self._projection.runtime_owns_entries,
+            "effective_runtime_owns_exits": self._projection.runtime_owns_exits,
+            "runtime_mode_source": (
+                "deployment_profile"
+                if self._configured_deployment_profile is not None
+                else "legacy_default"
+            ),
+        }
 
     def get_active_trades(self):
         return {
@@ -135,6 +159,8 @@ async def test_cmd_status_uses_runtime_projection_counts():
     assert "Active Trades: 1" in message
     assert "Runtime Mode: runtime_primary" in message
     assert "State Source: runtime_projection" in message
+    assert "Rollout Environment: paper" in message
+    assert "Rollout Stage: primary" in message
     assert "Runtime Healthy: yes" in message
     assert "Rollout Health: promotion_ready" in message
     assert "Rollout Recommended Action: stay_runtime_primary" in message
@@ -160,6 +186,7 @@ async def test_cmd_trades_uses_runtime_projected_positions():
     assert "BTC/USDT: BUY 0.25 @ $65000.000000 [open]" in message
     assert "ETH/USDT" not in message
     assert "State Source: runtime_projection" in message
+    assert "Rollout Environment: paper" in message
     assert "Rollout Health: promotion_ready" in message
     assert "Rollout Recommended Action: stay_runtime_primary" in message
 
@@ -178,6 +205,7 @@ async def test_cmd_trades_keeps_legacy_state_in_shadow_mode():
     assert "ETH/USDT: BUY 1.5 @ $3200.000000" in message
     assert "Shadow Projected Positions: 1" in message
     assert "State Source: shadow" in message
+    assert "Rollout Environment: paper" in message
     assert "Rollout Health: shadow_ready" in message
     assert "Rollout Recommended Action: continue_shadow" in message
 
@@ -198,6 +226,7 @@ async def test_cmd_performance_uses_runtime_open_position_count():
     message = update.message.calls[0]["text"]
     assert "Open Positions: 1" in message
     assert "Runtime Mode: runtime_primary" in message
+    assert "Rollout Environment: paper" in message
     assert "State Source: runtime_projection" in message
     assert "Rollout Health: promotion_ready" in message
 
@@ -218,6 +247,7 @@ async def test_cmd_metrics_uses_runtime_open_position_count():
     message = update.message.calls[0]["text"]
     assert "Open Positions: 1" in message
     assert "Runtime Mode: runtime_primary" in message
+    assert "Rollout Environment: paper" in message
     assert "State Source: runtime_projection" in message
     assert "Rollout Health: promotion_ready" in message
 
@@ -238,6 +268,7 @@ async def test_cmd_status_shows_rollback_guidance_for_unhealthy_runtime():
 
     message = update.message.calls[0]["text"]
     assert "Runtime Healthy: no" in message
+    assert "Rollout Environment: paper" in message
     assert "Rollout Health: rollback_recommended" in message
     assert "Rollout Recommended Action: rollback_to_legacy" in message
     assert "rollback to legacy is recommended" in message
@@ -264,6 +295,52 @@ async def test_cmd_status_shows_runtime_startup_pending():
     assert "Runtime Running: no" in message
     assert "Runtime Start Status: starting" in message
     assert "Runtime Start Pending: True" in message
+    assert "Rollout Environment: paper" in message
     assert "Rollout Health: startup_pending" in message
     assert "Rollout Recommended Action: wait_for_runtime" in message
     assert "startup is still in progress" in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_status_distinguishes_live_canary_rollout():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = FakeBot(
+        make_projection(source=ProjectionSource.SHADOW, runtime_mode="shadow"),
+        configured_deployment_profile="live_shadow",
+        trading_mode="live",
+    )
+    update = FakeUpdate()
+
+    await notifier.cmd_status(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "Deployment Profile: live_shadow" in message
+    assert "Rollout Environment: live" in message
+    assert "Rollout Stage: canary" in message
+    assert "Rollout Recommended Action: promote_live_runtime_entries" in message
+    assert "Live runtime shadow canary is healthy" in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_status_uses_live_rollback_guidance():
+    projection = make_projection(
+        source=ProjectionSource.RUNTIME_PROJECTION,
+        runtime_mode="runtime_primary",
+    )
+    object.__setattr__(projection, "runtime_is_healthy", False)
+
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = FakeBot(
+        projection,
+        configured_deployment_profile="live_runtime_primary",
+        trading_mode="live",
+    )
+    update = FakeUpdate()
+
+    await notifier.cmd_status(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "Rollout Environment: live" in message
+    assert "Rollout Stage: primary" in message
+    assert "Rollout Recommended Action: rollback_to_live_legacy" in message
+    assert "rollback to live_legacy" in message
