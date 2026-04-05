@@ -100,6 +100,7 @@ flowchart TB
 | **Trade Store** | `src/persistence/trade_store.py` | Async SQLite persistence for trades (Unix timestamps) |
 | **Performance Tracker** | `src/performance/metrics_tracker.py` | Sharpe, Sortino, drawdown, profit factor, equity curve |
 | **Runtime Telemetry** | `src/services/telemetry_service.py` | In-memory event counts, queue depth, ingress age, exchange age, queue lag snapshots |
+| **Runtime Event Capture / Replay** | `src/runtime/event_capture.py`, `src/runtime/event_replay.py` | Bounded JSONL capture for hot-path events and deterministic replay helpers for debugging/tests |
 | **Reconciliation Manager** | `src/monitoring/reconciliation.py` | Syncs DB state with exchange balances to find orphaned/lost trades |
 | **FastAPI App** | `src/api/app.py` | Application factory with lifespan-managed bot |
 | **API Routes** | `src/api/routes/` | REST endpoints: status, account, trading, performance, risk, strategy, model |
@@ -109,10 +110,50 @@ flowchart TB
 | **Backtesting** | `src/backtesting/engine.py` | Event-driven backtest engine |
 | **Walk-Forward** | `src/backtesting/walkforward.py` | Walk-forward analysis with overfitting detection |
 | **Backtest Runner** | `src/backtesting/backtest_runner.py` | CLI runner with synthetic data support |
+| **Runtime Shell** | `src/runtime/app.py`, `src/runtime/service_registry.py` | Event-driven runtime supervisor, service wiring, rollout state, and operator projections |
 | **Web UI** | `src/ui/` | Dashboard (HTML/CSS/JS) served by FastAPI |
 | **Start Script** | `start_bot.py` | CLI entry point with argparse (FastAPI or legacy mode) |
 
 ---
+
+## Runtime Telemetry and Event Capture
+
+The runtime surfaces latency and queue metrics through `runtime_telemetry` in `/api/status` and `/ws/status`. The goal is to make the hot path measurable before it is optimized.
+
+- `latency.event_age_ms` measures how long a runtime event sat between `ts_received` and the observation time inside the runtime. Rising values indicate the bot is falling behind its own ingestion path.
+- `latency.exchange_age_ms` measures the delay between the exchange timestamp and the time the runtime received the event. Rising values indicate feed delay, timestamp skew, or upstream staleness. Negative samples are ignored rather than polluting the summary.
+- `latency.queue_lag_ms.<queue>` measures how long an event waited before a hot-path queue drained it. Rising queue lag together with rising queue depth is the clearest sign of a backlog.
+
+The same telemetry snapshot also exposes:
+
+- `total_events`
+- `event_counts`
+- `metric_counts`
+- `queue_depths`
+- `last_seen_at`
+
+Important metric names emitted into `metric_counts`:
+
+- `event_age_sample.<event_type>`
+- `exchange_age_sample.<event_type>`
+- `queue_depth.<queue_name>`
+- `queue_lag_sample.<queue_name>`
+- `dropped_event`
+- `dropped_event.<consumer>`
+- `dropped_event.<consumer>.<event_type>`
+- `reconnect.<source>`
+- `stale_symbol` and `stale_symbol.<symbol>`
+- `shadow_drift` and `shadow_drift.<symbol>`
+- `missing_symbol` and `missing_symbol.<symbol>` / `missing_symbol.<side>`
+
+Interpretation is intentionally conservative:
+
+- Growing queue depth plus growing queue lag is a promotion blocker.
+- Repeated dropped events are a promotion blocker.
+- Persistent `exchange_age_ms` growth should be treated as a feed/timestamp problem until proven otherwise.
+- `startup_pending` is not a rollback signal by itself; it only means the runtime is still warming up.
+
+Runtime event capture uses `src/runtime/event_capture.py` to write a bounded JSONL record of hot-path events for offline debugging. Replay support is for test and investigation flows, not for live hot-path execution.
 
 ## Trading Cycle Walkthrough
 
@@ -161,6 +202,9 @@ akibaCryptobot/
 │   └── freqai_config.json     # ML model configuration
 ├── src/
 │   ├── bot.py                 # Trading engine orchestrator
+│   ├── runtime/
+│   │   ├── event_capture.py   # Bounded JSONL event capture
+│   │   └── event_replay.py    # Deterministic replay helpers for tests/debugging
 │   ├── trading/
 │   │   ├── position_manager.py   # Open position management
 │   │   └── opportunity_scanner.py # New trade scanning + execution

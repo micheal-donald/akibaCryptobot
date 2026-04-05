@@ -212,6 +212,70 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 
 ---
 
+## Runtime Telemetry
+
+`runtime_telemetry` appears inside `/api/status` and `/ws/status` when the runtime exposes operator metrics. It is the main operator-facing snapshot for Phase 12.
+
+### Top-Level Fields
+
+| Field | Meaning |
+|---|---|
+| `total_events` | Total runtime events observed since startup |
+| `event_counts` | Count by runtime event type, such as `market.kline` or `signal.suppressed` |
+| `metric_counts` | Low-level counters emitted by the runtime services |
+| `queue_depths` | Current queue depth by queue name |
+| `last_seen_at` | Timestamp of the most recently observed runtime event |
+| `latency` | Nested latency summaries for event age, exchange age, and queue lag |
+
+### Latency Metrics
+
+| Field | Meaning |
+|---|---|
+| `latency.event_age_ms` | Time from `ts_received` to runtime observation time. If this rises steadily, the runtime is backing up behind ingestion. |
+| `latency.exchange_age_ms` | Time from `ts_exchange` to `ts_received`. If this rises steadily, the feed is stale or timestamping is skewed. Negative samples are ignored. |
+| `latency.queue_lag_ms.<queue>` | Time an event waited before a hot-path queue drained it. Rising queue lag with rising queue depth is backlog, not noise. |
+
+Each latency summary includes:
+
+- `count`
+- `total_ms`
+- `average_ms`
+- `min_ms`
+- `max_ms`
+- `last_ms`
+
+### Metric Counters
+
+The runtime emits counters with stable names so operators can tell backlog from data-quality problems:
+
+- `event_age_sample.<event_type>`
+- `exchange_age_sample.<event_type>`
+- `queue_depth.<queue_name>`
+- `queue_lag_sample.<queue_name>`
+- `dropped_event`
+- `dropped_event.<consumer>`
+- `dropped_event.<consumer>.<event_type>`
+- `reconnect.<source>`
+- `stale_symbol`
+- `stale_symbol.<symbol>`
+- `shadow_drift`
+- `shadow_drift.<symbol>`
+- `missing_symbol`
+- `missing_symbol.<symbol>`
+- `missing_symbol.<side>`
+
+### Operator Interpretation
+
+- Treat persistent growth in `queue_depths` plus `queue_lag_ms` as a promotion blocker.
+- Treat sustained `dropped_event*` counts as a promotion blocker.
+- Treat rising `exchange_age_ms` as a feed problem until the exchange or timestamp path is proved healthy.
+- Treat `runtime_start_pending=true` as startup warm-up, not as a rollback signal.
+- In `paper_runtime_primary`, the healthy target is `rollout_health=promotion_ready` with `rollout_recommended_action=stay_runtime_primary`.
+- In `paper_runtime_entries`, the healthy target is `rollout_health=promotion_ready` with `rollout_recommended_action=promote_runtime_primary`.
+- In `paper_shadow`, the healthy target is `rollout_health=shadow_ready` with `rollout_recommended_action=continue_shadow`.
+
+---
+
 ## WebSocket Streams
 
 | Endpoint | Push Interval | Description |

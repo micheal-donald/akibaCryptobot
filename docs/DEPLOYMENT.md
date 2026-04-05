@@ -98,6 +98,35 @@ When either flag is supplied, deploy verification fails if `/api/status` does no
 
 Snapshot deploys intentionally preserve server-side `models/` artifacts. The pinned code deploy is sourced from `git archive`, while trained FreqAI joblib files are runtime artifacts that may be produced outside git. Preserving `models/` keeps code deploys from wiping the currently active model set; model refresh remains a separate training/deployment step.
 
+### Interpreting Runtime Telemetry
+
+`/api/status` and `/ws/status` expose `runtime_telemetry` when the runtime is active. Use it to judge whether a rollout is genuinely healthy, not just whether the process is alive.
+
+| Signal | Interpretation | Promotion impact |
+|---|---|---|
+| `latency.event_age_ms` rising steadily | The runtime is backing up behind its own ingest path | Block promotion until the trend stabilizes |
+| `latency.exchange_age_ms` rising steadily | The feed is stale, delayed, or timestamp skewed | Block promotion until the feed path is clean |
+| `latency.queue_lag_ms.<queue>` rising with `queue_depths.<queue>` | A hot-path queue is accumulating backlog | Block promotion; this is the clearest capacity warning |
+| `metric_counts.dropped_event*` increasing | Runtime work is being discarded or skipped | Block promotion until drops stop |
+| `metric_counts.reconnect*` increasing repeatedly | The runtime is repeatedly reconnecting a feed or transport | Investigate before promotion |
+| `metric_counts.stale_symbol*` increasing | One or more symbols are going stale | Treat as a market-data problem before promotion |
+| `runtime_start_pending=true` | The runtime is still warming up | Do not roll back yet unless it later turns into `rollback_recommended` |
+
+Healthy paper rollout targets are:
+
+- `paper_shadow`: `rollout_health=shadow_ready`, `rollout_recommended_action=continue_shadow`
+- `paper_runtime_entries`: `rollout_health=promotion_ready`, `rollout_recommended_action=promote_runtime_primary`
+- `paper_runtime_primary`: `rollout_health=promotion_ready`, `rollout_recommended_action=stay_runtime_primary`
+
+If any of the following are true, treat the deployment as blocked and hold or roll back:
+
+- `runtime_is_healthy=false`
+- `rollout_health=rollback_recommended`
+- `runtime_start_pending=true` after the startup window has elapsed
+- queue depth and queue lag both trend upward over successive samples
+- dropped-event counters continue to increase
+- exchange-age latency grows unexpectedly or goes negative before filtering
+
 #### Promotion and Rollback Runbook
 
 Use the same command pattern for every paper profile. Replace `<SHA>` with the reviewed commit you intend to deploy.
