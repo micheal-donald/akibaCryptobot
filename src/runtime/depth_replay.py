@@ -165,19 +165,18 @@ class RuntimeDepthReplayHarness:
         last_sequences: dict[str, int],
     ) -> DepthReplayStep:
         payload = record.payload
-        if not isinstance(payload, Mapping):
-            if record.symbol is not None and record.sequence is not None:
-                last_sequences[record.symbol] = record.sequence
-            return DepthReplayStep(record=record, snapshot=None, sequence_issue=None)
-
         sequence_issue = None
         if record.sequence is not None and record.symbol is not None:
             previous_sequence = last_sequences.get(record.symbol)
-            sequence_issue = RuntimeDepthReplayHarness._sequence_issue(
-                previous_sequence,
-                record.sequence,
-            )
+            if previous_sequence is not None:
+                sequence_issue = RuntimeDepthReplayHarness._sequence_issue(
+                    previous_sequence,
+                    record.sequence,
+                )
             last_sequences[record.symbol] = record.sequence
+
+        if not isinstance(payload, Mapping):
+            return DepthReplayStep(record=record, snapshot=None, sequence_issue=None)
 
         if record.payload_type == "OrderBookSnapshot":
             snapshot = RuntimeDepthReplayHarness._decode_snapshot(payload)
