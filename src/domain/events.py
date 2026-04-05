@@ -12,6 +12,7 @@ EventType = Literal[
     "market.kline_closed",
     "market.spread",
     "signal.order_intent",
+    "signal.suppressed",
     "execution.order_submitted",
     "execution.order_update",
     "execution.fill",

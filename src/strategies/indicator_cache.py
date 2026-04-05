@@ -25,21 +25,25 @@ class IndicatorWindowCache:
         self.max_window_size = max_window_size
         self._windows: dict[tuple[str, str], _WindowState] = {}
 
-    def append_candle(self, symbol: str, timeframe: str, candle: Candle) -> None:
-        """Append a completed candle and reset invalidated windows on gaps."""
+    def append_candle(self, symbol: str, timeframe: str, candle: Candle) -> str | None:
+        """Append a completed candle and return any invalidation reason."""
 
         state = self._get_state(symbol, timeframe)
+        invalidation_reason: str | None = None
         if state.last_close_time is not None:
             if candle.open_time > state.last_close_time:
                 self.invalidate(symbol, timeframe, reason="gap")
                 state = self._get_state(symbol, timeframe)
+                invalidation_reason = "gap"
             elif candle.open_time < state.last_close_time:
                 self.invalidate(symbol, timeframe, reason="stale")
                 state = self._get_state(symbol, timeframe)
+                invalidation_reason = "stale"
 
         state.candles.append(candle)
         state.last_close_time = candle.close_time
         state.invalidated_reason = None
+        return invalidation_reason
 
     def get_window(self, symbol: str, timeframe: str) -> tuple[Candle, ...]:
         """Return the current bounded candle window."""

@@ -9,6 +9,7 @@ from domain.events import BookTickerPayload, EventMeta, KlinePayload, RuntimeEve
 from domain.models import Candle
 from runtime.config import RuntimeConfig
 from services.market_data_service import MarketDataService
+from services.telemetry_service import TelemetryService
 
 
 class FakeMarketDataGateway:
@@ -56,6 +57,7 @@ def build_service(
 ) -> tuple[MarketDataService, FakeMarketDataGateway, asyncio.Queue]:
     gateway = FakeMarketDataGateway()
     queue: asyncio.Queue = asyncio.Queue()
+    telemetry = TelemetryService(name="telemetry")
     config = RuntimeConfig(
         symbols=("BTC/USDT",),
         kline_intervals=("1m", "15m"),
@@ -67,6 +69,7 @@ def build_service(
         runtime_config=config,
         event_bus=queue,
         bootstrap_gateway=bootstrap_gateway,
+        telemetry_service=telemetry,
     )
     return service, gateway, queue
 
@@ -239,6 +242,104 @@ def test_market_data_service_updates_kline_buffers_and_returns_snapshots() -> No
     assert state.last_price == 100.5
     assert service.get_candles("BTC/USDT", "1m")[0].close == 100.5
     assert queue.qsize() == 1
+
+
+def test_market_data_service_keeps_closed_history_closed_only() -> None:
+    service, gateway, _ = build_service()
+    open_time = datetime(2026, 3, 21, 12, 0, tzinfo=timezone.utc)
+    close_time = datetime(2026, 3, 21, 12, 1, tzinfo=timezone.utc)
+
+    async def run() -> None:
+        await service.start()
+        await gateway.callbacks["market.kline"][0](
+            RuntimeEvent(
+                meta=EventMeta(
+                    event_id="evt-open",
+                    event_type="market.kline",
+                    source="binance.ws.kline.1m",
+                    symbol="BTCUSDT",
+                    ts_exchange=close_time,
+                    ts_received=close_time,
+                ),
+                payload=KlinePayload(
+                    interval="1m",
+                    open_time=open_time,
+                    close_time=close_time,
+                    open=100.0,
+                    high=101.0,
+                    low=99.5,
+                    close=100.4,
+                    volume=20.0,
+                    is_closed=False,
+                ),
+            )
+        )
+        await gateway.callbacks["market.kline_closed"][0](
+            RuntimeEvent(
+                meta=EventMeta(
+                    event_id="evt-closed-1",
+                    event_type="market.kline_closed",
+                    source="binance.ws.kline.1m",
+                    symbol="BTCUSDT",
+                    ts_exchange=close_time,
+                    ts_received=close_time,
+                ),
+                payload=KlinePayload(
+                    interval="1m",
+                    open_time=open_time,
+                    close_time=close_time,
+                    open=100.0,
+                    high=101.0,
+                    low=99.5,
+                    close=100.5,
+                    volume=25.0,
+                    is_closed=True,
+                ),
+            )
+        )
+        await gateway.callbacks["market.kline_closed"][0](
+            RuntimeEvent(
+                meta=EventMeta(
+                    event_id="evt-closed-2",
+                    event_type="market.kline_closed",
+                    source="binance.ws.kline.1m",
+                    symbol="BTCUSDT",
+                    ts_exchange=close_time,
+                    ts_received=close_time,
+                ),
+                payload=KlinePayload(
+                    interval="1m",
+                    open_time=open_time,
+                    close_time=close_time,
+                    open=100.0,
+                    high=101.5,
+                    low=99.5,
+                    close=100.8,
+                    volume=30.0,
+                    is_closed=True,
+                ),
+            )
+        )
+
+    asyncio.run(run())
+
+    candles = service.get_candles("BTC/USDT", "1m")
+    assert len(candles) == 1
+    assert candles[0].close == 100.8
+
+
+def test_market_data_service_records_stale_transition_metric() -> None:
+    service, _, _ = build_service()
+    stale_now = datetime(2026, 3, 21, 12, 5, tzinfo=timezone.utc)
+    state = service._create_symbol_state("BTC/USDT")
+    state.last_update_at = stale_now - timedelta(seconds=120)
+    service._symbol_states["BTC/USDT"] = state
+
+    stale_symbols = service.refresh_stale_state(now=stale_now)
+
+    assert stale_symbols == ("BTC/USDT",)
+    assert service.telemetry_service is not None
+    assert service.telemetry_service.get_metric_count("stale_symbol.BTC/USDT") == 1
 
 
 def test_market_data_service_tracks_multi_interval_candles() -> None:

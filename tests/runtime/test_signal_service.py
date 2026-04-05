@@ -7,6 +7,7 @@ from domain.events import EventMeta, KlinePayload, OrderIntentPayload, RuntimeEv
 from domain.state import PositionState, PositionStatus
 from domain.models import SymbolState
 from services.signal_service import SignalService, SignalSuppressedPayload
+from services.telemetry_service import TelemetryService
 
 
 def make_kline_event(
@@ -200,6 +201,64 @@ def test_signal_service_suppresses_stale_symbol_state() -> None:
     assert event.payload.reason == "stale_symbol_state"
     assert service.get_suppression_counts()["stale_symbol_state"] == 1
     assert service.get_evaluation_counts()["evaluated"] == 1
+
+
+def test_signal_service_ignores_incomplete_kline_without_suppression_noise() -> None:
+    source: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    output: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    service = SignalService(
+        name="signal",
+        strategy=FakeRuntimeStrategy(),
+        event_bus=output,
+        event_source=source,
+        supported_timeframes=("1m",),
+    )
+
+    async def run() -> None:
+        await _run_service_once(
+            service,
+            source,
+            make_kline_event(event_id="evt-open", is_closed=False),
+        )
+
+    asyncio.run(run())
+
+    assert output.qsize() == 0
+    assert service.get_suppression_counts() == {}
+    assert service.get_evaluation_counts() == {}
+
+
+def test_signal_service_records_indicator_cache_invalidation_metrics() -> None:
+    source: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    output: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    telemetry = TelemetryService(name="telemetry")
+    service = SignalService(
+        name="signal",
+        strategy=FakeRuntimeStrategy(),
+        event_bus=output,
+        event_source=source,
+        telemetry_service=telemetry,
+        supported_timeframes=("1m",),
+    )
+
+    async def run() -> None:
+        await service.start()
+        await source.put(make_kline_event())
+        await source.put(
+            make_kline_event(
+                event_id="evt-gap",
+                open_time=datetime(2026, 3, 22, 9, 3, tzinfo=timezone.utc),
+                close_time=datetime(2026, 3, 22, 9, 4, tzinfo=timezone.utc),
+            )
+        )
+        await asyncio.wait_for(source.join(), timeout=1.0)
+        await service.stop()
+
+    asyncio.run(run())
+
+    assert telemetry.get_metric_count("indicator_cache_invalidated") == 1
+    assert telemetry.get_metric_count("indicator_cache_invalidated.gap") == 1
+    assert telemetry.get_metric_count("indicator_cache_invalidated.gap.1m") == 1
 
 
 def test_signal_service_isolates_strategy_exceptions() -> None:

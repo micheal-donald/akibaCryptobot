@@ -65,13 +65,28 @@ def test_indicator_window_cache_invalidates_and_rebuilds_after_gap() -> None:
 
     cache.append_candle("ETH/USDT", "1m", make_candle(0, close=3200.0))
     cache.append_candle("ETH/USDT", "1m", make_candle(1, close=3205.0))
-    cache.append_candle("ETH/USDT", "1m", make_candle(3, close=3210.0))
+    invalidation_reason = cache.append_candle(
+        "ETH/USDT", "1m", make_candle(3, close=3210.0)
+    )
 
     assert [c.close for c in cache.get_window("ETH/USDT", "1m")] == [3210.0]
     assert cache.get_last_close_time("ETH/USDT", "1m") == datetime(
         2026, 3, 22, 9, 4, tzinfo=timezone.utc
     )
+    assert invalidation_reason == "gap"
     assert cache.get_invalidation_reason("ETH/USDT", "1m") is None
+
+
+def test_indicator_window_cache_returns_stale_invalidation_reason() -> None:
+    cache = IndicatorWindowCache(max_window_size=5)
+
+    cache.append_candle("ETH/USDT", "1m", make_candle(1, close=3205.0))
+    invalidation_reason = cache.append_candle(
+        "ETH/USDT", "1m", make_candle(0, close=3200.0)
+    )
+
+    assert invalidation_reason == "stale"
+    assert [c.close for c in cache.get_window("ETH/USDT", "1m")] == [3200.0]
 
 
 def test_indicator_window_cache_explicit_gap_mark_clears_window() -> None:

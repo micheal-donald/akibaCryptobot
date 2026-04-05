@@ -21,6 +21,7 @@ from strategies.contracts import RuntimeStrategy
 from strategies.indicator_cache import IndicatorWindowCache
 
 from .base import BaseService
+from .telemetry_service import TelemetryService
 
 
 @dataclass(slots=True, frozen=True)
@@ -58,6 +59,7 @@ class SignalService(BaseService):
     market_state_source: object | None = None
     position_source: object | None = None
     risk_service: object | None = None
+    telemetry_service: TelemetryService | None = None
     indicator_cache: IndicatorWindowCache = field(
         default_factory=IndicatorWindowCache, init=False, repr=False
     )
@@ -126,12 +128,6 @@ class SignalService(BaseService):
         if not isinstance(payload, KlinePayload):
             return
         if event.meta.event_type != "market.kline_closed" or not payload.is_closed:
-            await self._suppress(
-                payload=payload,
-                symbol=event.meta.symbol or "",
-                reason="incomplete_candle",
-                evaluated_at=event.meta.ts_received,
-            )
             return
 
         symbol = event.meta.symbol
@@ -179,7 +175,17 @@ class SignalService(BaseService):
             close=payload.close,
             volume=payload.volume,
         )
-        self.indicator_cache.append_candle(symbol, payload.interval, candle)
+        invalidation_reason = self.indicator_cache.append_candle(
+            symbol, payload.interval, candle
+        )
+        if invalidation_reason is not None and self.telemetry_service is not None:
+            self.telemetry_service.record_metric("indicator_cache_invalidated")
+            self.telemetry_service.record_metric(
+                f"indicator_cache_invalidated.{invalidation_reason}"
+            )
+            self.telemetry_service.record_metric(
+                f"indicator_cache_invalidated.{invalidation_reason}.{payload.interval}"
+            )
         snapshot = self._build_snapshot(
             symbol=symbol,
             timeframe=payload.interval,

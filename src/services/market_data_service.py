@@ -15,6 +15,7 @@ from ports.exchange import MarketDataBootstrapGateway, MarketDataGateway
 from runtime.config import RuntimeConfig
 
 from .base import BaseService
+from .telemetry_service import TelemetryService
 
 
 @dataclass(slots=True)
@@ -26,6 +27,7 @@ class MarketDataService(BaseService):
     event_bus: asyncio.Queue[RuntimeEvent]
     bootstrap_gateway: MarketDataBootstrapGateway | None = None
     event_sinks: tuple[asyncio.Queue[RuntimeEvent], ...] = ()
+    telemetry_service: TelemetryService | None = None
     _symbol_states: dict[str, SymbolState] = field(default_factory=dict, init=False)
     _exchange_to_canonical: dict[str, str] = field(
         default_factory=dict, init=False, repr=False
@@ -94,6 +96,8 @@ class MarketDataService(BaseService):
             if self._is_state_stale(state, current_time):
                 if not state.is_stale:
                     state.mark_stale(current_time)
+                    if self.telemetry_service is not None:
+                        self.telemetry_service.record_stale_symbol(symbol)
                 stale_symbols.append(symbol)
             elif state.is_stale:
                 state.is_stale = False
@@ -247,19 +251,26 @@ class MarketDataService(BaseService):
             close=payload.close,
             volume=payload.volume,
         )
-
-        buffer = state.ensure_candle_buffer(
-            payload.interval, maxlen=self.runtime_config.candle_history_limit
-        )
-        buffer.append(candle)
-        if payload.interval == "1m":
-            state.candles_1m = buffer
-        state.last_kline_by_interval[payload.interval] = candle.close_time
-        state.last_kline_close = candle.close_time
         state.last_price = candle.close
         state.last_update_at = event.meta.ts_received
         state.is_stale = False
         state.stale_since = None
+        if event.meta.event_type != "market.kline_closed" or not payload.is_closed:
+            return
+
+        buffer = state.ensure_candle_buffer(
+            payload.interval, maxlen=self.runtime_config.candle_history_limit
+        )
+        if buffer and buffer[-1].close_time == candle.close_time:
+            buffer[-1] = candle
+        elif buffer and buffer[-1].close_time > candle.close_time:
+            return
+        else:
+            buffer.append(candle)
+        if payload.interval == "1m":
+            state.candles_1m = buffer
+        state.last_kline_by_interval[payload.interval] = candle.close_time
+        state.last_kline_close = candle.close_time
 
     def _is_state_stale(self, state: SymbolState, now: datetime) -> bool:
         if state.last_book_ticker_at is not None:

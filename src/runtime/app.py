@@ -309,6 +309,7 @@ class RuntimeApp:
             event_bus=app.event_bus,
             bootstrap_gateway=market_data_bootstrap_gateway,
             event_sinks=(app.signal_event_source,),
+            telemetry_service=app.telemetry_service,
         )
         app.signal_service = SignalService(
             name="signal",
@@ -318,6 +319,7 @@ class RuntimeApp:
             market_state_source=app.market_data_service,
             position_source=app.position_service,
             risk_service=app.risk_service,
+            telemetry_service=app.telemetry_service,
             supported_timeframes=config.kline_intervals,
         )
 
