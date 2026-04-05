@@ -36,10 +36,20 @@ def _inject_runtime_visibility(status_info, bot):
     return status_info
 
 
+def _inject_runtime_telemetry(status_info, bot):
+    telemetry_getter = getattr(bot, "get_runtime_telemetry_info", None)
+    if not callable(telemetry_getter):
+        status_info["runtime_telemetry"] = None
+        return status_info
+
+    status_info["runtime_telemetry"] = telemetry_getter()
+    return status_info
+
+
 def _build_status_payload(bot):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
-    status_info["runtime_telemetry"] = bot.get_runtime_telemetry_info()
+    _inject_runtime_telemetry(status_info, bot)
     projection = _get_runtime_projection(bot)
     rollout_summary = build_rollout_summary(
         projection,

@@ -63,7 +63,7 @@ class FakeStatusBot:
             "event_counts": {"market.kline": 1},
             "metric_counts": {"queue_depth.runtime.event_bus": 1},
             "queue_depths": {"runtime.event_bus": 1},
-            "last_seen_at": NOW,
+            "last_seen_at": NOW.isoformat(),
             "latency": {
                 "event_age_ms": {
                     "count": 1,

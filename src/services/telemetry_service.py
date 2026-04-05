@@ -195,7 +195,11 @@ class TelemetryService(BaseService):
             "event_counts": self.get_event_counts(),
             "metric_counts": self.get_metric_counts(),
             "queue_depths": self.get_queue_depths(),
-            "last_seen_at": self._last_seen_at,
+            "last_seen_at": (
+                self._last_seen_at.isoformat()
+                if self._last_seen_at is not None
+                else None
+            ),
             "latency": self.get_latency_snapshot(),
         }
 

@@ -22,6 +22,16 @@ def _inject_runtime_visibility(status_info, bot):
     return status_info
 
 
+def _inject_runtime_telemetry(status_info, bot):
+    telemetry_getter = getattr(bot, "get_runtime_telemetry_info", None)
+    if not callable(telemetry_getter):
+        status_info["runtime_telemetry"] = None
+        return status_info
+
+    status_info["runtime_telemetry"] = telemetry_getter()
+    return status_info
+
+
 @router.get("/health")
 async def health_check():
     """Liveness probe ? always returns OK if the server is up."""
@@ -33,7 +43,7 @@ async def get_status(bot=Depends(get_bot)):
     """Get comprehensive bot status including runtime cutover state."""
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
-    status_info["runtime_telemetry"] = bot.get_runtime_telemetry_info()
+    _inject_runtime_telemetry(status_info, bot)
     projection = bot.get_runtime_projection()
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active
     status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason

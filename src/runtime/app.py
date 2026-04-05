@@ -208,7 +208,9 @@ class RuntimeApp:
                 "high_watermark": persistence_service.get_high_watermark(),
                 "persisted_counts": persistence_service.get_persisted_counts(),
                 "failure_counts": persistence_service.get_failure_counts(),
-                "last_failure_at": last_failure_at,
+                "last_failure_at": (
+                    last_failure_at.isoformat() if last_failure_at is not None else None
+                ),
                 "last_failure_reason": last_failure_reason,
             }
         snapshot["event_bus_depth"] = self.event_bus.qsize()
