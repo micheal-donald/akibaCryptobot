@@ -32,6 +32,7 @@ from services.telemetry_service import TelemetryService
 from strategies.contracts import RuntimeStrategy
 
 from .config import RuntimeConfig
+from .event_capture import RuntimeEventCaptureBuffer
 from .service_registry import AsyncService, ServiceRegistry
 
 
@@ -44,6 +45,7 @@ class RuntimeEventRouter:
     persistence_service: PersistenceService
     telemetry_service: TelemetryService | None = None
     position_service: PositionService | None = None
+    event_capture: RuntimeEventCaptureBuffer | None = None
     is_running: bool = field(default=False, init=False)
     logger: logging.Logger = field(init=False, repr=False)
     _consumer_task: asyncio.Task[None] | None = field(
@@ -82,6 +84,8 @@ class RuntimeEventRouter:
             event = await self.event_bus.get()
             drained_at = datetime.now(timezone.utc)
             try:
+                if self.event_capture is not None:
+                    self.event_capture.capture(event, captured_at=drained_at)
                 if self.telemetry_service is not None:
                     self.telemetry_service.record_queue_lag(
                         "runtime.event_bus",
@@ -166,6 +170,7 @@ class RuntimeApp:
     position_service: PositionService | None = field(
         default=None, init=False, repr=False
     )
+    event_capture: RuntimeEventCaptureBuffer | None = field(default=None, repr=False)
     event_router: RuntimeEventRouter | None = field(
         default=None, init=False, repr=False
     )
@@ -181,11 +186,13 @@ class RuntimeApp:
         cls,
         config: RuntimeConfig,
         services: Iterable[tuple[str, AsyncService]] | None = None,
+        *,
+        event_capture: RuntimeEventCaptureBuffer | None = None,
     ) -> "RuntimeApp":
         """Convenience constructor for tests and future boot code."""
 
         registry = ServiceRegistry(services)
-        return cls(config=config, services=registry)
+        return cls(config=config, services=registry, event_capture=event_capture)
 
     def register_service(self, name: str, service: AsyncService) -> None:
         self.services.register(name, service)
@@ -227,10 +234,11 @@ class RuntimeApp:
         user_stream_gateway: UserStreamGateway | None = None,
         max_open_positions: int = 0,
         kill_switch_enabled: bool = False,
+        event_capture: RuntimeEventCaptureBuffer | None = None,
     ) -> "RuntimeApp":
         """Build the Phase 4 runtime shell with risk, execution, and persistence."""
 
-        app = cls(config=config)
+        app = cls(config=config, event_capture=event_capture)
         app.runtime_store = runtime_store
 
         app.position_service = PositionService(
@@ -263,6 +271,7 @@ class RuntimeApp:
             persistence_service=app.persistence_service,
             telemetry_service=app.telemetry_service,
             position_service=app.position_service,
+            event_capture=app.event_capture,
         )
 
         for name, service in (
@@ -290,6 +299,7 @@ class RuntimeApp:
         user_stream_gateway: UserStreamGateway | None = None,
         max_open_positions: int = 0,
         kill_switch_enabled: bool = False,
+        event_capture: RuntimeEventCaptureBuffer | None = None,
     ) -> "RuntimeApp":
         """Build the Phase 5 runtime shell with market-data and signal wiring."""
 
@@ -300,6 +310,7 @@ class RuntimeApp:
             user_stream_gateway=user_stream_gateway,
             max_open_positions=max_open_positions,
             kill_switch_enabled=kill_switch_enabled,
+            event_capture=event_capture,
         )
         app.signal_event_source = asyncio.Queue()
         app.market_data_service = MarketDataService(
