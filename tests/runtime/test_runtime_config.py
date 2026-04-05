@@ -146,6 +146,20 @@ def test_runtime_config_validate_startup_rejects_live_runtime_modes_by_default()
         config.validate_startup(exchange_sandbox=False)
 
 
+def test_runtime_config_validate_startup_names_live_canary_profiles() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "exchange": {"sandbox": False},
+            "runtime": {
+                "deployment_profile": "live_shadow",
+            },
+        }
+    )
+
+    with pytest.raises(ValueError, match="live runtime canary profile"):
+        config.validate_startup(exchange_sandbox=False)
+
+
 def test_runtime_config_validate_startup_allows_live_legacy_without_override() -> None:
     config = RuntimeConfig.from_mapping(
         {

@@ -284,6 +284,8 @@ Rollback should be the first response if runtime health degrades, rollout summar
 
 > [!IMPORTANT]
 > Live exchange deployments keep the legacy loop as the safe default. If `exchange.sandbox` is `false`, runtime-owned modes (`shadow`, `runtime_entries`, `runtime_primary`) will fail fast unless `runtime.allow_live_runtime=true` is set explicitly. `live_legacy` remains allowed without the override.
+>
+> When a reviewed live profile is selected, startup logs now emit `Live runtime rollout profile=<profile> stage=<legacy|canary|primary> allow_live_runtime=<bool>` before the bot begins trading. If a live canary or primary runtime profile is refused, the startup error names the reviewed live profile directly so the rollback path is obvious from the logs.
 
 ### Vultr Bare-Metal Setup
 The bot runs as a systemd service (`akibabot.service`) on a Vultr Ubuntu instance.

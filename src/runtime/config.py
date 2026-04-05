@@ -291,13 +291,21 @@ class RuntimeConfig:
         if self.allow_live_runtime:
             return
 
-        deployment_profile = (
-            f", deployment_profile={self.deployment_profile.value!r}"
-            if self.deployment_profile is not None
-            else ""
-        )
+        startup_target = "runtime-owned mode"
+        deployment_profile = ""
+        if self.deployment_profile is not None:
+            deployment_profile = (
+                f", deployment_profile={self.deployment_profile.value!r}"
+            )
+            if self.deployment_profile.is_live:
+                startup_target = (
+                    "live runtime canary profile"
+                    if self.deployment_profile.is_canary
+                    else "live runtime profile"
+                )
+
         raise ValueError(
-            "Refusing to start runtime-owned mode on a live exchange config: "
+            f"Refusing to start {startup_target} on a live exchange config: "
             f"runtime_mode={self.runtime_mode.value!r}{deployment_profile}. "
             "Set exchange.sandbox=true for paper/testnet or set "
             "runtime.allow_live_runtime=true to opt in explicitly."

@@ -301,6 +301,29 @@ class AkibaCryptoBot:
             visibility["effective_runtime_owns_exits"],
             visibility["runtime_mode_source"],
         )
+        if (
+            self.runtime_config is None
+            or self.runtime_config.deployment_profile is None
+        ):
+            return
+        if not self.runtime_config.deployment_profile.is_live:
+            return
+
+        live_stage = (
+            "legacy"
+            if not self.runtime_enabled
+            else (
+                "canary"
+                if self.runtime_config.deployment_profile.is_canary
+                else "primary"
+            )
+        )
+        self.logger.info(
+            "Live runtime rollout profile=%s stage=%s allow_live_runtime=%s",
+            self.runtime_config.deployment_profile.value,
+            live_stage,
+            self.runtime_config.allow_live_runtime,
+        )
 
     def _validate_runtime_startup(self) -> None:
         if self.runtime_config is None:

@@ -44,6 +44,22 @@ class DeploymentProfile(str, Enum):
     def shadow_mode(self) -> bool:
         return self in {DeploymentProfile.PAPER_SHADOW, DeploymentProfile.LIVE_SHADOW}
 
+    @property
+    def is_live(self) -> bool:
+        return self in {
+            DeploymentProfile.LIVE_LEGACY,
+            DeploymentProfile.LIVE_SHADOW,
+            DeploymentProfile.LIVE_RUNTIME_ENTRIES,
+            DeploymentProfile.LIVE_RUNTIME_PRIMARY,
+        }
+
+    @property
+    def is_canary(self) -> bool:
+        return self in {
+            DeploymentProfile.LIVE_SHADOW,
+            DeploymentProfile.LIVE_RUNTIME_ENTRIES,
+        }
+
 
 class RuntimeMode(str, Enum):
     """Defines which runtime path owns trading decisions."""

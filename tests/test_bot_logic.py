@@ -397,6 +397,15 @@ async def test_start_rejects_live_runtime_modes_without_override(bot):
         await bot.start()
 
 
+@pytest.mark.asyncio
+async def test_start_rejects_live_shadow_without_override(bot):
+    bot.config["exchange"]["sandbox"] = False
+    bot.config["runtime"] = {"deployment_profile": "live_shadow"}
+
+    with pytest.raises(ValueError, match="live_shadow"):
+        await bot.start()
+
+
 def test_validate_runtime_startup_allows_live_legacy_without_override(bot):
     bot.config["exchange"]["sandbox"] = False
     bot.runtime_config = RuntimeConfig(
@@ -515,6 +524,24 @@ def test_get_runtime_visibility_info_reports_profile_and_source(bot):
     assert visibility["effective_runtime_owns_entries"] is False
     assert visibility["effective_runtime_owns_exits"] is False
     assert visibility["runtime_mode_source"] == "deployment_profile"
+
+
+def test_log_runtime_visibility_reports_live_canary_stage(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        deployment_profile="live_shadow",
+        allow_live_runtime=True,
+    )
+
+    bot._log_runtime_visibility()
+
+    bot.logger.info.assert_any_call(
+        "Live runtime rollout profile=%s stage=%s allow_live_runtime=%s",
+        "live_shadow",
+        "canary",
+        True,
+    )
 
 
 @pytest.mark.asyncio

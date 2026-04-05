@@ -45,6 +45,22 @@ def log_runtime_visibility(logger, bot):
         visibility["effective_runtime_owns_exits"],
         visibility["runtime_mode_source"],
     )
+    runtime_config = getattr(bot, "runtime_config", None)
+    deployment_profile = getattr(runtime_config, "deployment_profile", None)
+    if deployment_profile is None or not deployment_profile.is_live:
+        return
+
+    live_stage = (
+        "legacy"
+        if not visibility["effective_runtime_enabled"]
+        else "canary" if deployment_profile.is_canary else "primary"
+    )
+    logger.info(
+        "Live runtime rollout profile=%s stage=%s allow_live_runtime=%s",
+        deployment_profile.value,
+        live_stage,
+        runtime_config.allow_live_runtime,
+    )
 
 
 def parse_arguments():
