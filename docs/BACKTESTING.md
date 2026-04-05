@@ -192,6 +192,19 @@ Each run writes:
 
 The merged config applies the best parameter set to the current runtime config so you can promote it into your checked-in config after review.
 
+## Microstructure Replay Features
+
+Phase 13 adds replay-driven microstructure helpers in `src/indicators/microstructure_features.py`. These helpers are intended for offline research and future low-latency strategy work, not live execution.
+
+The current primitives are:
+
+- `spread_from_snapshot()` for best-ask minus best-bid spread
+- `depth_imbalance()` for top-of-book or depth-window imbalance
+- `trade_pressure()` for short-horizon buy/sell pressure from replayed trade records
+- `feature_vector_from_replay()` for building research-ready feature rows from replayed depth sequences
+
+These features are most useful when fed by the bounded capture/replay format introduced in Phase 12 and extended by the Phase 13 depth replay harness.
+
 ## Interpreting Results
 
 ### Sharpe Ratio
