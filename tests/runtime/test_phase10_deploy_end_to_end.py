@@ -199,6 +199,22 @@ def test_deploy_snapshot_verifies_successful_profile_and_mode(
     assert result.stderr == ""
 
 
+def test_deploy_snapshot_verifies_live_canary_profile_and_mode(
+    tmp_path: Path,
+) -> None:
+    result = _run_deploy(
+        tmp_path,
+        expected_profile="live_shadow",
+        expected_effective_mode="shadow",
+        configured_profile="live_shadow",
+        effective_mode="shadow",
+    )
+
+    assert result.returncode == 0
+    assert '"configured_deployment_profile":"live_shadow"' in result.stdout
+    assert '"effective_runtime_mode":"shadow"' in result.stdout
+
+
 @pytest.mark.parametrize(
     (
         "expected_profile",

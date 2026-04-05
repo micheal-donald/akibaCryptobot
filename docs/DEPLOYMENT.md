@@ -137,6 +137,29 @@ git add config/config.json && git commit -m "deploy: paper_legacy rollback"
 DEPLOY_SHA=$(git rev-parse HEAD) bash scripts/deploy_snapshot.sh --expected-profile paper_legacy --expected-effective-mode legacy
 ```
 
+#### Live Canary Promotion Runbook
+
+Use the same pinned-SHA deploy flow for live runtime activation, but keep the live override explicit in the reviewed config diff. The profile helper sets `deployment_profile`, `runtime_mode`, and `shadow_mode`; it does not silently enable live runtime ownership. For `live_shadow`, `live_runtime_entries`, and `live_runtime_primary`, the same reviewed commit must also contain `runtime.allow_live_runtime=true`.
+
+Recommended live progression:
+
+1. `live_legacy`
+2. `live_shadow`
+3. `live_runtime_entries`
+4. `live_runtime_primary`
+5. `live_legacy` rollback
+
+Live canary commands:
+
+| Step | Local config review | Deploy command | Expected `/api/status` highlights |
+|---|---|---|---|
+| `live_shadow` | `python scripts/set_runtime_profile.py live_shadow`, then review `runtime.allow_live_runtime=true` in the same diff | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile live_shadow --expected-effective-mode shadow` | `trading_mode=live`, `configured_deployment_profile=live_shadow`, `rollout_environment=live`, `rollout_stage=canary`, initial `rollout_recommended_action=wait_for_live_runtime`, then `rollout_recommended_action=promote_live_runtime_entries` |
+| `live_runtime_entries` | `python scripts/set_runtime_profile.py live_runtime_entries`, keep `runtime.allow_live_runtime=true` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile live_runtime_entries --expected-effective-mode runtime_entries` | `trading_mode=live`, `configured_deployment_profile=live_runtime_entries`, `rollout_environment=live`, `rollout_stage=canary`, `rollout_recommended_action=promote_live_runtime_primary` |
+| `live_runtime_primary` | `python scripts/set_runtime_profile.py live_runtime_primary`, keep `runtime.allow_live_runtime=true` | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile live_runtime_primary --expected-effective-mode runtime_primary` | `trading_mode=live`, `configured_deployment_profile=live_runtime_primary`, `rollout_environment=live`, `rollout_stage=primary`, `rollout_recommended_action=stay_live_runtime_primary` |
+| `live_legacy` rollback | `python scripts/set_runtime_profile.py live_legacy`, remove or set `runtime.allow_live_runtime=false` in the reviewed diff | `DEPLOY_SHA=<SHA> bash scripts/deploy_snapshot.sh --expected-profile live_legacy --expected-effective-mode legacy` | `trading_mode=live`, `configured_deployment_profile=live_legacy`, `rollout_environment=live`, `rollout_stage=legacy`, `rollout_recommended_action=stay_live_legacy` |
+
+If any live canary or live primary rollout reports `rollout_health=rollback_recommended`, the expected immediate action is `rollback_to_live_legacy`.
+
 ---
 
 ## Docker Deployment
