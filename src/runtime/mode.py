@@ -13,6 +13,9 @@ class DeploymentProfile(str, Enum):
     PAPER_RUNTIME_ENTRIES = "paper_runtime_entries"
     PAPER_RUNTIME_PRIMARY = "paper_runtime_primary"
     LIVE_LEGACY = "live_legacy"
+    LIVE_SHADOW = "live_shadow"
+    LIVE_RUNTIME_ENTRIES = "live_runtime_entries"
+    LIVE_RUNTIME_PRIMARY = "live_runtime_primary"
 
     @classmethod
     def parse(cls, value: "DeploymentProfile | str") -> "DeploymentProfile":
@@ -32,11 +35,14 @@ class DeploymentProfile(str, Enum):
             DeploymentProfile.PAPER_RUNTIME_ENTRIES: RuntimeMode.RUNTIME_ENTRIES,
             DeploymentProfile.PAPER_RUNTIME_PRIMARY: RuntimeMode.RUNTIME_PRIMARY,
             DeploymentProfile.LIVE_LEGACY: RuntimeMode.LEGACY,
+            DeploymentProfile.LIVE_SHADOW: RuntimeMode.SHADOW,
+            DeploymentProfile.LIVE_RUNTIME_ENTRIES: RuntimeMode.RUNTIME_ENTRIES,
+            DeploymentProfile.LIVE_RUNTIME_PRIMARY: RuntimeMode.RUNTIME_PRIMARY,
         }[self]
 
     @property
     def shadow_mode(self) -> bool:
-        return self is DeploymentProfile.PAPER_SHADOW
+        return self in {DeploymentProfile.PAPER_SHADOW, DeploymentProfile.LIVE_SHADOW}
 
 
 class RuntimeMode(str, Enum):

@@ -70,7 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
         "profile",
         help=(
             "Deployment profile to apply: paper_legacy, paper_shadow, "
-            "paper_runtime_entries, paper_runtime_primary, or live_legacy"
+            "paper_runtime_entries, paper_runtime_primary, live_legacy, "
+            "live_shadow, live_runtime_entries, or live_runtime_primary"
         ),
     )
     parser.add_argument(

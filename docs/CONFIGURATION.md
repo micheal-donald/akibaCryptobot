@@ -35,6 +35,10 @@ python scripts/set_runtime_profile.py paper_shadow
 python scripts/set_runtime_profile.py paper_runtime_entries
 python scripts/set_runtime_profile.py paper_runtime_primary
 python scripts/set_runtime_profile.py paper_legacy  # rollback
+python scripts/set_runtime_profile.py live_shadow
+python scripts/set_runtime_profile.py live_runtime_entries
+python scripts/set_runtime_profile.py live_runtime_primary
+python scripts/set_runtime_profile.py live_legacy  # live rollback
 ```
 
 After running the helper, review the local diff before you deploy. The helper updates `runtime.deployment_profile`, `runtime.runtime_mode`, and `runtime.shadow_mode` together so the config stays reviewable and unambiguous.
@@ -73,7 +77,7 @@ It is additive: if the section is omitted, the bot stays on the legacy loop.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `deployment_profile` | string | `"paper_legacy"` in the sample config | Reviewed deployment profile: `paper_legacy`, `paper_shadow`, `paper_runtime_entries`, `paper_runtime_primary`, `live_legacy` |
+| `deployment_profile` | string | reviewed profile in `config/config.json` | Reviewed deployment profile: `paper_legacy`, `paper_shadow`, `paper_runtime_entries`, `paper_runtime_primary`, `live_legacy`, `live_shadow`, `live_runtime_entries`, `live_runtime_primary` |
 | `runtime_mode` | string | compatibility-only | Explicit rollout mode. When `deployment_profile` is present, this must match the profile-derived effective mode |
 | `shadow_mode` | bool | compatibility-only | Legacy fallback when `runtime_mode` is omitted. When `deployment_profile` is present, this must match the profile-derived shadow semantics if provided |
 | `allow_live_runtime` | bool | `false` | Explicit override for live exchange configs. Required for `shadow`, `runtime_entries`, and `runtime_primary` when `exchange.sandbox` is `false`. Does not activate the runtime by itself |
@@ -97,6 +101,9 @@ Rollout guidance:
 | `paper_runtime_entries` | Paper/testnet deployment profile where the runtime owns entries and legacy exit sweeps may still be used for compatibility |
 | `paper_runtime_primary` | Paper/testnet deployment profile where the runtime owns both entries and exits |
 | `live_legacy` | Live deployment profile that maps to the legacy loop |
+| `live_shadow` | Live canary profile where the runtime observes but the legacy loop remains authoritative |
+| `live_runtime_entries` | Live canary profile where the runtime owns entries and the legacy loop retains exit authority |
+| `live_runtime_primary` | Live primary profile where the runtime owns both entries and exits |
 | `legacy` | Keep the classic 60-second bot loop as the source of truth |
 | `shadow` | Run the runtime in read-only/shadow mode for comparison |
 | `runtime_entries` | Runtime owns entries; legacy exit sweeps may still be used for compatibility |

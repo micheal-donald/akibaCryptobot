@@ -22,6 +22,17 @@ from runtime.mode import DeploymentProfile, RuntimeMode
             False,
         ),
         (DeploymentProfile.LIVE_LEGACY, RuntimeMode.LEGACY, False),
+        (DeploymentProfile.LIVE_SHADOW, RuntimeMode.SHADOW, True),
+        (
+            DeploymentProfile.LIVE_RUNTIME_ENTRIES,
+            RuntimeMode.RUNTIME_ENTRIES,
+            False,
+        ),
+        (
+            DeploymentProfile.LIVE_RUNTIME_PRIMARY,
+            RuntimeMode.RUNTIME_PRIMARY,
+            False,
+        ),
     ],
 )
 def test_phase9_profiles_resolve_to_effective_runtime_modes(
@@ -78,7 +89,7 @@ def test_phase9_live_runtime_profile_requires_explicit_override() -> None:
         {
             "exchange": {"sandbox": False},
             "runtime": {
-                "deployment_profile": "paper_runtime_primary",
+                "deployment_profile": "live_runtime_primary",
             },
         }
     )

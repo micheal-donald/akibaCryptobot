@@ -81,14 +81,17 @@ def test_runtime_config_from_mapping_supports_explicit_runtime_mode() -> None:
 def test_runtime_config_from_mapping_supports_live_runtime_override() -> None:
     config = RuntimeConfig.from_mapping(
         {
+            "exchange": {"sandbox": False},
             "runtime": {
-                "runtime_mode": "runtime_primary",
+                "deployment_profile": "live_runtime_primary",
                 "allow_live_runtime": "true",
-            }
+            },
         }
     )
 
     assert config.allow_live_runtime is True
+    assert config.deployment_profile_name == "live_runtime_primary"
+    assert config.runtime_mode is RuntimeMode.RUNTIME_PRIMARY
     config.validate_startup(exchange_sandbox=False)
 
 

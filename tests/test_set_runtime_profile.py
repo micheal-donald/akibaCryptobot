@@ -46,6 +46,20 @@ def test_apply_deployment_profile_creates_runtime_section() -> None:
     }
 
 
+def test_apply_deployment_profile_supports_live_profiles() -> None:
+    updated_config, resolved_profile = apply_deployment_profile(
+        {},
+        "live_runtime_entries",
+    )
+
+    assert resolved_profile.value == "live_runtime_entries"
+    assert updated_config["runtime"] == {
+        "deployment_profile": "live_runtime_entries",
+        "runtime_mode": "runtime_entries",
+        "shadow_mode": False,
+    }
+
+
 def test_main_updates_config_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
