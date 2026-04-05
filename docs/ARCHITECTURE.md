@@ -102,6 +102,7 @@ flowchart TB
 | **Runtime Telemetry** | `src/services/telemetry_service.py` | In-memory event counts, queue depth, ingress age, exchange age, queue lag snapshots |
 | **Order Book Service** | `src/services/order_book_service.py` | Normalized local depth state with queryable best bid/ask and depth windows |
 | **Microstructure Features** | `src/indicators/microstructure_features.py` | Spread, depth imbalance, and replay-driven trade-pressure features for research and future low-latency strategies |
+| **Native Hot-Path Ports** | `src/ports/native_market_data.py`, `src/ports/native_execution.py`, `src/ports/native_hot_path.py` | Abstract boundary contracts for a future native market-data/execution data plane |
 | **Runtime Event Capture / Replay** | `src/runtime/event_capture.py`, `src/runtime/event_replay.py` | Bounded JSONL capture for hot-path events and deterministic replay helpers for debugging/tests |
 | **Reconciliation Manager** | `src/monitoring/reconciliation.py` | Syncs DB state with exchange balances to find orphaned/lost trades |
 | **FastAPI App** | `src/api/app.py` | Application factory with lifespan-managed bot |

@@ -21,6 +21,7 @@ from ports.exchange import (
     MarketDataGateway,
     UserStreamGateway,
 )
+from ports.native_hot_path import NativeHotPathPorts
 from ports.persistence import RuntimeStore
 from services.execution_service import ExecutionService
 from services.market_data_service import MarketDataService
@@ -171,6 +172,7 @@ class RuntimeApp:
         default=None, init=False, repr=False
     )
     event_capture: RuntimeEventCaptureBuffer | None = field(default=None, repr=False)
+    native_hot_path_ports: NativeHotPathPorts | None = field(default=None, repr=False)
     event_router: RuntimeEventRouter | None = field(
         default=None, init=False, repr=False
     )
@@ -188,11 +190,17 @@ class RuntimeApp:
         services: Iterable[tuple[str, AsyncService]] | None = None,
         *,
         event_capture: RuntimeEventCaptureBuffer | None = None,
+        native_hot_path_ports: NativeHotPathPorts | None = None,
     ) -> "RuntimeApp":
         """Convenience constructor for tests and future boot code."""
 
         registry = ServiceRegistry(services)
-        return cls(config=config, services=registry, event_capture=event_capture)
+        return cls(
+            config=config,
+            services=registry,
+            event_capture=event_capture,
+            native_hot_path_ports=native_hot_path_ports,
+        )
 
     def register_service(self, name: str, service: AsyncService) -> None:
         self.services.register(name, service)
@@ -235,10 +243,15 @@ class RuntimeApp:
         max_open_positions: int = 0,
         kill_switch_enabled: bool = False,
         event_capture: RuntimeEventCaptureBuffer | None = None,
+        native_hot_path_ports: NativeHotPathPorts | None = None,
     ) -> "RuntimeApp":
         """Build the Phase 4 runtime shell with risk, execution, and persistence."""
 
-        app = cls(config=config, event_capture=event_capture)
+        app = cls(
+            config=config,
+            event_capture=event_capture,
+            native_hot_path_ports=native_hot_path_ports,
+        )
         app.runtime_store = runtime_store
 
         app.position_service = PositionService(
@@ -300,6 +313,7 @@ class RuntimeApp:
         max_open_positions: int = 0,
         kill_switch_enabled: bool = False,
         event_capture: RuntimeEventCaptureBuffer | None = None,
+        native_hot_path_ports: NativeHotPathPorts | None = None,
     ) -> "RuntimeApp":
         """Build the Phase 5 runtime shell with market-data and signal wiring."""
 
@@ -311,6 +325,7 @@ class RuntimeApp:
             max_open_positions=max_open_positions,
             kill_switch_enabled=kill_switch_enabled,
             event_capture=event_capture,
+            native_hot_path_ports=native_hot_path_ports,
         )
         app.signal_event_source = asyncio.Queue()
         app.market_data_service = MarketDataService(
