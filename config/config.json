@@ -24,9 +24,9 @@
     "stake_currency": "USDT"
   },
   "runtime": {
-    "deployment_profile": "paper_shadow",
-    "runtime_mode": "shadow",
-    "shadow_mode": true
+    "deployment_profile": "paper_runtime_entries",
+    "runtime_mode": "runtime_entries",
+    "shadow_mode": false
   },
   "risk_management": {
     "max_position_size": 0.05,
