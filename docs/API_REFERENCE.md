@@ -35,6 +35,47 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   "runtime_start_pending": false,
   "runtime_owns_entries": true,
   "runtime_owns_exits": true,
+  "runtime_telemetry": {
+    "total_events": 128,
+    "event_counts": {
+      "market.kline": 64
+    },
+    "metric_counts": {
+      "queue_depth.runtime.event_bus": 5
+    },
+    "queue_depths": {
+      "runtime.event_bus": 5
+    },
+    "last_seen_at": "2024-01-15T10:29:59+00:00",
+    "latency": {
+      "event_age_ms": {
+        "count": 64,
+        "total_ms": 1280.0,
+        "average_ms": 20.0,
+        "min_ms": 8.0,
+        "max_ms": 55.0,
+        "last_ms": 18.0
+      },
+      "exchange_age_ms": {
+        "count": 64,
+        "total_ms": 320.0,
+        "average_ms": 5.0,
+        "min_ms": 2.0,
+        "max_ms": 10.0,
+        "last_ms": 4.0
+      },
+      "queue_lag_ms": {
+        "runtime.event_bus": {
+          "count": 64,
+          "total_ms": 256.0,
+          "average_ms": 4.0,
+          "min_ms": 1.0,
+          "max_ms": 12.0,
+          "last_ms": 3.0
+        }
+      }
+    }
+  },
   "runtime_is_healthy": true,
   "rollout_environment": "paper",
   "rollout_stage": "primary",
@@ -211,6 +252,18 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
     "runtime_start_pending": false,
     "runtime_owns_entries": true,
     "runtime_owns_exits": true,
+    "runtime_telemetry": {
+      "total_events": 128,
+      "event_counts": {"market.kline": 64},
+      "metric_counts": {"queue_depth.runtime.event_bus": 5},
+      "queue_depths": {"runtime.event_bus": 5},
+      "last_seen_at": "2024-01-15T10:29:59+00:00",
+      "latency": {
+        "event_age_ms": {"count": 64, "total_ms": 1280.0, "average_ms": 20.0, "min_ms": 8.0, "max_ms": 55.0, "last_ms": 18.0},
+        "exchange_age_ms": {"count": 64, "total_ms": 320.0, "average_ms": 5.0, "min_ms": 2.0, "max_ms": 10.0, "last_ms": 4.0},
+        "queue_lag_ms": {"runtime.event_bus": {"count": 64, "total_ms": 256.0, "average_ms": 4.0, "min_ms": 1.0, "max_ms": 12.0, "last_ms": 3.0}}
+      }
+    },
     "runtime_is_healthy": true,
     "rollout_environment": "paper",
     "rollout_stage": "primary",

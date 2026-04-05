@@ -6,6 +6,7 @@ import asyncio
 import logging
 import inspect
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Iterable
 
 from domain.events import (
@@ -79,7 +80,15 @@ class RuntimeEventRouter:
     async def _consume_events(self) -> None:
         while True:
             event = await self.event_bus.get()
+            drained_at = datetime.now(timezone.utc)
             try:
+                if self.telemetry_service is not None:
+                    self.telemetry_service.record_queue_lag(
+                        "runtime.event_bus",
+                        event,
+                        observed_at=drained_at,
+                        depth=self.event_bus.qsize(),
+                    )
                 await self._route_event(event)
             except Exception as exc:  # pragma: no cover - defensive logging
                 self.logger.warning("runtime event routing failed: %s", exc)
@@ -98,6 +107,11 @@ class RuntimeEventRouter:
             self.telemetry_service.record_dropped_event(
                 "persistence",
                 event_type=event.meta.event_type,
+            )
+        elif self.telemetry_service is not None:
+            self.telemetry_service.record_queue_depth(
+                "persistence",
+                self.persistence_service.get_queue_depth(),
             )
 
     async def _route_position_event(self, event: RuntimeEvent) -> None:
@@ -175,6 +189,31 @@ class RuntimeApp:
 
     def register_service(self, name: str, service: AsyncService) -> None:
         self.services.register(name, service)
+
+    def get_telemetry_snapshot(self) -> dict[str, object] | None:
+        """Return a read-only runtime telemetry snapshot when telemetry is active."""
+
+        telemetry_service = self.telemetry_service
+        if telemetry_service is None:
+            return None
+
+        snapshot = telemetry_service.get_snapshot()
+        persistence_service = self.persistence_service
+        if persistence_service is not None:
+            last_failure_at, last_failure_reason = (
+                persistence_service.get_last_failure()
+            )
+            snapshot["persistence"] = {
+                "queue_depth": persistence_service.get_queue_depth(),
+                "high_watermark": persistence_service.get_high_watermark(),
+                "persisted_counts": persistence_service.get_persisted_counts(),
+                "failure_counts": persistence_service.get_failure_counts(),
+                "last_failure_at": last_failure_at,
+                "last_failure_reason": last_failure_reason,
+            }
+        snapshot["event_bus_depth"] = self.event_bus.qsize()
+        snapshot["captured_at"] = datetime.now(timezone.utc).isoformat()
+        return snapshot
 
     @classmethod
     def build_phase4(

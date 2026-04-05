@@ -163,6 +163,34 @@ class FakeStatusBot:
     def get_runtime_projection(self) -> RuntimeProjection:
         return self._projection
 
+    def get_runtime_telemetry_info(self):
+        return {
+            "total_events": 2,
+            "event_counts": {"market.kline": 1},
+            "metric_counts": {"queue_depth.runtime.event_bus": 1},
+            "queue_depths": {"runtime.event_bus": 1},
+            "last_seen_at": NOW,
+            "latency": {
+                "event_age_ms": {
+                    "count": 1,
+                    "total_ms": 25.0,
+                    "average_ms": 25.0,
+                    "min_ms": 25.0,
+                    "max_ms": 25.0,
+                    "last_ms": 25.0,
+                },
+                "exchange_age_ms": {
+                    "count": 1,
+                    "total_ms": 5.0,
+                    "average_ms": 5.0,
+                    "min_ms": 5.0,
+                    "max_ms": 5.0,
+                    "last_ms": 5.0,
+                },
+                "queue_lag_ms": {},
+            },
+        }
+
     def get_active_trades(self):
         return list(self._active_trades)
 
@@ -192,6 +220,8 @@ async def test_status_route_includes_runtime_cutover_fields():
     assert payload["runtime_is_running"] is True
     assert payload["runtime_owns_entries"] is True
     assert payload["runtime_owns_exits"] is True
+    assert payload["runtime_telemetry"]["total_events"] == 2
+    assert payload["runtime_telemetry"]["latency"]["event_age_ms"]["count"] == 1
     assert payload["runtime_is_healthy"] is True
     assert payload["state_source"] == "runtime_projection"
     assert payload["rollout_environment"] == "paper"
@@ -225,6 +255,7 @@ async def test_status_route_keeps_legacy_trade_count_in_shadow_mode():
     assert payload["configured_deployment_profile"] == "paper_shadow"
     assert payload["effective_runtime_mode"] == "shadow"
     assert payload["runtime_is_healthy"] is True
+    assert payload["runtime_telemetry"]["queue_depths"]["runtime.event_bus"] == 1
     assert payload["rollout_environment"] == "paper"
     assert payload["rollout_stage"] == "shadow"
     assert payload["rollout_health"] == "shadow_ready"

@@ -57,6 +57,34 @@ class FakeStatusBot:
     def get_runtime_projection(self):
         return self._projection
 
+    def get_runtime_telemetry_info(self):
+        return {
+            "total_events": 2,
+            "event_counts": {"market.kline": 1},
+            "metric_counts": {"queue_depth.runtime.event_bus": 1},
+            "queue_depths": {"runtime.event_bus": 1},
+            "last_seen_at": NOW,
+            "latency": {
+                "event_age_ms": {
+                    "count": 1,
+                    "total_ms": 25.0,
+                    "average_ms": 25.0,
+                    "min_ms": 25.0,
+                    "max_ms": 25.0,
+                    "last_ms": 25.0,
+                },
+                "exchange_age_ms": {
+                    "count": 1,
+                    "total_ms": 5.0,
+                    "average_ms": 5.0,
+                    "min_ms": 5.0,
+                    "max_ms": 5.0,
+                    "last_ms": 5.0,
+                },
+                "queue_lag_ms": {},
+            },
+        }
+
     def get_runtime_visibility_info(self):
         if self._projection is None:
             return {
@@ -150,6 +178,7 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
     assert data["runtime_is_running"] is True
     assert data["runtime_owns_entries"] is True
     assert data["runtime_owns_exits"] is True
+    assert data["runtime_telemetry"]["total_events"] == 2
     assert data["runtime_is_healthy"] is True
     assert data["state_source"] == "runtime_projection"
     assert data["rollout_environment"] == "paper"
@@ -184,6 +213,7 @@ async def test_ws_status_keeps_legacy_state_when_projection_missing(monkeypatch)
     assert data["runtime_is_running"] is False
     assert data["runtime_owns_entries"] is False
     assert data["runtime_owns_exits"] is False
+    assert data["runtime_telemetry"]["queue_depths"]["runtime.event_bus"] == 1
     assert data["runtime_is_healthy"] is True
     assert data["state_source"] == "legacy"
     assert data["rollout_environment"] == "paper"

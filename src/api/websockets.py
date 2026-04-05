@@ -39,6 +39,7 @@ def _inject_runtime_visibility(status_info, bot):
 def _build_status_payload(bot):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
+    status_info["runtime_telemetry"] = bot.get_runtime_telemetry_info()
     projection = _get_runtime_projection(bot)
     rollout_summary = build_rollout_summary(
         projection,
@@ -110,6 +111,7 @@ def _build_status_payload(bot):
             "runtime_start_pending": runtime_start_pending,
             "runtime_owns_entries": runtime_owns_entries,
             "runtime_owns_exits": runtime_owns_exits,
+            "runtime_telemetry": status_info.get("runtime_telemetry"),
             "state_source": state_source,
             **rollout_summary,
             "projected_active_positions": projected_active_positions,

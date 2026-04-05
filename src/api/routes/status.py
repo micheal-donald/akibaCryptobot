@@ -33,6 +33,7 @@ async def get_status(bot=Depends(get_bot)):
     """Get comprehensive bot status including runtime cutover state."""
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
+    status_info["runtime_telemetry"] = bot.get_runtime_telemetry_info()
     projection = bot.get_runtime_projection()
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active
     status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason

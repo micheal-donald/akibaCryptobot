@@ -99,6 +99,7 @@ flowchart TB
 | **Config Validator** | `src/config_validator.py` | Validates all config sections at startup |
 | **Trade Store** | `src/persistence/trade_store.py` | Async SQLite persistence for trades (Unix timestamps) |
 | **Performance Tracker** | `src/performance/metrics_tracker.py` | Sharpe, Sortino, drawdown, profit factor, equity curve |
+| **Runtime Telemetry** | `src/services/telemetry_service.py` | In-memory event counts, queue depth, ingress age, exchange age, queue lag snapshots |
 | **Reconciliation Manager** | `src/monitoring/reconciliation.py` | Syncs DB state with exchange balances to find orphaned/lost trades |
 | **FastAPI App** | `src/api/app.py` | Application factory with lifespan-managed bot |
 | **API Routes** | `src/api/routes/` | REST endpoints: status, account, trading, performance, risk, strategy, model |

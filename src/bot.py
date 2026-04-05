@@ -895,6 +895,7 @@ class AkibaCryptoBot:
             "runtime_start_pending": self.runtime_start_pending,
             "runtime_owns_entries": self.runtime_owns_entries,
             "runtime_owns_exits": self.runtime_owns_exits,
+            "runtime_telemetry": self.get_runtime_telemetry_info(),
         }
 
     def get_runtime_projection(self):
@@ -910,6 +911,15 @@ class AkibaCryptoBot:
                 None if runtime_app is None else runtime_app.execution_service
             ),
         )
+
+    def get_runtime_telemetry_info(self):
+        runtime_app = self.runtime_app
+        if runtime_app is None:
+            return None
+        telemetry_getter = getattr(runtime_app, "get_telemetry_snapshot", None)
+        if not callable(telemetry_getter):
+            return None
+        return telemetry_getter()
 
     async def get_balance_info(self) -> Dict:
         """Get account balance for Telegram commands."""
