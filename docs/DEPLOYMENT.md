@@ -224,6 +224,32 @@ Practical operator expectations:
 
 If you are promoting or rolling back today, keep using the existing paper/live profile flow. The HFT mode described in Phase 15 is a documentation boundary and future operating model, not a new live deploy target yet.
 
+#### Phase 15 Latency SLOs and Degraded-Latency Actions
+
+The observability layer already exposes the fields needed for latency SLOs in `/api/status` and `/ws/status` through `runtime_telemetry`:
+
+- `latency.event_age_ms`
+- `latency.exchange_age_ms`
+- `latency.queue_lag_ms.<queue>`
+- `metric_counts.dropped_event*`
+
+These are operating targets for the low-latency runtime and future HFT mode:
+
+| Signal | Target | Action if exceeded |
+|---|---|---|
+| `latency.event_age_ms` | Prefer sub-50 ms average | Warn once; hold promotion if it persists |
+| `latency.exchange_age_ms` | Prefer sub-25 ms average | Treat as a feed/timestamp issue; block promotion if persistent |
+| `latency.queue_lag_ms.<queue>` | Prefer sub-25 ms average | Treat as hot-path backlog; block promotion if repeated |
+| `metric_counts.dropped_event*` | Prefer zero growth | Investigate immediately; block or roll back if rising |
+
+Practical operator expectations:
+
+1. The current standard algo mode may tolerate slower cycle timing, but not rising drops or repeated stale-feed signals.
+2. The low-latency runtime should be judged on queue health and feed freshness, not candle-cycle wall time.
+3. HFT should only be considered when these budgets are consistently met alongside venue-near infrastructure and a native hot path.
+
+Do not read these budgets as a claim that the current production deployment already satisfies HFT SLOs. They are the bar the platform should move toward as the native path becomes real.
+
 ---
 
 ## Docker Deployment

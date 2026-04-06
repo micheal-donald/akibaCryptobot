@@ -255,6 +255,19 @@ Each latency summary includes:
 - `max_ms`
 - `last_ms`
 
+### Operating Targets
+
+The telemetry fields are useful for judging whether the platform is only live or actually healthy enough for a low-latency rollout.
+
+| Field | Target | Interpretation |
+|---|---|---|
+| `latency.event_age_ms` | Prefer sub-50 ms average | The runtime is keeping up with its own ingest path |
+| `latency.exchange_age_ms` | Prefer sub-25 ms average | The feed is fresh and timestamping is sane |
+| `latency.queue_lag_ms.<queue>` | Prefer sub-25 ms average | The hot path is not backing up on that queue |
+| `metric_counts.dropped_event*` | Prefer no sustained increase | Runtime work is not being dropped under load |
+
+These are targets for the low-latency runtime and future HFT regime. They are not proof that the current deployment already meets HFT-class latency SLOs.
+
 ### Metric Counters
 
 The runtime emits counters with stable names so operators can tell backlog from data-quality problems:

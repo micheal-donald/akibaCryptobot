@@ -160,6 +160,24 @@ Interpretation is intentionally conservative:
 
 Runtime event capture uses `src/runtime/event_capture.py` to write a bounded JSONL record of hot-path events for offline debugging. Replay support is for test and investigation flows, not for live hot-path execution.
 
+### Phase 15 Latency SLO Targets
+
+These are documentation targets for the low-latency runtime and future HFT regime. They are not proof that the current deployment already meets HFT-grade timing.
+
+| Stage | Target budget | Operator interpretation |
+|---|---|---|
+| `event_age_ms` | Prefer sub-50 ms average, investigate sustained growth above 100 ms | The runtime is falling behind its own ingest path |
+| `exchange_age_ms` | Prefer sub-25 ms average, investigate sustained growth above 75 ms | The feed is stale, delayed, or timestamp-skewed |
+| `queue_lag_ms.<queue>` | Prefer sub-25 ms average per hot-path queue, investigate sustained growth above 50 ms | A queue is backing up and the hot path is losing responsiveness |
+
+Degraded-latency actions:
+
+- warn when any hot-path budget is crossed once
+- hold promotion when the same budget is crossed in repeated samples
+- block or roll back when growth is paired with `metric_counts.dropped_event*`
+- investigate network/feed health when `exchange_age_ms` rises before queue lag
+- treat persistent queue lag and dropped events as a rollout blocker, not a cosmetic warning
+
 ## Native Hot-Path Boundary
 
 Phase 14 introduces a native control-plane boundary without changing live trading behavior.
