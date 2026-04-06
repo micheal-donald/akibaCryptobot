@@ -11,6 +11,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from bot import AkibaCryptoBot
+from operations.alerts import OperationalAlertState
 from strategies.base_strategy import SignalType, TradingSignal
 from trading.opportunity_scanner import OpportunityScanner
 from trading.position_manager import PositionManager
@@ -76,6 +77,7 @@ def bot_fixture(sample_config):
     bot.active_trades = {}
     bot.is_running = False
     bot.trading_paused = False
+    bot._operational_alert_state = OperationalAlertState()
     bot.start_time = datetime.now()
     bot.session_id = None
     bot.last_update = datetime.now()

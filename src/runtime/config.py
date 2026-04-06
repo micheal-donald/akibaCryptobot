@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
+
+from operations.alerts import OperationsConfig
 
 from .mode import DeploymentProfile, RuntimeMode
 
@@ -29,6 +31,9 @@ class RuntimeConfig:
     deployment_profile: DeploymentProfile | str | None = None
     runtime_mode: RuntimeMode | str | None = None
     shadow_mode: bool | None = None
+    operations: OperationsConfig | Mapping[str, Any] | None = field(
+        default_factory=OperationsConfig
+    )
 
     def __post_init__(self) -> None:
         if self.candle_history_limit <= 0:
@@ -60,6 +65,12 @@ class RuntimeConfig:
             "allow_live_runtime",
             self._coerce_bool(self.allow_live_runtime, default=False),
         )
+        if not isinstance(self.operations, OperationsConfig):
+            object.__setattr__(
+                self,
+                "operations",
+                OperationsConfig.from_mapping(self._as_mapping(self.operations)),
+            )
 
         deployment_profile = self._resolve_deployment_profile(
             self.deployment_profile,
@@ -121,6 +132,7 @@ class RuntimeConfig:
         runtime_section = cls._as_mapping(data.get("runtime"))
         trading_section = cls._as_mapping(data.get("trading"))
         exchange_section = cls._as_mapping(data.get("exchange"))
+        operations_section = cls._as_mapping(data.get("operations"))
 
         symbols = cls._resolve_symbols(runtime_section, trading_section)
         intervals = cls._resolve_intervals(runtime_section, trading_section)
@@ -182,6 +194,7 @@ class RuntimeConfig:
                 runtime_section.get("allow_live_runtime"),
                 default=False,
             ),
+            operations=OperationsConfig.from_mapping(operations_section),
         )
 
     @classmethod

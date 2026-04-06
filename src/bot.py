@@ -20,6 +20,7 @@ from persistence.trade_store import TradeStore
 from performance.metrics_tracker import PerformanceMetricsTracker
 from monitoring.reconciliation import ReconciliationManager
 from operations import ModelTrainingManager
+from operations.alerts import OperationalAlertState
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
@@ -97,6 +98,7 @@ class AkibaCryptoBot:
 
         self.is_running = False
         self.trading_paused = False
+        self._operational_alert_state = OperationalAlertState()
         self.start_time = datetime.now()
         self.last_update = datetime.now()
         self.session_id = None  # Set when session is recorded to DB
@@ -948,6 +950,24 @@ class AkibaCryptoBot:
         if not callable(telemetry_getter):
             return None
         return telemetry_getter()
+
+    @property
+    def operational_alerts(self):
+        return tuple(self._operational_alert_state.operational_alerts)
+
+    @property
+    def halt_state(self) -> str:
+        return self._operational_alert_state.halt_state
+
+    @property
+    def entries_blocked_reason(self) -> str | None:
+        return self._operational_alert_state.entries_blocked_reason
+
+    def get_operational_alert_state(self) -> Dict:
+        return self._operational_alert_state.to_dict()
+
+    def set_operational_alert_state(self, state: OperationalAlertState) -> None:
+        self._operational_alert_state = state
 
     async def get_balance_info(self) -> Dict:
         """Get account balance for Telegram commands."""

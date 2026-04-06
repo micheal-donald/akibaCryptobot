@@ -28,6 +28,18 @@
     "runtime_mode": "runtime_primary",
     "shadow_mode": false
   },
+  "operations": {
+    "runtime_startup_timeout_seconds": 120,
+    "event_age_threshold_seconds": 15,
+    "exchange_age_threshold_seconds": 15,
+    "queue_lag_threshold_seconds": 5,
+    "queue_depth_threshold": 250,
+    "reconnect_count_threshold": 5,
+    "dropped_event_count_threshold": 10,
+    "model_staleness_warning_hours": 48,
+    "evaluation_interval_seconds": 15,
+    "critical_persistence_samples": 3
+  },
   "risk_management": {
     "max_position_size": 0.05,
     "max_daily_loss": 0.02,

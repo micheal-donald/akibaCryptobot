@@ -3,6 +3,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 from bot import AkibaCryptoBot
+from operations.alerts import OperationalAlertState
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
@@ -52,6 +53,7 @@ def bot(mock_config):
         bot.active_trades = {}
         bot.is_running = False
         bot.trading_paused = False
+        bot._operational_alert_state = OperationalAlertState()
         bot.start_time = datetime.now()
         bot.session_id = None
         bot.last_update = datetime.now()
