@@ -1,74 +1,100 @@
-"""
-Model status endpoint — exposes FreqAI model health to the dashboard.
-"""
+"""Model health and training control endpoints."""
+
+from __future__ import annotations
 
 import os
-from datetime import datetime
-from fastapi import APIRouter, Depends
+import secrets
+
+from fastapi import APIRouter, Depends, Header, HTTPException, status
+from pydantic import BaseModel, Field
+
 from api.dependencies import get_bot
 
 router = APIRouter()
 
 
+class TrainModelRequest(BaseModel):
+    pairs: list[str] | None = None
+    candles: int = Field(default=1000, gt=0)
+    timeframe: str = "1h"
+
+
+def _require_operator_token(
+    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
+) -> None:
+    expected_token = os.getenv("AKIBA_OPERATOR_TOKEN")
+    if not expected_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="operator_token_not_configured",
+        )
+    if not x_operator_token or not secrets.compare_digest(
+        x_operator_token, expected_token
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="operator_token_invalid",
+        )
+
+
+def _map_training_error(reason: str) -> HTTPException:
+    if reason == "operator_token_invalid":
+        return HTTPException(status_code=403, detail=reason)
+    if reason == "operator_token_not_configured":
+        return HTTPException(status_code=503, detail=reason)
+    return HTTPException(status_code=409, detail=reason)
+
+
 @router.get("/model/status")
 async def get_model_status(bot=Depends(get_bot)):
-    """
-    Get information about the currently loaded FreqAI models:
-    model age, accuracy, feature count, and training date.
-    """
-    active_strategy = bot.strategy_manager.get_active_strategy()
+    """Return FreqAI model health plus the current training snapshot."""
+    model_snapshot = getattr(bot, "get_model_status_info", None)
+    if callable(model_snapshot):
+        return await model_snapshot()
+    return {
+        "freqai_active": False,
+        "reason": "Model snapshot unavailable",
+        "models": [],
+    }
 
-    # Check if this is an ensemble strategy with ML components
-    if not hasattr(active_strategy, "strategies"):
-        return {"freqai_active": False, "reason": "Active strategy is not an ensemble"}
 
-    models = []
-    for strategy, weight, name in active_strategy.strategies:
-        if not hasattr(strategy, "model_trained"):
-            continue
-
-        model_info = {
-            "name": name,
-            "type": type(strategy).__name__,
-            "weight": weight,
-            "trained": getattr(strategy, "model_trained", False),
-            "feature_count": len(getattr(strategy, "feature_columns", [])),
+@router.get("/model/train/status")
+async def get_model_training_status(bot=Depends(get_bot)):
+    """Return the current and most recent training job state."""
+    if not hasattr(bot, "get_training_job_status"):
+        return {
+            "current_job": None,
+            "last_job": None,
+            "can_start_training": False,
+            "active_job_count": 0,
+            "start_blocker": "training_control_unavailable",
         }
 
-        # Check model file age on disk
-        models_dir = "models"
-        if os.path.exists(models_dir):
-            model_files = [
-                f for f in os.listdir(models_dir) if f.endswith("_freqai.joblib")
-            ]
-            if model_files:
-                newest = max(
-                    model_files,
-                    key=lambda f: os.path.getmtime(os.path.join(models_dir, f)),
-                )
-                mtime = os.path.getmtime(os.path.join(models_dir, newest))
-                model_info["last_trained"] = datetime.fromtimestamp(mtime).isoformat()
-                age_hours = (datetime.now().timestamp() - mtime) / 3600
-                model_info["age_hours"] = round(age_hours, 1)
-                model_info["stale"] = age_hours > 48  # Flag if older than 2 days
+    snapshot = await bot.get_training_job_status()
+    can_start_training, blocker = await bot.can_start_training()
+    payload = snapshot.to_dict()
+    payload["can_start_training"] = can_start_training
+    payload["start_blocker"] = blocker
+    return payload
 
-        # Top features if available
-        if hasattr(strategy, "ml_model") and strategy.ml_model is not None:
-            if hasattr(strategy.ml_model, "feature_importances_"):
-                cols = getattr(strategy, "feature_columns", [])
-                importances = strategy.ml_model.feature_importances_
-                if len(cols) == len(importances):
-                    top = sorted(
-                        zip(cols, importances), key=lambda x: x[1], reverse=True
-                    )[:5]
-                    model_info["top_features"] = [
-                        {"name": n, "importance": round(float(v), 4)} for n, v in top
-                    ]
 
-        models.append(model_info)
+@router.post("/model/train", dependencies=[Depends(_require_operator_token)])
+async def start_model_training(
+    request: TrainModelRequest,
+    bot=Depends(get_bot),
+):
+    """Queue a server-side FreqAI training job."""
+    can_start_training, blocker = await bot.can_start_training()
+    if not can_start_training:
+        raise _map_training_error(blocker or "training_start_blocked")
+    try:
+        queued_job = await bot.enqueue_training_job(
+            requested_by="api",
+            pairs=request.pairs,
+            candles=request.candles,
+            timeframe=request.timeframe,
+        )
+    except ValueError as exc:
+        raise _map_training_error(str(exc)) from exc
 
-    any_trained = any(m["trained"] for m in models)
-    return {
-        "freqai_active": any_trained,
-        "models": models,
-    }
+    return queued_job.to_dict()

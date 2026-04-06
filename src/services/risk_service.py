@@ -39,6 +39,7 @@ class RiskService(BaseService):
     position_source: object | None = None
     max_open_positions: int = 0
     kill_switch_enabled: bool = False
+    entries_paused: bool = False
     _decision_counts: Counter[str] = field(
         default_factory=Counter, init=False, repr=False
     )
@@ -73,6 +74,11 @@ class RiskService(BaseService):
         """Enable or disable the runtime kill switch."""
 
         self.kill_switch_enabled = enabled
+
+    def set_entries_paused(self, enabled: bool) -> None:
+        """Block non-reduce-only order intents while still allowing exits."""
+
+        self.entries_paused = enabled
 
     def get_decision_counts(self) -> dict[str, int]:
         """Return a snapshot of allow/block counts."""
@@ -115,6 +121,8 @@ class RiskService(BaseService):
     ) -> str | None:
         if self.kill_switch_enabled:
             return "kill_switch_enabled"
+        if self.entries_paused and not intent.reduce_only:
+            return "entries_paused"
 
         current_position = self._find_position_for_symbol(intent.symbol, positions)
         if current_position is not None and current_position.open_qty > 0:

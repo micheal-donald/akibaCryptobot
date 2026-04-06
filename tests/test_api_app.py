@@ -6,6 +6,7 @@ import pytest
 from api.app import shutdown_trading_bot
 from api.routes.status import get_status
 from api.routes.trading import get_active_trades
+from operations.training_jobs import TrainingJobRecord, TrainingJobSnapshot
 from runtime.view_models import (
     ProjectedPositionView,
     ProjectionSource,
@@ -122,10 +123,17 @@ class FakeStatusBot:
         configured_deployment_profile: str | None = None,
         trading_mode: str = "paper",
         native_shadow_report: dict[str, object] | None = None,
+        training_snapshot: TrainingJobSnapshot | None = None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
         self._native_shadow_report = native_shadow_report
+        self._training_snapshot = training_snapshot or TrainingJobSnapshot(
+            current_job=None,
+            last_job=None,
+            can_start_training=True,
+            active_job_count=0,
+        )
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self.config = {"exchange": {"sandbox": trading_mode != "live"}}
@@ -141,6 +149,7 @@ class FakeStatusBot:
             "daily_pnl": 0.0,
             "uptime": "0:00:10",
             "is_running": True,
+            "trading_paused": False,
             "trading_mode": self._trading_mode,
             "runtime_mode": self._projection.runtime_mode,
             "runtime_is_running": self._projection.runtime_is_running,
@@ -199,9 +208,21 @@ class FakeStatusBot:
     def get_active_trades(self):
         return list(self._active_trades)
 
+    async def get_training_job_status(self):
+        return self._training_snapshot
+
 
 @pytest.mark.asyncio
 async def test_status_route_includes_runtime_cutover_fields():
+    job = TrainingJobRecord(
+        job_id="job-status",
+        status="running",
+        requested_by="api",
+        pairs=("BTC/USDT",),
+        candles=900,
+        timeframe="1h",
+        progress=35.0,
+    )
     bot = FakeStatusBot(
         make_projection(
             source=ProjectionSource.RUNTIME_PROJECTION,
@@ -212,6 +233,12 @@ async def test_status_route_includes_runtime_cutover_fields():
             rejected_order_count=1,
         ),
         configured_deployment_profile="paper_runtime_primary",
+        training_snapshot=TrainingJobSnapshot(
+            current_job=job,
+            last_job=job,
+            can_start_training=False,
+            active_job_count=1,
+        ),
     )
 
     payload = await get_status(bot=bot)
@@ -235,6 +262,8 @@ async def test_status_route_includes_runtime_cutover_fields():
     assert payload["rollout_recommended_action"] == "stay_runtime_primary"
     assert "Runtime primary ownership is healthy" in payload["rollout_summary"]
     assert payload["projected_active_positions"] == 1
+    assert payload["training_job"]["current_job"]["job_id"] == "job-status"
+    assert payload["training_job"]["current_job"]["status"] == "running"
     assert payload["projected_open_orders"] == 2
     assert payload["projected_pending_exits"] == 1
     assert payload["projected_rejected_orders"] == 1

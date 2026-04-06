@@ -59,11 +59,23 @@ def _inject_native_shadow_report(status_info, bot):
     return status_info
 
 
-def _build_status_payload(bot):
+async def _inject_training_job(status_info, bot):
+    training_getter = getattr(bot, "get_training_job_status", None)
+    if not callable(training_getter):
+        status_info["training_job"] = None
+        return status_info
+
+    snapshot = await training_getter()
+    status_info["training_job"] = snapshot.to_dict()
+    return status_info
+
+
+async def _build_status_payload(bot):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
     _inject_runtime_telemetry(status_info, bot)
     _inject_native_shadow_report(status_info, bot)
+    await _inject_training_job(status_info, bot)
     projection = _get_runtime_projection(bot)
     rollout_summary = build_rollout_summary(
         projection,
@@ -137,6 +149,7 @@ def _build_status_payload(bot):
             "runtime_owns_exits": runtime_owns_exits,
             "runtime_telemetry": status_info.get("runtime_telemetry"),
             "native_shadow_report": status_info.get("native_shadow_report"),
+            "training_job": status_info.get("training_job"),
             "state_source": state_source,
             **rollout_summary,
             "projected_active_positions": projected_active_positions,
@@ -190,7 +203,7 @@ async def ws_status(websocket: WebSocket):
         while True:
             bot = bot_state.get("bot")
             if bot:
-                await websocket.send_json(_build_status_payload(bot))
+                await websocket.send_json(await _build_status_payload(bot))
 
             await asyncio.sleep(5)
     except WebSocketDisconnect:

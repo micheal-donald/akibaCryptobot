@@ -16,6 +16,7 @@
  *   GET  /api/heatmap             -> risk heatmap data
  *   GET  /api/circuit-breaker     -> circuit breaker status
  *   GET  /api/model/status        -> model health cards
+ *   GET  /api/model/train/status  -> training job state
  *   GET  /api/strategy/performance -> per-strategy performance
  *   POST /api/strategy/switch     -> strategy switching
  *   POST /api/trading/pause       -> pause button
@@ -87,9 +88,13 @@ const dom = {
 // ─── State ───────────────────────────────────────────────────────
 
 let isBotRunning = false;
+let isTradingPaused = false;
 let chartInstance = null;
 let latestPrices = {};
 let wsLastPing = Date.now();
+let latestStatusSnapshot = null;
+let latestModelSnapshot = null;
+let latestTrainingSnapshot = null;
 
 // ─── Initialization ──────────────────────────────────────────────
 
@@ -111,6 +116,7 @@ async function init() {
         fetchRisk(),
         fetchCorrelations(),
         fetchModelHealth(),
+        fetchTrainingStatus(),
         fetchStrategyPerformance(),
     ]);
 
@@ -124,6 +130,7 @@ async function init() {
     setInterval(fetchRisk, 30000);
     setInterval(fetchCorrelations, 60000);
     setInterval(fetchModelHealth, 60000);
+    setInterval(fetchTrainingStatus, 15000);
 }
 
 // ─── REST Fetchers ───────────────────────────────────────────────
@@ -132,7 +139,9 @@ async function fetchStatus() {
     try {
         const res = await fetch(`${API_BASE}/status`);
         const data = await res.json();
+        latestStatusSnapshot = data;
         updateStatusUI(data);
+        renderModelOperationsPanel();
     } catch (e) {
         setStatusIndicator(false, 'API UNREACHABLE');
     }
@@ -585,58 +594,52 @@ async function fetchModelHealth() {
     try {
         const res = await fetch(`${API_BASE}/model/status`);
         const data = await res.json();
-
-        if (!data.freqai_active) {
-            dom.modelHealthContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">${data.reason || 'FreqAI not active'}</div>`;
-            return;
-        }
-
-        const models = data.models || [];
-        if (models.length === 0) {
-            dom.modelHealthContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">No models loaded</div>`;
-            return;
-        }
-
-        dom.modelHealthContainer.innerHTML = models.map(m => {
-            const staleClass = m.stale ? 'model-card-stale' : '';
-            const ageStr = m.age_hours != null ? `${m.age_hours.toFixed(1)}h ago` : 'Unknown';
-
-            let featuresHtml = '';
-            if (m.top_features && m.top_features.length > 0) {
-                const maxImp = Math.max(...m.top_features.map(f => f.importance));
-                featuresHtml = `
-                    <div class="mt-2 space-y-1">
-                        ${m.top_features.map(f => {
-                            const pct = maxImp > 0 ? (f.importance / maxImp * 100) : 0;
-                            return `
-                                <div class="flex items-center gap-2">
-                                    <span class="text-matrix-dim w-20 truncate text-[10px]">${f.name}</span>
-                                    <div class="flex-grow bg-matrix-border rounded-full h-1">
-                                        <div class="bg-matrix-neon h-1 rounded-full" style="width: ${pct}%"></div>
-                                    </div>
-                                    <span class="text-matrix-dim text-[10px] w-10 text-right">${f.importance.toFixed(3)}</span>
-                                </div>`;
-                        }).join('')}
-                    </div>`;
-            }
-
-            return `
-                <div class="border border-matrix-border rounded-lg p-3 ${staleClass}">
-                    <div class="flex justify-between items-start mb-1">
-                        <span class="text-white text-xs font-bold">${m.name}</span>
-                        <span class="text-[10px] ${m.stale ? 'text-red-400' : 'text-matrix-dim'}">${ageStr}</span>
-                    </div>
-                    <div class="flex gap-3 text-[10px] text-matrix-dim">
-                        <span>W: ${m.weight != null ? m.weight.toFixed(2) : '—'}</span>
-                        <span>Feat: ${m.feature_count ?? '—'}</span>
-                        <span>${m.trained ? 'Trained' : 'Untrained'}</span>
-                    </div>
-                    ${featuresHtml}
-                </div>`;
-        }).join('');
+        latestModelSnapshot = data;
+        renderModelOperationsPanel();
     } catch (e) {
-        dom.modelHealthContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">Failed to load model status</div>`;
+        latestModelSnapshot = {
+            freqai_active: false,
+            reason: 'Failed to load model status',
+            models: [],
+        };
+        renderModelOperationsPanel();
     }
+}
+
+async function fetchTrainingStatus() {
+    try {
+        const res = await fetch(`${API_BASE}/model/train/status`);
+        const data = await res.json();
+        latestTrainingSnapshot = data;
+        renderModelOperationsPanel();
+    } catch (e) {
+        latestTrainingSnapshot = {
+            current_job: null,
+            last_job: null,
+            can_start_training: false,
+            start_blocker: 'training_status_unavailable',
+        };
+        renderModelOperationsPanel();
+    }
+}
+
+function renderModelOperationsPanel() {
+    const modelData = latestModelSnapshot;
+    const trainingData = latestTrainingSnapshot;
+    const statusData = latestStatusSnapshot;
+
+    if (!modelData && !trainingData && !statusData) {
+        dom.modelHealthContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">Loading model status...</div>`;
+        return;
+    }
+
+    const sections = [
+        renderTrainingSection(trainingData, modelData, statusData),
+        renderOperationalAlertsSection(statusData),
+        renderModelCardsSection(modelData),
+    ].filter(Boolean);
+
+    dom.modelHealthContainer.innerHTML = sections.join('');
 }
 
 async function fetchStrategyPerformance() {
@@ -786,10 +789,22 @@ function connectPricesWS() {
 function updateStatusUI(data) {
     if (!data) return;
 
+    latestStatusSnapshot = data;
+
     // Running state
     const isRunning = data.is_running !== undefined ? data.is_running : true;
-    setStatusIndicator(isRunning);
     isBotRunning = isRunning;
+    isTradingPaused = Boolean(data.trading_paused);
+
+    if (data.circuit_breaker_active) {
+        setStatusIndicator(false, 'CIRCUIT BREAKER', 'critical');
+    } else if (!isRunning) {
+        setStatusIndicator(false, 'BOT STOPPED', 'offline');
+    } else if (isTradingPaused) {
+        setStatusIndicator(true, 'ENTRIES PAUSED', 'warning');
+    } else {
+        setStatusIndicator(isRunning);
+    }
 
     // Uptime
     if (data.uptime) {
@@ -809,20 +824,27 @@ function updateStatusUI(data) {
     if (data.circuit_breaker_active) {
         dom.cbBanner.classList.remove('hidden');
         dom.cbReason.textContent = data.circuit_breaker_reason || 'Unknown reason';
-        setStatusIndicator(false, 'CIRCUIT BREAKER');
     } else if (!data.circuit_breaker_active) {
         dom.cbBanner.classList.add('hidden');
     }
 
     // Update pause button text
-    dom.pauseBtn.textContent = isBotRunning ? 'PAUSE BOT' : 'RESUME BOT';
+    dom.pauseBtn.textContent = isTradingPaused ? 'RESUME ENTRIES' : 'PAUSE ENTRIES';
 }
 
-function setStatusIndicator(isOnline, textOverride = null) {
+function setStatusIndicator(isOnline, textOverride = null, tone = 'critical') {
     if (textOverride) {
         dom.statusText.textContent = textOverride;
-        dom.statusText.className = 'text-red-500 font-mono tracking-wider';
-        dom.statusDot.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#EF4444]';
+        if (tone === 'warning') {
+            dom.statusText.className = 'text-yellow-400 font-mono tracking-wider';
+            dom.statusDot.className = 'w-2 h-2 rounded-full bg-yellow-400 animate-pulse shadow-[0_0_8px_#FACC15]';
+        } else if (tone === 'offline') {
+            dom.statusText.className = 'text-matrix-dim font-mono tracking-wider';
+            dom.statusDot.className = 'w-2 h-2 rounded-full bg-matrix-dim';
+        } else {
+            dom.statusText.className = 'text-red-500 font-mono tracking-wider';
+            dom.statusDot.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_#EF4444]';
+        }
         return;
     }
 
@@ -835,6 +857,184 @@ function setStatusIndicator(isOnline, textOverride = null) {
         dom.statusText.className = 'text-matrix-dim font-mono tracking-wider';
         dom.statusDot.className = 'w-2 h-2 rounded-full bg-matrix-dim';
     }
+}
+
+function formatTimestamp(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString();
+}
+
+function getTrainingStatusMeta(status) {
+    switch (status) {
+        case 'queued':
+            return { icon: '🧠⏳', cls: 'text-yellow-400' };
+        case 'running':
+            return { icon: '🧠⚙️', cls: 'text-blue-400' };
+        case 'succeeded':
+            return { icon: '🧠✅', cls: 'text-matrix-neon' };
+        case 'failed':
+            return { icon: '🧠❌', cls: 'text-red-500' };
+        case 'blocked':
+            return { icon: '🧠⛔', cls: 'text-red-500' };
+        default:
+            return { icon: '🧠', cls: 'text-matrix-dim' };
+    }
+}
+
+function renderTrainingSection(trainingData, modelData, statusData) {
+    const currentJob = trainingData?.current_job || null;
+    const lastJob = trainingData?.last_job || null;
+    const activeJob = currentJob || lastJob;
+    const activeStatus = activeJob?.status || 'idle';
+    const statusMeta = getTrainingStatusMeta(activeStatus);
+    const reloadStatus = modelData?.reload_status || activeJob?.reload_status || '—';
+    const startBlocker = trainingData?.start_blocker || '—';
+    const tradingPaused = Boolean(statusData?.trading_paused);
+
+    const summaryLines = [
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status</span><span class="${statusMeta.cls}">${statusMeta.icon} ${activeStatus.toUpperCase()}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Trading Paused</span><span class="${tradingPaused ? 'text-yellow-400' : 'text-red-400'}">${tradingPaused ? 'yes' : 'no'}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Can Start</span><span class="${trainingData?.can_start_training ? 'text-matrix-neon' : 'text-red-400'}">${trainingData?.can_start_training ? 'yes' : 'no'}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Reload Status</span><span class="text-white">${reloadStatus}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Last Success</span><span class="text-white">${formatTimestamp(modelData?.last_success_at)}</span></div>`,
+    ];
+
+    if (activeJob) {
+        summaryLines.push(
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Job ID</span><span class="text-white truncate max-w-[180px]">${activeJob.job_id}</span></div>`,
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Requested By</span><span class="text-white">${activeJob.requested_by || '—'}</span></div>`,
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Timeframe</span><span class="text-white">${activeJob.timeframe || '—'}</span></div>`,
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Candles</span><span class="text-white">${activeJob.candles ?? '—'}</span></div>`,
+        );
+        if (activeJob.progress != null) {
+            summaryLines.push(
+                `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Progress</span><span class="text-white">${Number(activeJob.progress).toFixed(0)}%</span></div>`
+            );
+        }
+        if (activeJob.error) {
+            summaryLines.push(
+                `<div class="text-[11px] text-red-400 break-words">Error: ${activeJob.error}</div>`
+            );
+        }
+        if (activeJob.result_summary) {
+            summaryLines.push(
+                `<div class="text-[11px] text-matrix-dim break-words">Result: ${activeJob.result_summary}</div>`
+            );
+        }
+    } else {
+        summaryLines.push(
+            `<div class="text-[11px] text-matrix-dim">No training job has been queued from this server yet.</div>`
+        );
+    }
+
+    if (!trainingData?.can_start_training && startBlocker && startBlocker !== '—') {
+        summaryLines.push(
+            `<div class="text-[11px] text-yellow-400 break-words">Start blocker: ${startBlocker}</div>`
+        );
+    }
+
+    return `
+        <div class="border border-matrix-border rounded-lg p-3 space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-white text-xs font-bold tracking-wide">TRAINING CONTROL</span>
+                <span class="text-[10px] text-matrix-dim">API / Telegram aligned</span>
+            </div>
+            ${summaryLines.join('')}
+        </div>`;
+}
+
+function renderOperationalAlertsSection(statusData) {
+    const alerts = Array.isArray(statusData?.operational_alerts)
+        ? statusData.operational_alerts
+        : [];
+    const haltState = statusData?.halt_state || 'none';
+    const entriesBlockedReason = statusData?.entries_blocked_reason || '—';
+    const trainingJob = statusData?.training_job || null;
+
+    const alertLines = [
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Halt State</span><span class="${haltState === 'none' ? 'text-matrix-neon' : 'text-red-400'}">${haltState}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Entries Blocked</span><span class="${entriesBlockedReason === '—' ? 'text-matrix-neon' : 'text-yellow-400'}">${entriesBlockedReason}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status Job Surface</span><span class="text-white">${trainingJob?.current_job?.status || trainingJob?.last_job?.status || 'idle'}</span></div>`,
+    ];
+
+    if (alerts.length === 0) {
+        alertLines.push(
+            `<div class="text-[11px] text-matrix-dim">No active operational alerts. Phase 17 will promote this placeholder into the alert authority surface.</div>`
+        );
+    }
+
+    return `
+        <div class="border border-matrix-border rounded-lg p-3 space-y-2">
+            <div class="flex items-center justify-between">
+                <span class="text-white text-xs font-bold tracking-wide">OPERATIONS</span>
+                <span class="text-[10px] text-matrix-dim">${alerts.length} active alert${alerts.length === 1 ? '' : 's'}</span>
+            </div>
+            ${alertLines.join('')}
+        </div>`;
+}
+
+function renderModelCardsSection(modelData) {
+    if (!modelData) {
+        return `
+            <div class="border border-matrix-border rounded-lg p-3">
+                <div class="text-matrix-dim text-xs text-center py-4">Loading model status...</div>
+            </div>`;
+    }
+
+    if (!modelData.freqai_active) {
+        return `
+            <div class="border border-matrix-border rounded-lg p-3">
+                <div class="text-matrix-dim text-xs text-center py-4">${modelData.reason || 'FreqAI not active'}</div>
+            </div>`;
+    }
+
+    const models = modelData.models || [];
+    if (models.length === 0) {
+        return `
+            <div class="border border-matrix-border rounded-lg p-3">
+                <div class="text-matrix-dim text-xs text-center py-4">No models loaded</div>
+            </div>`;
+    }
+
+    return models.map(m => {
+        const staleClass = m.stale ? 'model-card-stale' : '';
+        const ageStr = m.age_hours != null ? `${m.age_hours.toFixed(1)}h ago` : 'Unknown';
+
+        let featuresHtml = '';
+        if (m.top_features && m.top_features.length > 0) {
+            const maxImp = Math.max(...m.top_features.map(f => f.importance));
+            featuresHtml = `
+                <div class="mt-2 space-y-1">
+                    ${m.top_features.map(f => {
+                        const pct = maxImp > 0 ? (f.importance / maxImp * 100) : 0;
+                        return `
+                            <div class="flex items-center gap-2">
+                                <span class="text-matrix-dim w-20 truncate text-[10px]">${f.name}</span>
+                                <div class="flex-grow bg-matrix-border rounded-full h-1">
+                                    <div class="bg-matrix-neon h-1 rounded-full" style="width: ${pct}%"></div>
+                                </div>
+                                <span class="text-matrix-dim text-[10px] w-10 text-right">${f.importance.toFixed(3)}</span>
+                            </div>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        return `
+            <div class="border border-matrix-border rounded-lg p-3 ${staleClass}">
+                <div class="flex justify-between items-start mb-1">
+                    <span class="text-white text-xs font-bold">${m.name}</span>
+                    <span class="text-[10px] ${m.stale ? 'text-red-400' : 'text-matrix-dim'}">${ageStr}</span>
+                </div>
+                <div class="flex gap-3 text-[10px] text-matrix-dim">
+                    <span>W: ${m.weight != null ? m.weight.toFixed(2) : '—'}</span>
+                    <span>Feat: ${m.feature_count ?? '—'}</span>
+                    <span>${m.trained ? 'Trained' : 'Untrained'}</span>
+                </div>
+                ${featuresHtml}
+            </div>`;
+    }).join('');
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -898,17 +1098,24 @@ function setupStrategySelector() {
 
 function setupPauseButton() {
     dom.pauseBtn.addEventListener('click', async () => {
-        const endpoint = isBotRunning ? '/trading/pause' : '/trading/resume';
+        const endpoint = isTradingPaused ? '/trading/resume' : '/trading/pause';
         try {
             const res = await fetch(`${API_BASE}${endpoint}`, { method: 'POST' });
             const data = await res.json();
-            isBotRunning = data.is_running ?? !isBotRunning;
-            setStatusIndicator(isBotRunning);
-            dom.pauseBtn.textContent = isBotRunning ? 'PAUSE BOT' : 'RESUME BOT';
+            isBotRunning = data.is_running ?? isBotRunning;
+            isTradingPaused = data.trading_paused ?? !isTradingPaused;
+            if (isTradingPaused) {
+                setStatusIndicator(true, 'ENTRIES PAUSED', 'warning');
+            } else {
+                setStatusIndicator(isBotRunning);
+            }
+            dom.pauseBtn.textContent = isTradingPaused ? 'RESUME ENTRIES' : 'PAUSE ENTRIES';
+            await fetchStatus();
+            await fetchTrainingStatus();
         } catch (e) {
             dom.pauseBtn.textContent = 'ERROR';
             setTimeout(() => {
-                dom.pauseBtn.textContent = isBotRunning ? 'PAUSE BOT' : 'RESUME BOT';
+                dom.pauseBtn.textContent = isTradingPaused ? 'RESUME ENTRIES' : 'PAUSE ENTRIES';
             }, 2000);
         }
     });

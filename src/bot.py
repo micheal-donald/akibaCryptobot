@@ -19,6 +19,7 @@ from strategies.base_strategy import StrategyManager
 from persistence.trade_store import TradeStore
 from performance.metrics_tracker import PerformanceMetricsTracker
 from monitoring.reconciliation import ReconciliationManager
+from operations import ModelTrainingManager
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
@@ -73,6 +74,7 @@ class AkibaCryptoBot:
         # Trade persistence (SQLite)
         db_path = self.config.get("persistence", {}).get("db_path", "data/trades.db")
         self.trade_store = TradeStore(db_path)
+        self.training_manager = ModelTrainingManager(self, config_path=config_path)
         self.active_trades: Dict[str, Dict] = {}
 
         # Created in start() once we have the real wallet balance
@@ -94,6 +96,7 @@ class AkibaCryptoBot:
         )
 
         self.is_running = False
+        self.trading_paused = False
         self.start_time = datetime.now()
         self.last_update = datetime.now()
         self.session_id = None  # Set when session is recorded to DB
@@ -287,6 +290,16 @@ class AkibaCryptoBot:
             self._runtime_start_status = "failed"
             raise
         self._runtime_start_status = "running"
+        self._sync_runtime_entry_pause()
+
+    def _sync_runtime_entry_pause(self) -> None:
+        runtime_app = self.runtime_app
+        if runtime_app is None:
+            return
+        risk_service = getattr(runtime_app, "risk_service", None)
+        if risk_service is None or not hasattr(risk_service, "set_entries_paused"):
+            return
+        risk_service.set_entries_paused(self.trading_paused)
 
     def _log_runtime_visibility(self) -> None:
         visibility = self.get_runtime_visibility_info()
@@ -371,6 +384,7 @@ class AkibaCryptoBot:
         try:
             # Initialize trade persistence and reload open positions
             await self.trade_store.initialize()
+            await self.training_manager.initialize()
             self.active_trades = await self.trade_store.load_open_trades()
 
             # Record this bot session in the database
@@ -762,6 +776,8 @@ class AkibaCryptoBot:
         # owns entries and the circuit breaker is inactive.
         if self.runtime_owns_entries:
             self.logger.debug("Skipping legacy opportunity scan - runtime owns entries")
+        elif self.trading_paused:
+            self.logger.debug("Skipping opportunity scan - trading is paused")
         elif not self.circuit_breaker_active:
             await self.opportunity_scanner.scan_opportunities()
         else:
@@ -877,6 +893,7 @@ class AkibaCryptoBot:
             "daily_pnl": 0.0,
             "uptime": str(uptime),
             "is_running": self.is_running,
+            "trading_paused": self.trading_paused,
             "runtime_mode": self.runtime_mode.value,
             "configured_deployment_profile": visibility_info[
                 "configured_deployment_profile"
@@ -970,6 +987,110 @@ class AkibaCryptoBot:
             "pairs": self.config["trading"]["pairs"],
         }
 
+    async def get_model_status_info(self) -> Dict:
+        """Return the operator-facing FreqAI model and training snapshot."""
+
+        active_strategy = self.strategy_manager.get_active_strategy()
+        training_snapshot = await self.get_training_job_status()
+        latest_success = await self.trade_store.get_latest_successful_training_job()
+
+        if not hasattr(active_strategy, "strategies"):
+            return {
+                "freqai_active": False,
+                "reason": "Active strategy is not an ensemble",
+                "models": [],
+                "last_success_at": (
+                    latest_success.finished_at.isoformat()
+                    if latest_success and latest_success.finished_at
+                    else None
+                ),
+                "reload_status": (
+                    training_snapshot.current_job.reload_status
+                    if training_snapshot.current_job is not None
+                    else (
+                        training_snapshot.last_job.reload_status
+                        if training_snapshot.last_job is not None
+                        else None
+                    )
+                ),
+                "current_job_id": (
+                    training_snapshot.current_job.job_id
+                    if training_snapshot.current_job is not None
+                    else None
+                ),
+            }
+
+        models = []
+        for strategy, weight, name in active_strategy.strategies:
+            if not hasattr(strategy, "model_trained"):
+                continue
+
+            model_info = {
+                "name": name,
+                "type": type(strategy).__name__,
+                "weight": weight,
+                "trained": getattr(strategy, "model_trained", False),
+                "feature_count": len(getattr(strategy, "feature_columns", [])),
+            }
+
+            models_dir = self._resolve_models_dir()
+            if os.path.exists(models_dir):
+                model_files = [
+                    f for f in os.listdir(models_dir) if f.endswith("_freqai.joblib")
+                ]
+                if model_files:
+                    newest = max(
+                        model_files,
+                        key=lambda f: os.path.getmtime(os.path.join(models_dir, f)),
+                    )
+                    mtime = os.path.getmtime(os.path.join(models_dir, newest))
+                    model_info["last_trained"] = datetime.fromtimestamp(
+                        mtime
+                    ).isoformat()
+                    age_hours = (datetime.now().timestamp() - mtime) / 3600
+                    model_info["age_hours"] = round(age_hours, 1)
+                    model_info["stale"] = age_hours > 48
+
+            if hasattr(strategy, "ml_model") and strategy.ml_model is not None:
+                if hasattr(strategy.ml_model, "feature_importances_"):
+                    cols = getattr(strategy, "feature_columns", [])
+                    importances = strategy.ml_model.feature_importances_
+                    if len(cols) == len(importances):
+                        top = sorted(
+                            zip(cols, importances), key=lambda x: x[1], reverse=True
+                        )[:5]
+                        model_info["top_features"] = [
+                            {"name": n, "importance": round(float(v), 4)}
+                            for n, v in top
+                        ]
+
+            models.append(model_info)
+
+        any_trained = any(model["trained"] for model in models)
+        return {
+            "freqai_active": any_trained,
+            "models": models,
+            "last_success_at": (
+                latest_success.finished_at.isoformat()
+                if latest_success and latest_success.finished_at
+                else None
+            ),
+            "reload_status": (
+                training_snapshot.current_job.reload_status
+                if training_snapshot.current_job is not None
+                else (
+                    training_snapshot.last_job.reload_status
+                    if training_snapshot.last_job is not None
+                    else None
+                )
+            ),
+            "current_job_id": (
+                training_snapshot.current_job.job_id
+                if training_snapshot.current_job is not None
+                else None
+            ),
+        }
+
     # ------------------------------------------------------------------
     # Strategy loading
     # ------------------------------------------------------------------
@@ -1004,39 +1125,90 @@ class AkibaCryptoBot:
         Load pre-trained FreqAI models from the models/ directory.
         These are produced by scripts/train_models.py (run via GitHub Actions).
         """
-        active_strategy = self.strategy_manager.get_active_strategy()
-
-        if hasattr(active_strategy, "load_models"):
-            models_dir = os.path.join(
-                os.path.dirname(os.path.dirname(__file__)), "models"
+        models_dir = self._resolve_models_dir()
+        try:
+            loaded = self.reload_freqai_models(models_dir=models_dir)
+        except RuntimeError:
+            self.logger.warning(
+                "🧠 FreqAI is INACTIVE: no pre-trained models found. "
+                "Ensemble will rely on momentum signals only."
             )
-            if not os.path.exists(models_dir):
-                models_dir = "models"  # fallback to relative path
+            return
+        self.logger.info(f"🧠 FreqAI is ACTIVE: {loaded} pre-trained model(s) loaded")
 
-            loaded = active_strategy.load_models(models_dir)
-            if loaded > 0:
-                self.logger.info(
-                    f"🧠 FreqAI is ACTIVE: {loaded} pre-trained model(s) loaded"
-                )
-            else:
-                self.logger.warning(
-                    "🧠 FreqAI is INACTIVE: no pre-trained models found. "
-                    "Ensemble will rely on momentum signals only."
-                )
+    def _resolve_models_dir(self) -> str:
+        models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "models")
+        if not os.path.exists(models_dir):
+            return "models"
+        return models_dir
+
+    def _reset_freqai_models(self) -> None:
+        active_strategy = self.strategy_manager.get_active_strategy()
+        strategies = getattr(active_strategy, "strategies", ())
+        for strategy, *_ in strategies:
+            if hasattr(strategy, "ml_model"):
+                strategy.ml_model = None
+            if hasattr(strategy, "model_trained"):
+                strategy.model_trained = False
+            if hasattr(strategy, "is_model_trained"):
+                strategy.is_model_trained = False
+            if hasattr(strategy, "feature_columns"):
+                strategy.feature_columns = []
+            if hasattr(strategy, "model_expired"):
+                strategy.model_expired = False
+            if hasattr(strategy, "model_trained_at"):
+                strategy.model_trained_at = None
+
+    def reload_freqai_models(self, models_dir: str | None = None) -> int:
+        """Reload FreqAI models from disk into the active strategy."""
+
+        active_strategy = self.strategy_manager.get_active_strategy()
+        if not hasattr(active_strategy, "load_models"):
+            raise RuntimeError("freqai_not_available")
+
+        resolved_models_dir = models_dir or self._resolve_models_dir()
+        self._reset_freqai_models()
+        loaded = active_strategy.load_models(resolved_models_dir)
+        if loaded <= 0:
+            raise RuntimeError("no_trained_models_found")
+        return loaded
 
     # ------------------------------------------------------------------
     # Telegram control
     # ------------------------------------------------------------------
 
     def pause_trading(self):
-        """Pause trading (called by Telegram /stop command)."""
-        self.is_running = False
-        self.logger.info("Trading paused via Telegram command")
+        """Pause new entries while leaving the bot lifecycle running."""
+        self.trading_paused = True
+        self._sync_runtime_entry_pause()
+        self.logger.info("Trading entries paused")
 
     def resume_trading(self):
-        """Resume trading (called by Telegram /resume command)."""
-        self.is_running = True
-        self.logger.info("Trading resumed via Telegram command")
+        """Resume new entries after an operator pause."""
+        self.trading_paused = False
+        self._sync_runtime_entry_pause()
+        self.logger.info("Trading entries resumed")
+
+    async def get_training_job_status(self):
+        return await self.training_manager.get_training_job_status()
+
+    async def can_start_training(self) -> tuple[bool, str | None]:
+        return await self.training_manager.can_start_training()
+
+    async def enqueue_training_job(
+        self,
+        *,
+        requested_by: str = "system",
+        pairs: List[str] | None = None,
+        candles: int = 1000,
+        timeframe: str = "1h",
+    ):
+        return await self.training_manager.enqueue_training_job(
+            requested_by=requested_by,
+            pairs=pairs,
+            candles=candles,
+            timeframe=timeframe,
+        )
 
 
 async def main():

@@ -20,6 +20,7 @@ AkibaCryptoBot is configured via two JSON files and environment variables.
 | `AKIBA_CONFIG` | Config path for service mode | `config/config.json` |
 | `AKIBA_NO_API` | Disable API in service mode | `false` |
 | `AKIBA_DRY_RUN` | Run service in dry-run mode | `false` |
+| `AKIBA_OPERATOR_TOKEN` | Shared secret required by mutating operator endpoints such as `POST /api/model/train` | — |
 | `MAX_POSITION_SIZE` | Max portfolio fraction per trade | `0.05` |
 | `MAX_DAILY_LOSS` | Max daily loss fraction | `0.02` |
 | `STOP_LOSS_PERCENT` | Default stop-loss percentage | `0.02` |
@@ -44,6 +45,13 @@ python scripts/set_runtime_profile.py live_legacy  # live rollback
 After running the helper, review the local diff before you deploy. The helper updates `runtime.deployment_profile`, `runtime.runtime_mode`, and `runtime.shadow_mode` together so the config stays reviewable and unambiguous.
 
 The deployed server should then reflect the same values in `/api/status` through `configured_deployment_profile`, `effective_runtime_mode`, `effective_runtime_enabled`, `effective_runtime_owns_entries`, and `effective_runtime_owns_exits`.
+
+Server-side FreqAI training is guarded separately from deployment profiles:
+
+- it is allowed only when `exchange.sandbox=true`
+- trading must be paused first
+- `POST /api/model/train` requires `AKIBA_OPERATOR_TOKEN` in `X-Operator-Token`
+- training runs in a staging directory and only promotes validated artifacts into `models/`
 
 ---
 
@@ -156,6 +164,7 @@ For the full paper activation sequence, see [docs/DEPLOYMENT.md](/home/lekim/Pro
 | `data_split_parameters.random_state` | int | `42` | Random seed for reproducibility |
 | `ml_params.lookahead_period` | int | `5` | Candles ahead for target labelling |
 | `ml_params.training_data_period` | int | `1000` | Historical candles for training data |
+| `ml_params.n_jobs` | int | model default | Parallel workers for offline training. Server-triggered training overrides this to `1` to avoid starving the trading process |
 
 ### `persistence`
 

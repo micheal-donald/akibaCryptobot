@@ -404,6 +404,52 @@ Checkout exact CI-passed SHA → Rsync app files → Render runtime `.env`
 
 Handles FreqAI model re-training on schedule or manual trigger.
 
+### Server-Side Training Fallback
+
+When GitHub Actions is unavailable or rate-limited, the server can run the same training flow locally.
+
+Guardrails:
+
+- paper mode only
+- trading must be paused first
+- only one queued/running training job at a time
+- `POST /api/model/train` requires `X-Operator-Token: <AKIBA_OPERATOR_TOKEN>`
+- training runs into `models_staging/<job_id>/`
+- only validated `*_freqai.joblib` files are promoted into `models/`
+- models reload in-process; the service does not restart for a successful training refresh
+
+Recommended operator flow:
+
+1. Pause entries:
+   - `POST /api/trading/pause`
+   - or Telegram `/stop`
+2. Queue training:
+   - `POST /api/model/train`
+   - or Telegram `/train_model`
+3. Watch progress:
+   - `GET /api/model/train/status`
+   - `GET /api/model/status`
+   - or Telegram `/train_status` and `/model`
+4. Resume entries only after the job succeeds and `reload_status=reloaded`:
+   - `POST /api/trading/resume`
+   - or Telegram `/resume`
+
+Example curl:
+
+```bash
+curl -X POST http://<host>:8000/api/trading/pause
+
+curl -X POST http://<host>:8000/api/model/train \
+  -H "Content-Type: application/json" \
+  -H "X-Operator-Token: $AKIBA_OPERATOR_TOKEN" \
+  -d '{"pairs":["BTC/USDT","ETH/USDT"],"candles":1000,"timeframe":"1h"}'
+
+curl http://<host>:8000/api/model/train/status
+curl http://<host>:8000/api/model/status
+```
+
+The pinned snapshot deploy helper now preserves the server-side `models/` directory when the deployed commit does not track model artifacts. That prevents a normal code deploy from silently disabling FreqAI after a successful local training refresh.
+
 ### GitHub Secrets Required
 
 | Secret | Description |

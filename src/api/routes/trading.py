@@ -54,11 +54,19 @@ async def get_active_trades(bot=Depends(get_bot)):
 async def pause_trading(bot=Depends(get_bot)):
     """Pause the trading engine (stops scanning for new opportunities)."""
     bot.pause_trading()
-    return {"status": "paused", "is_running": bot.is_running}
+    return {
+        "status": "paused",
+        "is_running": bot.is_running,
+        "trading_paused": getattr(bot, "trading_paused", False),
+    }
 
 
 @router.post("/trading/resume")
 async def resume_trading(bot=Depends(get_bot)):
     """Resume the trading engine."""
     bot.resume_trading()
-    return {"status": "resumed", "is_running": bot.is_running}
+    return {
+        "status": "resumed",
+        "is_running": bot.is_running,
+        "trading_paused": getattr(bot, "trading_paused", False),
+    }

@@ -43,6 +43,7 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
         self.ml_config = self.freqai_config.get("ml_params", {})
         self.lookahead_period = self.ml_config.get("lookahead_period", 5)
         self.training_data_period = self.ml_config.get("training_data_period", 1000)
+        self.training_n_jobs = int(self.ml_config.get("n_jobs", -1))
         self.feature_columns = []
 
         # Initialize ML model
@@ -194,13 +195,16 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
                     max_depth=10,
                     random_state=42,
                     verbose=-1,  # Suppress output
-                    n_jobs=-1,
+                    n_jobs=self.training_n_jobs,
                     importance_type="gain",
                 )
                 logger.info("Using LightGBM classifier (10x faster than RandomForest)")
             elif model_type in ["randomforest", "rf"]:
                 self.ml_model = RandomForestClassifier(
-                    n_estimators=100, max_depth=10, random_state=42, n_jobs=-1
+                    n_estimators=100,
+                    max_depth=10,
+                    random_state=42,
+                    n_jobs=self.training_n_jobs,
                 )
                 logger.info("Using RandomForest classifier")
             else:
@@ -211,6 +215,7 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
                     num_leaves=31,
                     random_state=42,
                     verbose=-1,
+                    n_jobs=self.training_n_jobs,
                 )
                 logger.info(
                     f"Unknown model type '{model_type}', defaulting to LightGBM"

@@ -3,6 +3,13 @@ from datetime import datetime, timezone
 import pytest
 
 from notifications.telegram_bot import TelegramNotifier
+from operations.training_jobs import (
+    TRAINING_JOB_QUEUED,
+    TRAINING_JOB_RUNNING,
+    TRAINING_JOB_SUCCEEDED,
+    TrainingJobRecord,
+    TrainingJobSnapshot,
+)
 from runtime.view_models import (
     ProjectedPositionView,
     ProjectionSource,
@@ -48,6 +55,44 @@ class FakePerformanceTracker:
             "current_drawdown_percent": 0.5,
             "open_trades_count": 7,
         }
+
+
+class FakeTrainingStore:
+    def __init__(self, snapshot=None, enqueue_result=None):
+        self.snapshot = snapshot
+        self.enqueue_result = enqueue_result
+        self.enqueued_requests = []
+
+    async def get_training_job_status(self):
+        return self.snapshot
+
+    async def enqueue_training_job(self, request):
+        self.enqueued_requests.append(request)
+        return self.enqueue_result
+
+
+class FakeStrategyComponent:
+    def __init__(self):
+        self.model_trained = True
+        self.feature_columns = ["%-rsi", "%-macd"]
+        self.ml_model = type(
+            "FakeModel",
+            (),
+            {"feature_importances_": [0.8, 0.2]},
+        )()
+
+
+class FakeEnsembleStrategy:
+    def __init__(self):
+        self.strategies = [(FakeStrategyComponent(), 0.6, "freqai")]
+
+
+class FakeStrategyManager:
+    def __init__(self):
+        self._active_strategy = FakeEnsembleStrategy()
+
+    def get_active_strategy(self):
+        return self._active_strategy
 
 
 def make_projection(
@@ -102,9 +147,11 @@ class FakeBot:
         self._projection = projection
         self.trade_store = object()
         self.performance_tracker = FakePerformanceTracker()
+        self.strategy_manager = FakeStrategyManager()
         self._configured_deployment_profile = configured_deployment_profile
         self.config = {"exchange": {"sandbox": trading_mode != "live"}}
         self._trading_mode = trading_mode
+        self.is_running = False
 
     def get_status_info(self):
         return {
@@ -142,6 +189,54 @@ class FakeBot:
         }
 
 
+class TrainingBot:
+    def __init__(
+        self,
+        *,
+        trading_mode: str = "paper",
+        is_running: bool = False,
+        snapshot=None,
+        enqueue_result=None,
+    ):
+        self.config = {
+            "exchange": {"sandbox": trading_mode != "live"},
+            "trading": {"pairs": ["BTC/USDT", "ETH/USDT"]},
+            "freqai": {"ml_params": {"training_data_period": 1200}},
+        }
+        self.is_running = is_running
+        self.trade_store = FakeTrainingStore(
+            snapshot=snapshot, enqueue_result=enqueue_result
+        )
+        self.strategy_manager = FakeStrategyManager()
+
+    def get_status_info(self):
+        return {
+            "active_trades": 0,
+            "daily_pnl": 0.0,
+            "uptime": "0:00:10",
+            "trading_mode": "paper" if self.config["exchange"]["sandbox"] else "live",
+        }
+
+    def get_runtime_projection(self):
+        return make_projection(
+            source=ProjectionSource.LEGACY,
+            runtime_mode="legacy",
+        )
+
+    def get_runtime_visibility_info(self):
+        return {
+            "configured_deployment_profile": "paper_legacy",
+            "effective_runtime_mode": "legacy",
+            "effective_runtime_enabled": False,
+            "effective_runtime_owns_entries": False,
+            "effective_runtime_owns_exits": False,
+            "runtime_mode_source": "legacy_default",
+        }
+
+    def get_active_trades(self):
+        return {}
+
+
 @pytest.mark.asyncio
 async def test_cmd_status_uses_runtime_projection_counts():
     notifier = TelegramNotifier(bot_token="token", chat_id="chat")
@@ -170,6 +265,40 @@ async def test_cmd_status_uses_runtime_projection_counts():
 
 
 @pytest.mark.asyncio
+async def test_cmd_status_includes_current_training_job():
+    job = TrainingJobRecord(
+        job_id="job-1",
+        status=TRAINING_JOB_RUNNING,
+        requested_by="telegram",
+        pairs=("BTC/USDT",),
+        candles=1200,
+        timeframe="1h",
+        progress=42.0,
+        result_summary=None,
+        error=None,
+        reload_status=None,
+    )
+    snapshot = TrainingJobSnapshot(
+        current_job=job,
+        last_job=job,
+        can_start_training=False,
+        active_job_count=1,
+    )
+
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = TrainingBot(snapshot=snapshot)
+    update = FakeUpdate()
+
+    await notifier.cmd_status(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "Training Job" in message
+    assert "Status: running" in message
+    assert "Requested By: telegram" in message
+    assert "Progress: 42%" in message
+
+
+@pytest.mark.asyncio
 async def test_cmd_trades_uses_runtime_projected_positions():
     notifier = TelegramNotifier(bot_token="token", chat_id="chat")
     notifier.bot_instance = FakeBot(
@@ -189,6 +318,200 @@ async def test_cmd_trades_uses_runtime_projected_positions():
     assert "Rollout Environment: paper" in message
     assert "Rollout Health: promotion_ready" in message
     assert "Rollout Recommended Action: stay_runtime_primary" in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_model_uses_model_snapshot_and_training_status(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    models_dir = tmp_path / "models"
+    models_dir.mkdir()
+    (models_dir / "BTC_USDT_freqai.joblib").write_text("stub")
+
+    job = TrainingJobRecord(
+        job_id="job-2",
+        status=TRAINING_JOB_SUCCEEDED,
+        requested_by="api",
+        pairs=("BTC/USDT", "ETH/USDT"),
+        candles=1000,
+        timeframe="1h",
+        progress=100.0,
+        result_summary="Reloaded",
+        error=None,
+        reload_status="reloaded",
+    )
+    snapshot = TrainingJobSnapshot(
+        current_job=None,
+        last_job=job,
+        can_start_training=True,
+        active_job_count=0,
+    )
+
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = TrainingBot(snapshot=snapshot)
+    update = FakeUpdate()
+
+    await notifier.cmd_model(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "🧠 Model Status" in message
+    assert "Model: freqai" in message
+    assert "Trained: yes" in message
+    assert "Top Features: %-rsi" in message
+    assert "Last Training Job" in message
+    assert "Status: succeeded" in message
+    assert "Reload Status: reloaded" in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_train_model_queues_job_with_defaults_when_paused():
+    job = TrainingJobRecord(
+        job_id="job-3",
+        status=TRAINING_JOB_QUEUED,
+        requested_by="telegram",
+        pairs=("BTC/USDT",),
+        candles=1500,
+        timeframe="4h",
+    )
+    snapshot = TrainingJobSnapshot(
+        current_job=job,
+        last_job=job,
+        can_start_training=False,
+        active_job_count=1,
+    )
+
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = TrainingBot(
+        snapshot=snapshot,
+        is_running=False,
+        enqueue_result=job,
+    )
+    update = FakeUpdate()
+
+    context = type(
+        "Context", (), {"args": ["BTC/USDT", "candles=1500", "timeframe=4h"]}
+    )()
+    await notifier.cmd_train_model(update, context)
+
+    message = update.message.calls[0]["text"]
+    assert "Training job queued successfully." in message
+    assert "Job ID: job-3" in message
+    assert "Requested By: telegram" in message
+    assert "Pairs: BTC/USDT" in message
+    assert "Timeframe: 4h" in message
+    assert "Candles: 1500" in message
+    assert (
+        notifier.bot_instance.trade_store.enqueued_requests[0]["requested_by"]
+        == "telegram"
+    )
+
+
+@pytest.mark.asyncio
+async def test_cmd_train_model_rejects_when_bot_is_running():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = TrainingBot(is_running=True)
+    update = FakeUpdate()
+    context = type("Context", (), {"args": []})()
+
+    await notifier.cmd_train_model(update, context)
+
+    message = update.message.calls[0]["text"]
+    assert "Pause trading before starting model training." in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_train_status_reports_current_job():
+    job = TrainingJobRecord(
+        job_id="job-4",
+        status=TRAINING_JOB_RUNNING,
+        requested_by="api",
+        pairs=("BNB/USDT",),
+        candles=900,
+        timeframe="30m",
+        progress=55.0,
+    )
+    snapshot = TrainingJobSnapshot(
+        current_job=job,
+        last_job=job,
+        can_start_training=False,
+        active_job_count=1,
+    )
+
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = TrainingBot(snapshot=snapshot)
+    update = FakeUpdate()
+    context = type("Context", (), {"args": []})()
+
+    await notifier.cmd_train_status(update, context)
+
+    message = update.message.calls[0]["text"]
+    assert "🧠 Training Control" in message
+    assert "Can Start Training: no" in message
+    assert "Active Jobs: 1" in message
+    assert "Current Job" in message
+    assert "Status: running" in message
+
+
+@pytest.mark.asyncio
+async def test_send_trade_notification_uses_directional_icons():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    messages = []
+
+    async def fake_send_message(message, parse_mode=None):
+        messages.append(message)
+        return True
+
+    notifier.send_message = fake_send_message
+
+    await notifier.send_trade_notification(
+        {
+            "action": "entry",
+            "symbol": "BTC/USDT",
+            "side": "buy",
+            "amount": 0.25,
+            "price": 65000.0,
+        }
+    )
+    await notifier.send_trade_notification(
+        {
+            "action": "exit",
+            "symbol": "BTC/USDT",
+            "side": "sell",
+            "amount": 0.25,
+            "price": 66000.0,
+            "pnl": 250.0,
+            "reason": "take_profit",
+        }
+    )
+
+    assert "🟢⬆️ NEW LONG ENTRY" in messages[0]
+    assert "✅📈 CLOSED SELL TRADE" in messages[1]
+
+
+@pytest.mark.asyncio
+async def test_send_training_notification_uses_training_icons():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    messages = []
+
+    async def fake_send_message(message, parse_mode=None):
+        messages.append(message)
+        return True
+
+    notifier.send_message = fake_send_message
+
+    await notifier.send_training_notification(
+        {
+            "job_id": "job-5",
+            "status": "running",
+            "requested_by": "telegram",
+            "pairs": ["BTC/USDT"],
+            "candles": 1200,
+            "timeframe": "1h",
+            "progress": 37.5,
+        }
+    )
+
+    assert "🧠⚙️ TRAINING JOB RUNNING" in messages[0]
+    assert "Progress: 38%" in messages[0]
 
 
 @pytest.mark.asyncio

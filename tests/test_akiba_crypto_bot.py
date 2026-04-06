@@ -75,6 +75,7 @@ def bot_fixture(sample_config):
     bot.telegram = None
     bot.active_trades = {}
     bot.is_running = False
+    bot.trading_paused = False
     bot.start_time = datetime.now()
     bot.session_id = None
     bot.last_update = datetime.now()
@@ -89,6 +90,9 @@ def bot_fixture(sample_config):
     bot._cleanup_future = None
     bot.performance_tracker = MagicMock()
     bot.performance_tracker.record_trade_exit = AsyncMock()
+    bot.runtime_config = None
+    bot.runtime_handle = None
+    bot.runtime_app = None
     bot.position_manager = PositionManager(bot)
     bot.opportunity_scanner = OpportunityScanner(bot)
     return bot

@@ -11,13 +11,14 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
-| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, circuit breaker state, strategy, trading mode |
+| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, circuit breaker state, training job state, strategy, trading mode |
 | `GET` | `/api/reconcile` | Manually triggers a reconciliation check between DB and Exchange |
 
 **Example response** (`GET /api/status`):
 ```json
 {
   "is_running": true,
+  "trading_paused": false,
   "uptime": "2h 15m",
   "active_trades": 2,
   "circuit_breaker_active": false,
@@ -87,6 +88,27 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
     ],
     "native_shadow_summary": "Native shadow diverges from Python runtime."
   },
+  "training_job": {
+    "current_job": null,
+    "last_job": {
+      "job_id": "job-12",
+      "status": "succeeded",
+      "requested_by": "telegram",
+      "requested_at": "2024-01-15T09:30:00+00:00",
+      "started_at": "2024-01-15T09:30:01+00:00",
+      "finished_at": "2024-01-15T09:36:18+00:00",
+      "pairs": ["BTC/USDT", "ETH/USDT"],
+      "candles": 1000,
+      "timeframe": "1h",
+      "progress": 100.0,
+      "result_summary": "Training finished successfully (1 model(s) reloaded).",
+      "error": null,
+      "promoted_model_paths": ["models/BTC_USDT_freqai.joblib", "models/ETH_USDT_freqai.joblib"],
+      "reload_status": "reloaded"
+    },
+    "can_start_training": true,
+    "active_job_count": 0
+  },
   "runtime_is_healthy": true,
   "rollout_environment": "paper",
   "rollout_stage": "primary",
@@ -117,8 +139,8 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/trades` | All currently open positions with entry prices |
-| `POST` | `/api/trading/pause` | Pause the trading engine (stops scanning for new trades) |
-| `POST` | `/api/trading/resume` | Resume the trading engine |
+| `POST` | `/api/trading/pause` | Pause new entries while leaving the bot lifecycle, exits, and API online |
+| `POST` | `/api/trading/resume` | Resume new entries |
 
 **Example response** (`GET /api/trades`):
 ```json
@@ -196,12 +218,17 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/model/status` | FreqAI model info: age, staleness, feature count, top features |
+| `GET` | `/api/model/status` | FreqAI model info: age, staleness, feature count, top features, last successful training, reload state |
+| `GET` | `/api/model/train/status` | Current and last server-side training job state |
+| `POST` | `/api/model/train` | Queue a server-side FreqAI training job. Requires `X-Operator-Token`, paper mode, and paused trading |
 
 **Example response:**
 ```json
 {
   "freqai_active": true,
+  "last_success_at": "2024-01-15T09:36:18+00:00",
+  "reload_status": "reloaded",
+  "current_job_id": null,
   "models": [
     {
       "name": "MLFreqAIStrategy",
@@ -220,6 +247,73 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   ]
 }
 ```
+
+**Example response** (`GET /api/model/train/status`):
+```json
+{
+  "current_job": {
+    "job_id": "job-13",
+    "status": "running",
+    "requested_by": "api",
+    "requested_at": "2024-01-15T10:00:00+00:00",
+    "started_at": "2024-01-15T10:00:01+00:00",
+    "finished_at": null,
+    "pairs": ["BTC/USDT"],
+    "candles": 1200,
+    "timeframe": "1h",
+    "progress": 42.0,
+    "result_summary": "Training subprocess is running.",
+    "error": null,
+    "promoted_model_paths": [],
+    "reload_status": "training"
+  },
+  "last_job": {
+    "job_id": "job-12",
+    "status": "succeeded",
+    "requested_by": "telegram",
+    "requested_at": "2024-01-15T09:30:00+00:00",
+    "started_at": "2024-01-15T09:30:01+00:00",
+    "finished_at": "2024-01-15T09:36:18+00:00",
+    "pairs": ["BTC/USDT", "ETH/USDT"],
+    "candles": 1000,
+    "timeframe": "1h",
+    "progress": 100.0,
+    "result_summary": "Training finished successfully (1 model(s) reloaded).",
+    "error": null,
+    "promoted_model_paths": ["models/BTC_USDT_freqai.joblib", "models/ETH_USDT_freqai.joblib"],
+    "reload_status": "reloaded"
+  },
+  "can_start_training": false,
+  "active_job_count": 1,
+  "start_blocker": "training_job_already_active"
+}
+```
+
+**Request body** (`POST /api/model/train`):
+```json
+{
+  "pairs": ["BTC/USDT", "ETH/USDT"],
+  "candles": 1000,
+  "timeframe": "1h"
+}
+```
+
+**Headers**
+
+| Header | Required | Meaning |
+|---|---|---|
+| `X-Operator-Token` | yes | Shared secret from `AKIBA_OPERATOR_TOKEN` |
+
+**Rejection reasons**
+
+| HTTP | `detail` |
+|---|---|
+| `403` | `operator_token_invalid` |
+| `503` | `operator_token_not_configured` |
+| `409` | `training_not_allowed_in_live` |
+| `409` | `trading_must_be_paused` |
+| `409` | `training_job_already_active` |
+| `409` | `freqai_not_available` |
 
 ---
 
@@ -305,7 +399,7 @@ The runtime emits counters with stable names so operators can tell backlog from 
 | Endpoint | Push Interval | Description |
 |---|---|---|
 | `ws://<host>:<port>/ws/prices` | 1 second | Real-time price ticks from the Binance exchange cache |
-| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with deployment profile, effective runtime mode, ownership, and projection metadata |
+| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with deployment profile, effective runtime mode, ownership, training-job state, and projection metadata |
 
 **Message format** (`/ws/prices`):
 ```json

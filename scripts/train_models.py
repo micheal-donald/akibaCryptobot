@@ -18,7 +18,6 @@ import argparse
 import json
 import logging
 import asyncio
-from datetime import datetime
 
 # Add src directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
@@ -73,6 +72,12 @@ def parse_args():
         action="store_true",
         default=False,
         help="Use binance.us API (for US-based CI runners)",
+    )
+    parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=None,
+        help="Override the ML model training parallelism (default: config value)",
     )
     return parser.parse_args()
 
@@ -164,11 +169,18 @@ def main():
     with open(args.config, "r") as f:
         config = json.load(f)
 
+    if args.n_jobs is not None:
+        freqai_config = config.setdefault("freqai", {})
+        ml_params = freqai_config.setdefault("ml_params", {})
+        ml_params["n_jobs"] = int(args.n_jobs)
+
     # Determine pairs
     pairs = args.pairs or config.get("trading", {}).get("pairs", ["BTC/USDT"])
     logger.info(f"Training for pairs: {pairs}")
     logger.info(f"Candles: {args.candles}, Timeframe: {args.timeframe}")
     logger.info(f"Output directory: {args.output_dir}")
+    if args.n_jobs is not None:
+        logger.info(f"Training parallelism override: {args.n_jobs}")
 
     # Run training
     results = asyncio.run(

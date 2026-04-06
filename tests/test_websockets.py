@@ -5,6 +5,7 @@ from fastapi import WebSocketDisconnect
 
 from api.dependencies import bot_state
 from api.websockets import ws_status
+from operations.training_jobs import TrainingJobRecord, TrainingJobSnapshot
 from runtime.view_models import (
     ProjectedPositionView,
     ProjectionSource,
@@ -36,10 +37,17 @@ class FakeStatusBot:
         configured_deployment_profile=None,
         trading_mode="paper",
         native_shadow_report=None,
+        training_snapshot=None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
         self._native_shadow_report = native_shadow_report
+        self._training_snapshot = training_snapshot or TrainingJobSnapshot(
+            current_job=None,
+            last_job=None,
+            can_start_training=True,
+            active_job_count=0,
+        )
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self.strategy_manager = type(
@@ -53,6 +61,7 @@ class FakeStatusBot:
             "daily_pnl": 12.34,
             "uptime": "0:10:00",
             "is_running": True,
+            "trading_paused": False,
             "trading_mode": self._trading_mode,
         }
 
@@ -113,6 +122,9 @@ class FakeStatusBot:
             ),
         }
 
+    async def get_training_job_status(self):
+        return self._training_snapshot
+
 
 def make_projection(
     *, source: ProjectionSource, runtime_mode: str
@@ -156,6 +168,14 @@ def make_projection(
 
 @pytest.mark.asyncio
 async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
+    job = TrainingJobRecord(
+        job_id="job-ws",
+        status="queued",
+        requested_by="api",
+        pairs=("BTC/USDT",),
+        candles=1000,
+        timeframe="1h",
+    )
     monkeypatch.setitem(
         bot_state,
         "bot",
@@ -165,6 +185,12 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
                 runtime_mode="runtime_primary",
             ),
             configured_deployment_profile="paper_runtime_primary",
+            training_snapshot=TrainingJobSnapshot(
+                current_job=job,
+                last_job=job,
+                can_start_training=False,
+                active_job_count=1,
+            ),
         ),
     )
     websocket = FakeWebSocket()
@@ -197,6 +223,8 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
     assert data["projected_rejected_orders"] == 1
     assert data["strategy"] == "ensemble"
     assert data["trading_mode"] == "paper"
+    assert data["training_job"]["current_job"]["job_id"] == "job-ws"
+    assert data["training_job"]["current_job"]["status"] == "queued"
 
 
 @pytest.mark.asyncio

@@ -45,6 +45,17 @@ def _inject_native_shadow_report(status_info, bot):
     return status_info
 
 
+async def _inject_training_job(status_info, bot):
+    training_getter = getattr(bot, "get_training_job_status", None)
+    if not callable(training_getter):
+        status_info["training_job"] = None
+        return status_info
+
+    snapshot = await training_getter()
+    status_info["training_job"] = snapshot.to_dict()
+    return status_info
+
+
 @router.get("/health")
 async def health_check():
     """Liveness probe ? always returns OK if the server is up."""
@@ -58,6 +69,7 @@ async def get_status(bot=Depends(get_bot)):
     _inject_runtime_visibility(status_info, bot)
     _inject_runtime_telemetry(status_info, bot)
     _inject_native_shadow_report(status_info, bot)
+    await _inject_training_job(status_info, bot)
     projection = bot.get_runtime_projection()
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active
     status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason

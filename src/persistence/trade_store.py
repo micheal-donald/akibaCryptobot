@@ -5,12 +5,29 @@ Replaces the in-memory ``self.active_trades = {}`` dictionary so that
 open positions survive bot restarts and crashes.
 """
 
+from __future__ import annotations
+
+import asyncio
+import json
 import os
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
+from uuid import uuid4
 
 import aiosqlite
+
+from operations.training_jobs import (
+    ACTIVE_TRAINING_JOB_STATUSES,
+    TRAINING_JOB_BLOCKED,
+    TRAINING_JOB_FAILED,
+    TRAINING_JOB_QUEUED,
+    TRAINING_JOB_RUNNING,
+    TRAINING_JOB_SUCCEEDED,
+    TrainingJobRecord,
+    TrainingJobRequest,
+    TrainingJobSnapshot,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +71,25 @@ CREATE TABLE IF NOT EXISTS portfolio_history (
 )
 """
 
+CREATE_TRAINING_JOBS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS model_training_jobs (
+    job_id              TEXT    PRIMARY KEY,
+    status              TEXT    NOT NULL,
+    requested_by        TEXT    NOT NULL,
+    requested_at        INTEGER NOT NULL,
+    started_at          INTEGER,
+    finished_at         INTEGER,
+    pairs               TEXT    NOT NULL,
+    candles             INTEGER NOT NULL,
+    timeframe           TEXT    NOT NULL,
+    progress            REAL    NOT NULL DEFAULT 0.0,
+    result_summary      TEXT,
+    error               TEXT,
+    promoted_model_paths TEXT,
+    reload_status       TEXT
+)
+"""
+
 
 class TradeStore:
     """Thin async wrapper around an SQLite database for trade persistence."""
@@ -61,6 +97,7 @@ class TradeStore:
     def __init__(self, db_path: str = "data/trades.db"):
         self.db_path = db_path
         self._db: Optional[aiosqlite.Connection] = None
+        self._training_job_lock: asyncio.Lock | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -74,12 +111,16 @@ class TradeStore:
         await self._db.execute(CREATE_TABLE_SQL)
         await self._db.execute(CREATE_SESSIONS_TABLE_SQL)
         await self._db.execute(CREATE_PORTFOLIO_HISTORY_TABLE_SQL)
+        await self._db.execute(CREATE_TRAINING_JOBS_TABLE_SQL)
         # Time-series optimizations: indices for fast range scans and filtering
         await self._db.execute(
             "CREATE INDEX IF NOT EXISTS idx_trades_status_exit ON trades(status, exit_timestamp);"
         )
         await self._db.execute(
             "CREATE INDEX IF NOT EXISTS idx_trades_status_symbol ON trades(status, symbol);"
+        )
+        await self._db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_training_jobs_status_requested_at ON model_training_jobs(status, requested_at);"
         )
         await self._db.commit()
         logger.info(f"TradeStore initialised → {self.db_path}")
@@ -109,6 +150,309 @@ class TradeStore:
         elif isinstance(ts, (int, float)):
             return datetime.fromtimestamp(ts)
         return datetime.now()
+
+    @staticmethod
+    def _serialize_json(values: Sequence[str]) -> str:
+        return json.dumps(list(values))
+
+    @staticmethod
+    def _deserialize_json(values: str | None) -> tuple[str, ...]:
+        if not values:
+            return ()
+        try:
+            decoded = json.loads(values)
+        except json.JSONDecodeError:
+            return ()
+        if not isinstance(decoded, list):
+            return ()
+        return tuple(str(value) for value in decoded if str(value))
+
+    @staticmethod
+    def _timestamp_or_none(value: int | float | None) -> datetime | None:
+        if value is None:
+            return None
+        return datetime.fromtimestamp(value)
+
+    def _training_job_mutex(self) -> asyncio.Lock:
+        if self._training_job_lock is None:
+            self._training_job_lock = asyncio.Lock()
+        return self._training_job_lock
+
+    async def _fetch_training_job_row(
+        self, query: str, params: Sequence[object] = ()
+    ) -> Optional[aiosqlite.Row]:
+        cursor = await self._db.execute(query, params)
+        return await cursor.fetchone()
+
+    def _row_to_training_job(
+        self, row: aiosqlite.Row | None
+    ) -> TrainingJobRecord | None:
+        if row is None:
+            return None
+        return TrainingJobRecord(
+            job_id=row["job_id"],
+            status=row["status"],
+            requested_by=row["requested_by"],
+            requested_at=self._timestamp_or_none(row["requested_at"]),
+            started_at=self._timestamp_or_none(row["started_at"]),
+            finished_at=self._timestamp_or_none(row["finished_at"]),
+            pairs=self._deserialize_json(row["pairs"]),
+            candles=row["candles"],
+            timeframe=row["timeframe"],
+            progress=row["progress"],
+            result_summary=row["result_summary"],
+            error=row["error"],
+            promoted_model_paths=self._deserialize_json(row["promoted_model_paths"]),
+            reload_status=row["reload_status"],
+        )
+
+    async def get_latest_training_job(self) -> TrainingJobRecord | None:
+        """Return the most recent training job, if one exists."""
+        row = await self._fetch_training_job_row(
+            """
+            SELECT *
+              FROM model_training_jobs
+          ORDER BY requested_at DESC, rowid DESC
+             LIMIT 1
+            """
+        )
+        return self._row_to_training_job(row)
+
+    async def get_latest_successful_training_job(self) -> TrainingJobRecord | None:
+        """Return the most recent successful training job, if one exists."""
+        row = await self._fetch_training_job_row(
+            """
+            SELECT *
+              FROM model_training_jobs
+             WHERE status = ?
+          ORDER BY finished_at DESC, requested_at DESC, rowid DESC
+             LIMIT 1
+            """,
+            (TRAINING_JOB_SUCCEEDED,),
+        )
+        return self._row_to_training_job(row)
+
+    async def get_active_training_job(self) -> TrainingJobRecord | None:
+        """Return the active queued/running training job, if one exists."""
+        row = await self._fetch_training_job_row(
+            """
+            SELECT *
+              FROM model_training_jobs
+             WHERE status IN (?, ?)
+          ORDER BY requested_at DESC, rowid DESC
+             LIMIT 1
+            """,
+            tuple(ACTIVE_TRAINING_JOB_STATUSES),
+        )
+        return self._row_to_training_job(row)
+
+    async def can_start_training(self) -> bool:
+        """Return True when no queued/running training job exists."""
+        return (await self.get_active_training_job()) is None
+
+    async def get_training_job_status(self) -> TrainingJobSnapshot:
+        """Return a snapshot of the current and most recent training jobs."""
+        current_job = await self.get_active_training_job()
+        last_job = await self.get_latest_training_job()
+        return TrainingJobSnapshot(
+            current_job=current_job,
+            last_job=last_job,
+            can_start_training=current_job is None,
+            active_job_count=1 if current_job is not None else 0,
+        )
+
+    async def enqueue_training_job(
+        self,
+        request: TrainingJobRequest | Dict[str, object],
+        *,
+        job_id: str | None = None,
+    ) -> TrainingJobRecord:
+        """Create a queued training job or persist a blocked request."""
+        if isinstance(request, dict):
+            request = TrainingJobRequest(
+                pairs=tuple(request.get("pairs", ()) or ()),
+                candles=request.get("candles", 1000),
+                timeframe=request.get("timeframe", "1h"),
+                requested_by=request.get("requested_by", "system"),
+            )
+
+        async with self._training_job_mutex():
+            active_job = await self.get_active_training_job()
+            record = TrainingJobRecord(
+                job_id=job_id or uuid4().hex,
+                status=(
+                    TRAINING_JOB_QUEUED if active_job is None else TRAINING_JOB_BLOCKED
+                ),
+                requested_by=request.requested_by,
+                requested_at=datetime.now(),
+                pairs=request.pairs,
+                candles=request.candles,
+                timeframe=request.timeframe,
+                progress=0.0,
+                result_summary=(
+                    "Queued for execution"
+                    if active_job is None
+                    else f"Blocked by active training job {active_job.job_id}"
+                ),
+                error=(
+                    None
+                    if active_job is None
+                    else f"training job {active_job.job_id} is already {active_job.status}"
+                ),
+                reload_status="pending" if active_job is None else "blocked",
+            )
+            await self._db.execute(
+                """
+                INSERT INTO model_training_jobs (
+                    job_id,
+                    status,
+                    requested_by,
+                    requested_at,
+                    started_at,
+                    finished_at,
+                    pairs,
+                    candles,
+                    timeframe,
+                    progress,
+                    result_summary,
+                    error,
+                    promoted_model_paths,
+                    reload_status
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.job_id,
+                    record.status,
+                    record.requested_by,
+                    (
+                        int(record.requested_at.timestamp())
+                        if record.requested_at
+                        else None
+                    ),
+                    None,
+                    None,
+                    self._serialize_json(record.pairs),
+                    record.candles,
+                    record.timeframe,
+                    record.progress,
+                    record.result_summary,
+                    record.error,
+                    self._serialize_json(record.promoted_model_paths),
+                    record.reload_status,
+                ),
+            )
+            await self._db.commit()
+            return record
+
+    async def update_training_job(
+        self,
+        job_id: str,
+        *,
+        status: str | None = None,
+        progress: float | None = None,
+        result_summary: str | None = None,
+        error: str | None = None,
+        promoted_model_paths: Sequence[str] | None = None,
+        reload_status: str | None = None,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+    ) -> TrainingJobRecord | None:
+        """Update an existing training job and return the refreshed row."""
+        async with self._training_job_mutex():
+            updates: list[str] = []
+            params: list[object] = []
+            if status is not None:
+                updates.append("status = ?")
+                params.append(status)
+            if progress is not None:
+                updates.append("progress = ?")
+                params.append(float(progress))
+            if result_summary is not None:
+                updates.append("result_summary = ?")
+                params.append(result_summary)
+            if error is not None:
+                updates.append("error = ?")
+                params.append(error)
+            if promoted_model_paths is not None:
+                updates.append("promoted_model_paths = ?")
+                params.append(self._serialize_json(tuple(promoted_model_paths)))
+            if reload_status is not None:
+                updates.append("reload_status = ?")
+                params.append(reload_status)
+            if started_at is not None:
+                updates.append("started_at = ?")
+                params.append(int(started_at.timestamp()))
+            if finished_at is not None:
+                updates.append("finished_at = ?")
+                params.append(int(finished_at.timestamp()))
+
+            if not updates:
+                return await self.get_latest_training_job()
+
+            params.append(job_id)
+            await self._db.execute(
+                f"""
+                UPDATE model_training_jobs
+                   SET {", ".join(updates)}
+                 WHERE job_id = ?
+                """,
+                tuple(params),
+            )
+            await self._db.commit()
+            return await self.get_training_job_by_id(job_id)
+
+    async def get_training_job_by_id(self, job_id: str) -> TrainingJobRecord | None:
+        """Return a training job by id."""
+        row = await self._fetch_training_job_row(
+            "SELECT * FROM model_training_jobs WHERE job_id = ? LIMIT 1",
+            (job_id,),
+        )
+        return self._row_to_training_job(row)
+
+    async def mark_training_job_running(self, job_id: str) -> TrainingJobRecord | None:
+        """Mark a queued job as running."""
+        return await self.update_training_job(
+            job_id,
+            status=TRAINING_JOB_RUNNING,
+            started_at=datetime.now(),
+            reload_status="running",
+        )
+
+    async def mark_training_job_succeeded(
+        self,
+        job_id: str,
+        *,
+        promoted_model_paths: Sequence[str] | None = None,
+        result_summary: str | None = None,
+        reload_status: str = "succeeded",
+    ) -> TrainingJobRecord | None:
+        """Mark a training job as succeeded."""
+        return await self.update_training_job(
+            job_id,
+            status=TRAINING_JOB_SUCCEEDED,
+            result_summary=result_summary,
+            promoted_model_paths=promoted_model_paths,
+            reload_status=reload_status,
+            finished_at=datetime.now(),
+        )
+
+    async def mark_training_job_failed(
+        self,
+        job_id: str,
+        *,
+        error: str,
+        result_summary: str | None = None,
+        reload_status: str = "failed",
+    ) -> TrainingJobRecord | None:
+        """Mark a training job as failed."""
+        return await self.update_training_job(
+            job_id,
+            status=TRAINING_JOB_FAILED,
+            error=error,
+            result_summary=result_summary,
+            reload_status=reload_status,
+            finished_at=datetime.now(),
+        )
 
     # ------------------------------------------------------------------
     # Reads

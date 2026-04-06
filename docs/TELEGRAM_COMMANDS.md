@@ -38,6 +38,8 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 | `/status` | Bot status — uptime, active trades or projected positions, runtime mode, source-of-truth state, and rollout guidance |
 | `/config` | Current configuration summary |
 | `/reconcile` | Manual balance audit vs Exchange |
+| `/model` | Current FreqAI model health plus the latest training/reload snapshot |
+| `/train_status` | Current and last server-side training job state |
 
 ### Trading
 
@@ -45,8 +47,9 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 |---|---|
 | `/balance` | Live wallet balances from Binance |
 | `/trades` | List open positions from the active source of truth, including runtime-projected positions during runtime-owned modes |
-| `/stop` | Pause the trading engine (stops scanning for new trades) |
-| `/resume` | Resume the trading engine |
+| `/stop` | Pause new entries while leaving the bot lifecycle, exits, and API online |
+| `/resume` | Resume new entries |
+| `/train_model` | Queue a server-side FreqAI training job. Works only in paper mode while trading is paused |
 
 ### Performance
 
@@ -74,6 +77,7 @@ The bot sends these notifications automatically (when enabled in config):
 |---|---|---|
 | **Trade Entry** | A new position is opened | Symbol, side, amount, entry price, stop loss, take profit |
 | **Trade Exit** | A position is closed | Symbol, exit price, PnL, exit reason |
+| **Training Job** | A server-side model training job changes state | Job id, requester, symbols, timeframe, progress, result or error |
 | **Error Alert** | An error occurs | Error message and context |
 | **Daily Report** | End of trading day | Trades count, win rate, total PnL, drawdown |
 
@@ -117,7 +121,7 @@ If live runtime health degrades, the recommended action becomes `rollback_to_liv
 
 ### Trade notification
 ```
-📈 NEW TRADE — BUY
+🟢⬆️ NEW LONG ENTRY
 ━━━━━━━━━━━━━━━━━━━━━
 Symbol: BTC/USDT
 Side: BUY
@@ -127,3 +131,31 @@ Stop Loss: $41,650.00
 Take Profit: $44,200.00
 Signal Strength: 0.72
 ```
+
+Icon semantics used by the notifier:
+
+- `🟢⬆️` buy/open long
+- `🔴⬇️` sell/open short
+- `✅📈` profitable exit
+- `🛑📉` losing exit or stop
+- `🧠⏳` training queued
+- `🧠⚙️` training running
+- `🧠✅` training succeeded
+- `🧠❌` training failed
+
+### `/train_model` response
+```
+🧠⏳ TRAINING JOB QUEUED
+Job ID: job-42
+Requested By: telegram
+Pairs: BTC/USDT, ETH/USDT
+Timeframe: 1h
+Candles: 1000
+```
+
+The command shares the exact same guardrails as `POST /api/model/train`:
+
+- paper mode only
+- trading must already be paused
+- only one queued/running job at a time
+- the operator must fix the blocker before a new job can be queued

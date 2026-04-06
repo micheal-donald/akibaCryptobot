@@ -1,4 +1,5 @@
 import os
+import inspect
 from typing import Any, Dict
 import logging
 from datetime import datetime
@@ -63,8 +64,12 @@ class TelegramNotifier:
         price = trade_data.get("price", 0)
 
         if action == "entry":
+            side_icon = "🟢⬆️" if side == "BUY" else "🔴⬇️"
+            side_label = (
+                "LONG" if side == "BUY" else "SHORT" if side == "SELL" else side
+            )
             message = (
-                f"📈 NEW {side} TRADE\n"
+                f"{side_icon} NEW {side_label} ENTRY\n"
                 f"Symbol: {symbol}\n"
                 f"Amount: {amount}\n"
                 f"Entry Price: ${price:.6f}\n"
@@ -79,10 +84,10 @@ class TelegramNotifier:
         elif action == "exit":
             pnl = trade_data.get("pnl", 0)
             reason = trade_data.get("reason", "manual")
-            pnl_emoji = "📈" if pnl > 0 else "📉"
+            pnl_emoji = "✅📈" if pnl > 0 else "🛑📉"
 
             message = (
-                f"{pnl_emoji} CLOSED {side} TRADE\n"
+                f"{pnl_emoji} CLOSED {side or 'UNKNOWN'} TRADE\n"
                 f"Symbol: {symbol}\n"
                 f"Exit Price: ${price:.6f}\n"
                 f"PnL: ${pnl:.6f}\n"
@@ -92,6 +97,48 @@ class TelegramNotifier:
 
         else:
             message = f"🔄 Trade Update: {symbol} - {action}"
+
+        await self.send_message(message)
+
+    async def send_training_notification(self, training_data: Any):
+        """Send a training-job notification or operator summary."""
+        if not self.enabled:
+            return
+
+        status = self._job_value(training_data, "status", "unknown")
+        status_icon_map = {
+            "queued": "🧠⏳",
+            "running": "🧠⚙️",
+            "succeeded": "🧠✅",
+            "failed": "🧠❌",
+            "blocked": "🧠⛔",
+            "idle": "🧠",
+        }
+        icon = status_icon_map.get(str(status), "🧠")
+        job_id = self._job_value(training_data, "job_id", "unknown")
+        requested_by = self._job_value(training_data, "requested_by", "unknown")
+        pairs = self._job_value(training_data, "pairs", ())
+        timeframe = self._job_value(training_data, "timeframe", "unknown")
+        candles = self._job_value(training_data, "candles", "unknown")
+        progress = self._job_value(training_data, "progress", None)
+        result_summary = self._job_value(training_data, "result_summary", None)
+        error = self._job_value(training_data, "error", None)
+
+        message = (
+            f"{icon} TRAINING JOB {str(status).upper()}\n"
+            f"Job ID: {job_id}\n"
+            f"Requested By: {requested_by}\n"
+            f"Pairs: {', '.join(pairs) if pairs else 'default config'}\n"
+            f"Timeframe: {timeframe}\n"
+            f"Candles: {candles}"
+        )
+
+        if progress is not None:
+            message += f"\nProgress: {float(progress):.0f}%"
+        if result_summary:
+            message += f"\nResult: {result_summary}"
+        if error:
+            message += f"\nError: {error}"
 
         await self.send_message(message)
 
@@ -153,6 +200,9 @@ class TelegramNotifier:
         application.add_handler(CommandHandler("resume", self.cmd_resume))
         application.add_handler(CommandHandler("help", self.cmd_help))
         application.add_handler(CommandHandler("config", self.cmd_config))
+        application.add_handler(CommandHandler("model", self.cmd_model))
+        application.add_handler(CommandHandler("train_model", self.cmd_train_model))
+        application.add_handler(CommandHandler("train_status", self.cmd_train_status))
         application.add_handler(CommandHandler("performance", self.cmd_performance))
         application.add_handler(CommandHandler("metrics", self.cmd_metrics))
         application.add_handler(CommandHandler("report", self.cmd_report))
@@ -261,6 +311,296 @@ class TelegramNotifier:
             return visibility
         return {}
 
+    @staticmethod
+    def _job_value(job: Any, key: str, default: Any = None) -> Any:
+        if job is None:
+            return default
+        if isinstance(job, dict):
+            return job.get(key, default)
+        return getattr(job, key, default)
+
+    async def _call_optional_helper(
+        self,
+        *helper_names: str,
+        default: Any = None,
+        **kwargs,
+    ) -> Any:
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            return default
+
+        for helper_name in helper_names:
+            helper = getattr(bot, helper_name, None)
+            if not callable(helper):
+                continue
+            try:
+                result = helper(**kwargs)
+                if inspect.isawaitable(result):
+                    result = await result
+                return result
+            except Exception as exc:
+                logger.error(
+                    "Telegram helper %s failed: %s", helper_name, exc, exc_info=True
+                )
+                return default
+        return default
+
+    def _extract_training_request(
+        self, context: ContextTypes.DEFAULT_TYPE
+    ) -> Dict[str, Any]:
+        args = list(getattr(context, "args", []) or [])
+        parsed: Dict[str, Any] = {}
+        positional_pairs: list[str] = []
+
+        for arg in args:
+            if "=" in arg:
+                key, value = arg.split("=", 1)
+                key = key.lstrip("-").strip().lower()
+                value = value.strip()
+                if key in {"pairs", "pair"}:
+                    parsed["pairs"] = [
+                        item.strip() for item in value.split(",") if item.strip()
+                    ]
+                elif key in {"candles", "candle_limit"}:
+                    parsed["candles"] = int(value)
+                elif key == "timeframe":
+                    parsed["timeframe"] = value
+                elif key in {"by", "requested_by"}:
+                    parsed["requested_by"] = value
+            else:
+                positional_pairs.append(arg)
+
+        if positional_pairs and "pairs" not in parsed:
+            parsed["pairs"] = positional_pairs
+        return parsed
+
+    @staticmethod
+    def _format_model_status_lines(model_status: Dict[str, Any]) -> list[str]:
+        if not model_status or not model_status.get("freqai_active"):
+            return [
+                "🧠 Model Status",
+                f"Reason: {model_status.get('reason', 'FreqAI not active')}",
+            ]
+
+        lines = ["🧠 Model Status"]
+        for model in model_status.get("models", []):
+            name = model.get("name", "unknown")
+            trained = "yes" if model.get("trained") else "no"
+            feature_count = model.get("feature_count", "—")
+            stale = "yes" if model.get("stale") else "no"
+            age_hours = model.get("age_hours")
+            age_text = f"{age_hours:.1f}h ago" if age_hours is not None else "unknown"
+            lines.extend(
+                [
+                    f"Model: {name}",
+                    f"Trained: {trained}",
+                    f"Feature Count: {feature_count}",
+                    f"Age: {age_text}",
+                    f"Stale: {stale}",
+                ]
+            )
+            top_features = model.get("top_features") or []
+            if top_features:
+                feature_text = ", ".join(
+                    f"{feature['name']} ({feature['importance']:.3f})"
+                    for feature in top_features[:5]
+                )
+                lines.append(f"Top Features: {feature_text}")
+        return lines
+
+    @staticmethod
+    def _format_training_job_lines(
+        job: Any, heading: str = "🧠 Training Job"
+    ) -> list[str]:
+        if job is None:
+            return [heading, "No training job has been recorded."]
+
+        status = str(TelegramNotifier._job_value(job, "status", "unknown"))
+        status_icon_map = {
+            "queued": "🧠⏳",
+            "running": "🧠⚙️",
+            "succeeded": "🧠✅",
+            "failed": "🧠❌",
+            "blocked": "🧠⛔",
+            "idle": "🧠",
+        }
+        icon = status_icon_map.get(status, "🧠")
+        pairs = TelegramNotifier._job_value(job, "pairs", ())
+        lines = [
+            f"{heading} {icon}",
+            f"Job ID: {TelegramNotifier._job_value(job, 'job_id', 'unknown')}",
+            f"Status: {status}",
+            f"Requested By: {TelegramNotifier._job_value(job, 'requested_by', 'unknown')}",
+            f"Pairs: {', '.join(pairs) if pairs else 'default config'}",
+            f"Timeframe: {TelegramNotifier._job_value(job, 'timeframe', 'unknown')}",
+            f"Candles: {TelegramNotifier._job_value(job, 'candles', 'unknown')}",
+        ]
+        progress = TelegramNotifier._job_value(job, "progress", None)
+        if progress is not None:
+            lines.append(f"Progress: {float(progress):.0f}%")
+        result_summary = TelegramNotifier._job_value(job, "result_summary", None)
+        if result_summary:
+            lines.append(f"Result: {result_summary}")
+        error = TelegramNotifier._job_value(job, "error", None)
+        if error:
+            lines.append(f"Error: {error}")
+        reload_status = TelegramNotifier._job_value(job, "reload_status", None)
+        if reload_status:
+            lines.append(f"Reload Status: {reload_status}")
+        return lines
+
+    def _get_training_store(self):
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            return None
+        store = getattr(bot, "trade_store", None)
+        if store is None:
+            return None
+        if not any(
+            hasattr(store, attr)
+            for attr in ("get_training_job_status", "enqueue_training_job")
+        ):
+            return None
+        return store
+
+    async def _get_training_job_status(self):
+        result = await self._call_optional_helper("get_training_job_status")
+        if result is not None:
+            return result
+        store = self._get_training_store()
+        if store is None:
+            return None
+        helper = getattr(store, "get_training_job_status", None)
+        if not callable(helper):
+            return None
+        result = helper()
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    async def _enqueue_training_job(self, request: Dict[str, Any]):
+        result = await self._call_optional_helper(
+            "enqueue_training_job",
+            request=request,
+        )
+        if result is not None:
+            return result
+        store = self._get_training_store()
+        if store is None:
+            return None
+        helper = getattr(store, "enqueue_training_job", None)
+        if not callable(helper):
+            return None
+        result = helper(request)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    def _resolve_training_mode(self) -> str:
+        if hasattr(self, "bot_instance"):
+            config = getattr(self.bot_instance, "config", None)
+            exchange = config.get("exchange", {}) if isinstance(config, dict) else {}
+            return "paper" if exchange.get("sandbox", True) else "live"
+        return "paper"
+
+    def _resolve_default_pairs(self) -> list[str]:
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            return []
+        config = getattr(bot, "config", None)
+        trading = config.get("trading", {}) if isinstance(config, dict) else {}
+        pairs = trading.get("pairs", [])
+        return list(pairs) if isinstance(pairs, (list, tuple)) else []
+
+    def _resolve_default_candles(self) -> int:
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            return 1000
+        config = getattr(bot, "config", None)
+        freqai = config.get("freqai", {}) if isinstance(config, dict) else {}
+        ml_params = freqai.get("ml_params", {}) if isinstance(freqai, dict) else {}
+        return int(ml_params.get("training_data_period", 1000))
+
+    def _resolve_default_timeframe(self) -> str:
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            return "1h"
+        config = getattr(bot, "config", None)
+        trading = config.get("trading", {}) if isinstance(config, dict) else {}
+        timeframes = trading.get("timeframes", {}) if isinstance(trading, dict) else {}
+        if isinstance(timeframes, dict):
+            return str(timeframes.get("primary", "1h"))
+        return "1h"
+
+    def _get_model_status_snapshot(self) -> Dict[str, Any]:
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            return {"freqai_active": False, "reason": "Bot instance not available"}
+
+        strategy_manager = getattr(bot, "strategy_manager", None)
+        if strategy_manager is None:
+            return {"freqai_active": False, "reason": "Strategy manager not available"}
+
+        active_strategy_getter = getattr(strategy_manager, "get_active_strategy", None)
+        active_strategy = (
+            active_strategy_getter() if callable(active_strategy_getter) else None
+        )
+
+        if not hasattr(active_strategy, "strategies"):
+            return {
+                "freqai_active": False,
+                "reason": "Active strategy is not an ensemble",
+            }
+
+        models = []
+        for strategy, weight, name in active_strategy.strategies:
+            if not hasattr(strategy, "model_trained"):
+                continue
+
+            model_info = {
+                "name": name,
+                "type": type(strategy).__name__,
+                "weight": weight,
+                "trained": getattr(strategy, "model_trained", False),
+                "feature_count": len(getattr(strategy, "feature_columns", [])),
+            }
+
+            models_dir = "models"
+            if os.path.exists(models_dir):
+                model_files = [
+                    f for f in os.listdir(models_dir) if f.endswith("_freqai.joblib")
+                ]
+                if model_files:
+                    newest = max(
+                        model_files,
+                        key=lambda f: os.path.getmtime(os.path.join(models_dir, f)),
+                    )
+                    mtime = os.path.getmtime(os.path.join(models_dir, newest))
+                    model_info["last_trained"] = datetime.fromtimestamp(
+                        mtime
+                    ).isoformat()
+                    age_hours = (datetime.now().timestamp() - mtime) / 3600
+                    model_info["age_hours"] = round(age_hours, 1)
+                    model_info["stale"] = age_hours > 48
+
+            if hasattr(strategy, "ml_model") and strategy.ml_model is not None:
+                if hasattr(strategy.ml_model, "feature_importances_"):
+                    cols = getattr(strategy, "feature_columns", [])
+                    importances = strategy.ml_model.feature_importances_
+                    if len(cols) == len(importances):
+                        top = sorted(
+                            zip(cols, importances), key=lambda x: x[1], reverse=True
+                        )[:5]
+                        model_info["top_features"] = [
+                            {"name": n, "importance": round(float(v), 4)}
+                            for n, v in top
+                        ]
+
+            models.append(model_info)
+
+        any_trained = any(m["trained"] for m in models)
+        return {"freqai_active": any_trained, "models": models}
+
     def _resolve_trading_mode(self, status_info: Dict[str, Any] | None = None) -> str:
         if isinstance(status_info, dict) and status_info.get("trading_mode"):
             return str(status_info["trading_mode"])
@@ -327,6 +667,9 @@ class TelegramNotifier:
             "/status - Bot status\n"
             "/balance - Account balance\n"
             "/trades - Active trades\n"
+            "/model - FreqAI model health\n"
+            "/train_model - Queue model training\n"
+            "/train_status - Current model training job\n"
             "/performance - Performance summary\n"
             "/metrics - Detailed metrics\n"
             "/report - Full performance report\n"
@@ -374,6 +717,23 @@ class TelegramNotifier:
                     lines.append(
                         f"Projected Pending Exits: {getattr(projection, 'pending_exit_count', 0)}"
                     )
+
+                training_status = await self._get_training_job_status()
+                if training_status is not None:
+                    current_job = self._job_value(training_status, "current_job", None)
+                    last_job = self._job_value(training_status, "last_job", None)
+                    if current_job is not None:
+                        lines.extend(
+                            self._format_training_job_lines(
+                                current_job, heading="Training Job"
+                            )
+                        )
+                    elif last_job is not None:
+                        lines.extend(
+                            self._format_training_job_lines(
+                                last_job, heading="Last Training Job"
+                            )
+                        )
 
                 message = "\n".join(lines)
             except Exception as e:
@@ -453,6 +813,18 @@ class TelegramNotifier:
                             )
                         )
 
+                    training_status = await self._get_training_job_status()
+                    if training_status is not None:
+                        current_job = self._job_value(
+                            training_status, "current_job", None
+                        )
+                        if current_job is not None:
+                            lines.extend(
+                                self._format_training_job_lines(
+                                    current_job, heading="Training Job"
+                                )
+                            )
+
                     message = "\n".join(lines)
             except Exception as e:
                 message = f"Error fetching trades: {str(e)}"
@@ -485,6 +857,8 @@ class TelegramNotifier:
             "/status - Bot status and performance\n"
             "/balance - Account balance\n"
             "/trades - List active trades\n"
+            "/model - FreqAI model health\n"
+            "/train_status - Current training job\n"
             "/performance - Quick performance summary\n"
             "/metrics - Detailed performance metrics\n"
             "/report - Full formatted report\n\n"
@@ -494,6 +868,7 @@ class TelegramNotifier:
             "⚙️ Configuration:\n"
             "/config - Show bot configuration\n\n"
             "🛠 Tools:\n"
+            "/train_model - Queue a model training job\n"
             "/reconcile - Audit DB vs Exchange\n\n"
             "❓ Help:\n"
             "/help - Show this help message\n"
@@ -521,6 +896,109 @@ class TelegramNotifier:
             message = "❌ Bot instance not available"
 
         await update.message.reply_text(message)
+
+    async def cmd_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /model command"""
+        model_status = self._get_model_status_snapshot()
+        lines = self._format_model_status_lines(model_status)
+
+        training_status = await self._get_training_job_status()
+        if training_status is not None:
+            current_job = self._job_value(training_status, "current_job", None)
+            last_job = self._job_value(training_status, "last_job", None)
+            if current_job is not None:
+                lines.extend(
+                    self._format_training_job_lines(current_job, heading="Training Job")
+                )
+            elif last_job is not None:
+                lines.extend(
+                    self._format_training_job_lines(
+                        last_job, heading="Last Training Job"
+                    )
+                )
+
+        await update.message.reply_text("\n".join(lines))
+
+    async def cmd_train_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /train_model command"""
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            await update.message.reply_text("❌ Bot instance not available")
+            return
+
+        trading_mode = self._resolve_trading_mode()
+        if trading_mode != "paper":
+            await update.message.reply_text(
+                "❌ Training is paper-only. Switch the bot to paper mode first."
+            )
+            return
+
+        trading_paused = getattr(bot, "trading_paused", None)
+        if trading_paused is None:
+            trading_paused = not getattr(bot, "is_running", True)
+        if not trading_paused:
+            await update.message.reply_text(
+                "❌ Pause trading before starting model training."
+            )
+            return
+
+        request = self._extract_training_request(context)
+        if not request.get("pairs"):
+            request["pairs"] = self._resolve_default_pairs()
+        if not request.get("candles"):
+            request["candles"] = self._resolve_default_candles()
+        if not request.get("timeframe"):
+            request["timeframe"] = self._resolve_default_timeframe()
+        request["requested_by"] = "telegram"
+
+        try:
+            job = await self._enqueue_training_job(request)
+        except Exception as exc:
+            await update.message.reply_text(f"❌ Failed to queue training: {exc}")
+            return
+
+        if job is None:
+            await update.message.reply_text(
+                "❌ Training is unavailable. No training store or helper is configured."
+            )
+            return
+
+        status = self._job_value(job, "status", "unknown")
+        lines = self._format_training_job_lines(job, heading="Training Request")
+        if status == "blocked":
+            lines.insert(1, "Queued request was blocked because another job is active.")
+        else:
+            lines.insert(1, "Training job queued successfully.")
+
+        await update.message.reply_text("\n".join(lines))
+
+    async def cmd_train_status(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ):
+        """Handle /train_status command"""
+        training_status = await self._get_training_job_status()
+        if training_status is None:
+            await update.message.reply_text("❌ Training status is unavailable")
+            return
+
+        current_job = self._job_value(training_status, "current_job", None)
+        last_job = self._job_value(training_status, "last_job", None)
+        can_start = self._job_value(training_status, "can_start_training", False)
+        active_job_count = self._job_value(training_status, "active_job_count", 0)
+
+        lines = [
+            "🧠 Training Control",
+            f"Can Start Training: {'yes' if can_start else 'no'}",
+            f"Active Jobs: {active_job_count}",
+        ]
+        if current_job is not None:
+            lines.extend(
+                self._format_training_job_lines(current_job, heading="Current Job")
+            )
+        elif last_job is not None:
+            lines.extend(self._format_training_job_lines(last_job, heading="Last Job"))
+
+        await update.message.reply_text("\n".join(lines))
 
     async def cmd_reconcile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /reconcile command - manually trigger audit"""
