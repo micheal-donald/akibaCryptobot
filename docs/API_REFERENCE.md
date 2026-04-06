@@ -11,7 +11,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
-| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, circuit breaker state, strategy, trading mode |
+| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, circuit breaker state, strategy, trading mode |
 | `GET` | `/api/reconcile` | Manually triggers a reconciliation check between DB and Exchange |
 
 **Example response** (`GET /api/status`):
@@ -75,6 +75,17 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
         }
       }
     }
+  },
+  "native_shadow_report": {
+    "native_shadow_enabled": true,
+    "native_shadow_status": "divergent",
+    "native_shadow_is_match": false,
+    "native_shadow_mismatch_count": 2,
+    "native_shadow_mismatches": [
+      "active_position_count",
+      "open_order_count"
+    ],
+    "native_shadow_summary": "Native shadow diverges from Python runtime."
   },
   "runtime_is_healthy": true,
   "rollout_environment": "paper",

@@ -46,10 +46,24 @@ def _inject_runtime_telemetry(status_info, bot):
     return status_info
 
 
+def _inject_native_shadow_report(status_info, bot):
+    if "native_shadow_report" in status_info:
+        return status_info
+
+    report_getter = getattr(bot, "get_native_shadow_report", None)
+    if not callable(report_getter):
+        status_info.setdefault("native_shadow_report", None)
+        return status_info
+
+    status_info["native_shadow_report"] = report_getter()
+    return status_info
+
+
 def _build_status_payload(bot):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
     _inject_runtime_telemetry(status_info, bot)
+    _inject_native_shadow_report(status_info, bot)
     projection = _get_runtime_projection(bot)
     rollout_summary = build_rollout_summary(
         projection,
@@ -122,6 +136,7 @@ def _build_status_payload(bot):
             "runtime_owns_entries": runtime_owns_entries,
             "runtime_owns_exits": runtime_owns_exits,
             "runtime_telemetry": status_info.get("runtime_telemetry"),
+            "native_shadow_report": status_info.get("native_shadow_report"),
             "state_source": state_source,
             **rollout_summary,
             "projected_active_positions": projected_active_positions,

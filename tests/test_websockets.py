@@ -35,9 +35,11 @@ class FakeStatusBot:
         *,
         configured_deployment_profile=None,
         trading_mode="paper",
+        native_shadow_report=None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
+        self._native_shadow_report = native_shadow_report
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self.strategy_manager = type(
@@ -53,6 +55,9 @@ class FakeStatusBot:
             "is_running": True,
             "trading_mode": self._trading_mode,
         }
+
+    def get_native_shadow_report(self):
+        return self._native_shadow_report
 
     def get_runtime_projection(self):
         return self._projection
@@ -223,6 +228,47 @@ async def test_ws_status_keeps_legacy_state_when_projection_missing(monkeypatch)
     assert "Legacy loop remains authoritative" in data["rollout_summary"]
     assert data["projected_active_positions"] == 0
     assert data["projected_open_orders"] == 0
+    assert data["native_shadow_report"] is None
+
+
+@pytest.mark.asyncio
+async def test_ws_status_surfaces_native_shadow_mismatch_report(monkeypatch):
+    monkeypatch.setitem(
+        bot_state,
+        "bot",
+        FakeStatusBot(
+            make_projection(
+                source=ProjectionSource.RUNTIME_PROJECTION,
+                runtime_mode="runtime_primary",
+            ),
+            configured_deployment_profile="paper_runtime_primary",
+            native_shadow_report={
+                "native_shadow_enabled": True,
+                "native_shadow_status": "divergent",
+                "native_shadow_is_match": False,
+                "native_shadow_mismatch_count": 2,
+                "native_shadow_mismatches": [
+                    "active_position_count",
+                    "open_order_count",
+                ],
+                "native_shadow_summary": (
+                    "Native shadow diverges from Python runtime."
+                ),
+            },
+        ),
+    )
+    websocket = FakeWebSocket()
+
+    await ws_status(websocket)
+
+    data = websocket.sent[0]["data"]
+    assert data["native_shadow_report"]["native_shadow_status"] == "divergent"
+    assert data["native_shadow_report"]["native_shadow_is_match"] is False
+    assert data["native_shadow_report"]["native_shadow_mismatch_count"] == 2
+    assert data["native_shadow_report"]["native_shadow_mismatches"] == [
+        "active_position_count",
+        "open_order_count",
+    ]
 
 
 @pytest.mark.asyncio

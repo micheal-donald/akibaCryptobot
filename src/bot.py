@@ -896,6 +896,7 @@ class AkibaCryptoBot:
             "runtime_owns_entries": self.runtime_owns_entries,
             "runtime_owns_exits": self.runtime_owns_exits,
             "runtime_telemetry": self.get_runtime_telemetry_info(),
+            "native_shadow_report": self.get_native_shadow_report(),
         }
 
     def get_runtime_projection(self):
@@ -911,6 +912,16 @@ class AkibaCryptoBot:
                 None if runtime_app is None else runtime_app.execution_service
             ),
         )
+
+    def get_native_shadow_report(self):
+        runtime_app = self.runtime_app
+        if runtime_app is None:
+            return None
+
+        report_getter = getattr(runtime_app, "get_native_shadow_report", None)
+        if not callable(report_getter):
+            return None
+        return report_getter()
 
     def get_runtime_telemetry_info(self):
         runtime_app = self.runtime_app

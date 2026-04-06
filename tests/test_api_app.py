@@ -121,9 +121,11 @@ class FakeStatusBot:
         *,
         configured_deployment_profile: str | None = None,
         trading_mode: str = "paper",
+        native_shadow_report: dict[str, object] | None = None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
+        self._native_shadow_report = native_shadow_report
         self.circuit_breaker_active = False
         self.circuit_breaker_reason = ""
         self.config = {"exchange": {"sandbox": trading_mode != "live"}}
@@ -145,6 +147,9 @@ class FakeStatusBot:
             "runtime_owns_entries": self._projection.runtime_owns_entries,
             "runtime_owns_exits": self._projection.runtime_owns_exits,
         }
+
+    def get_native_shadow_report(self):
+        return self._native_shadow_report
 
     def get_runtime_visibility_info(self):
         return {
@@ -262,6 +267,40 @@ async def test_status_route_keeps_legacy_trade_count_in_shadow_mode():
     assert payload["rollout_recommended_action"] == "continue_shadow"
     assert "validate before promotion" in payload["rollout_summary"]
     assert payload["projected_active_positions"] == 0
+    assert payload["native_shadow_report"] is None
+
+
+@pytest.mark.asyncio
+async def test_status_route_surfaces_native_shadow_mismatch_report():
+    bot = FakeStatusBot(
+        make_projection(
+            source=ProjectionSource.RUNTIME_PROJECTION,
+            runtime_mode="runtime_primary",
+            active_positions=(make_projected_position(),),
+        ),
+        configured_deployment_profile="paper_runtime_primary",
+        native_shadow_report={
+            "native_shadow_enabled": True,
+            "native_shadow_status": "divergent",
+            "native_shadow_is_match": False,
+            "native_shadow_mismatch_count": 2,
+            "native_shadow_mismatches": [
+                "active_position_count",
+                "open_order_count",
+            ],
+            "native_shadow_summary": "Native shadow diverges from Python runtime.",
+        },
+    )
+
+    payload = await get_status(bot=bot)
+
+    assert payload["native_shadow_report"]["native_shadow_status"] == "divergent"
+    assert payload["native_shadow_report"]["native_shadow_is_match"] is False
+    assert payload["native_shadow_report"]["native_shadow_mismatch_count"] == 2
+    assert payload["native_shadow_report"]["native_shadow_mismatches"] == [
+        "active_position_count",
+        "open_order_count",
+    ]
 
 
 @pytest.mark.asyncio

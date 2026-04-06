@@ -34,6 +34,8 @@ from strategies.contracts import RuntimeStrategy
 
 from .config import RuntimeConfig
 from .event_capture import RuntimeEventCaptureBuffer
+from .native_shadow import NativeShadowBridge, NativeShadowSnapshot
+from .projection import build_runtime_projection
 from .service_registry import AsyncService, ServiceRegistry
 
 
@@ -173,6 +175,9 @@ class RuntimeApp:
     )
     event_capture: RuntimeEventCaptureBuffer | None = field(default=None, repr=False)
     native_hot_path_ports: NativeHotPathPorts | None = field(default=None, repr=False)
+    native_shadow_snapshot: NativeShadowSnapshot | None = field(
+        default=None, repr=False
+    )
     event_router: RuntimeEventRouter | None = field(
         default=None, init=False, repr=False
     )
@@ -215,9 +220,10 @@ class RuntimeApp:
         snapshot = telemetry_service.get_snapshot()
         persistence_service = self.persistence_service
         if persistence_service is not None:
-            last_failure_at, last_failure_reason = (
-                persistence_service.get_last_failure()
-            )
+            (
+                last_failure_at,
+                last_failure_reason,
+            ) = persistence_service.get_last_failure()
             snapshot["persistence"] = {
                 "queue_depth": persistence_service.get_queue_depth(),
                 "high_watermark": persistence_service.get_high_watermark(),
@@ -231,6 +237,48 @@ class RuntimeApp:
         snapshot["event_bus_depth"] = self.event_bus.qsize()
         snapshot["captured_at"] = datetime.now(timezone.utc).isoformat()
         return snapshot
+
+    def get_native_shadow_report(self) -> dict[str, object] | None:
+        """Return a read-only native-shadow comparison report for operators."""
+
+        native_ports = self.native_hot_path_ports
+        if native_ports is None:
+            return None
+        bridge = NativeShadowBridge(native_ports=native_ports)
+
+        projection = build_runtime_projection(
+            runtime_mode=self.config.runtime_mode,
+            runtime_is_running=self.is_running,
+            runtime_start_status=("running" if self.is_running else "configured"),
+            position_source=self.position_service,
+            execution_source=self.execution_service,
+        )
+        native_snapshot = self.native_shadow_snapshot
+        if native_snapshot is None:
+            return {
+                "native_shadow_enabled": True,
+                "native_shadow_status": "awaiting_native_snapshot",
+                "native_shadow_is_match": True,
+                "native_shadow_mismatch_count": 0,
+                "native_shadow_mismatches": (),
+                "native_shadow_summary": (
+                    "Native shadow is enabled; awaiting native snapshot."
+                ),
+            }
+
+        comparison = bridge.compare(projection, native_snapshot)
+        return {
+            "native_shadow_enabled": True,
+            "native_shadow_status": ("match" if comparison.is_match else "divergent"),
+            "native_shadow_is_match": comparison.is_match,
+            "native_shadow_mismatch_count": len(comparison.mismatches),
+            "native_shadow_mismatches": comparison.mismatches,
+            "native_shadow_summary": (
+                "Native shadow matches Python runtime."
+                if comparison.is_match
+                else "Native shadow diverges from Python runtime."
+            ),
+        }
 
     @classmethod
     def build_phase4(
