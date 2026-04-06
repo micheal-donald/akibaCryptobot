@@ -98,6 +98,51 @@ When either flag is supplied, deploy verification fails if `/api/status` does no
 
 Snapshot deploys intentionally preserve server-side `models/` artifacts. The pinned code deploy is sourced from `git archive`, while trained FreqAI joblib files are runtime artifacts that may be produced outside git. Preserving `models/` keeps code deploys from wiping the currently active model set; model refresh remains a separate training/deployment step.
 
+### Phase 15 Kill-Switch and Anomaly Runbook
+
+This runbook defines the future halt and recovery expectations for the low-latency runtime and HFT operating model. It is a documentation contract, not a claim that the current platform is already HFT-class.
+
+#### Immediate Halt Triggers
+
+Treat the deployment as an immediate halt candidate if any of the following persist beyond a brief startup window:
+
+- `runtime_is_healthy=false`
+- `rollout_health=rollback_recommended`
+- `latency.event_age_ms` keeps rising across successive samples
+- `latency.exchange_age_ms` keeps rising unexpectedly or the feed repeatedly goes stale
+- `latency.queue_lag_ms.<queue>` rises together with `queue_depths.<queue>`
+- `metric_counts.dropped_event*` continues to increase
+- `metric_counts.reconnect*` spikes repeatedly without stabilization
+- the order book becomes stale or invalid because of missing deltas, gaps, or sequence breaks
+- exchange acknowledgements, cancels, or fills stop arriving within the expected window
+- the native shadow report shows persistent divergence in a hot-path field
+
+These are signals that the hot path is no longer trustworthy enough for continued promotion or live HFT-style operation.
+
+#### Operator Response
+
+When a halt trigger appears:
+
+1. Stop promotion and freeze any further rollout changes.
+2. Capture `/api/health`, `/api/status`, `/api/model/status`, and the relevant logs for the incident timeline.
+3. If the runtime owns entries or exits, follow the reviewed rollback profile flow instead of ad hoc manual changes.
+4. If the order book is stale, invalidate it and wait for a clean, healthy rebuild before resuming.
+5. If exchange acknowledgements stop or reconnects spike, hold the deployment until connectivity stabilizes and telemetry stops degrading.
+6. If the native shadow report is divergent, keep the native path read-only and resolve the mismatch before any cutover.
+
+#### Recovery After a Halt
+
+Recovery is profile-driven and deliberate:
+
+1. Identify the root cause: degraded latency, stale feed, exchange anomaly, or native-shadow divergence.
+2. Resolve the underlying problem before changing modes again.
+3. Return to the safest reviewed profile first, usually `paper_legacy` or `live_legacy` depending on environment.
+4. Re-run the pinned deploy with the expected profile and mode assertions.
+5. Confirm the runtime reports healthy rollout state and no degraded-latency or stale-book warnings.
+6. Re-attempt promotion only after the system is stable again.
+
+For future HFT operations, the kill-switch must be faster than the strategy can accumulate damage. That is a design target, not a statement about current runtime behavior.
+
 ### Interpreting Runtime Telemetry
 
 `/api/status` and `/ws/status` expose `runtime_telemetry` when the runtime is active. Use it to judge whether a rollout is genuinely healthy, not just whether the process is alive.

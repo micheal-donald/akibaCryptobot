@@ -196,6 +196,51 @@ If (peak_portfolio_value - current_value) / peak_portfolio_value > drawdown_thre
 
 ---
 
+## HFT Kill-Switch and Anomaly Handling
+
+Phase 15 adds future HFT-specific halt rules and recovery expectations. These are documentation requirements for the low-latency and HFT operating model, not a claim that the current runtime is already HFT-class.
+
+### Immediate Halt Conditions
+
+Treat the session as a halt candidate if any of the following persist beyond a brief startup window:
+
+- `runtime_is_healthy=false`
+- `rollout_health=rollback_recommended`
+- `latency.event_age_ms` keeps rising across successive samples
+- `latency.exchange_age_ms` keeps rising unexpectedly or the feed repeatedly goes stale
+- `latency.queue_lag_ms.<queue>` rises together with `queue_depths.<queue>`
+- `metric_counts.dropped_event*` continues to increase
+- `metric_counts.reconnect*` spikes repeatedly without stabilization
+- the order book becomes stale or invalid because of missing deltas, gaps, or sequence breaks
+- exchange acknowledgements, cancels, or fills stop arriving within the expected window
+- the native shadow report shows persistent divergence in a hot-path field
+
+These conditions mean the strategy engine should stop being trusted until the underlying issue is understood.
+
+### Operator Recovery
+
+After a halt:
+
+1. Record the current health, status, model, and log context.
+2. Identify the underlying cause: degraded latency, stale feed, exchange anomaly, or native-shadow divergence.
+3. Resolve the issue before changing profiles again.
+4. Revert to the safest reviewed profile available, usually `paper_legacy` or `live_legacy`.
+5. Re-run the pinned deploy with the expected profile and mode assertions.
+6. Resume promotion only after the rollout state and telemetry return to healthy values.
+
+### Degraded-Latency Expectations
+
+For future HFT operation, repeated latency degradation should be treated like a soft halt before it becomes a hard failure:
+
+- rising `latency.event_age_ms` means the runtime is falling behind its ingest path
+- rising `latency.exchange_age_ms` means the feed or timestamps are stale
+- rising `latency.queue_lag_ms.<queue>` with growing depth means the hot path is backing up
+- rising `metric_counts.dropped_event*` means work is being discarded and the rollout should stop
+
+The current platform exposes these telemetry fields, but the HFT response model above is a future operating requirement, not a statement of current low-latency production readiness.
+
+---
+
 ## Reconciliation Layer (Auditing)
 
 The `ReconciliationManager` acts as a final safety audit between the bot's internal database and the actual exchange state.
