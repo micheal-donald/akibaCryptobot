@@ -205,6 +205,65 @@ The current primitives are:
 
 These features are most useful when fed by the bounded capture/replay format introduced in Phase 12 and extended by the Phase 13 depth replay harness.
 
+## HFT Simulation Requirements
+
+Phase 15 defines the minimum execution-simulation quality needed before HFT-oriented research can be trusted. The current candle backtest engine and microstructure replay helpers are useful for research, but they are not yet sufficient to model real HFT execution behavior.
+
+### Queue Position Modeling
+
+HFT research needs queue-aware fill simulation, not just candle-close execution assumptions.
+
+Minimum expectations:
+
+- passive orders should track an estimated queue position at the target price level
+- fills should depend on both queued volume ahead of the order and observed trade-through volume
+- queue position should advance or decay as depth updates and trades arrive
+- cancellations at the best price should affect whether the order becomes fillable sooner
+
+If the simulator cannot represent queue position, it cannot reliably research market-making or other passive-order strategies.
+
+### Aggressive vs Passive Fills
+
+The replay layer must distinguish between aggressive and passive execution paths.
+
+Minimum expectations:
+
+- aggressive orders should fill against the available book depth at the time of submission, subject to slippage and depth exhaustion
+- passive orders should only fill when market flow reaches the resting order
+- partial fills should be possible on both paths
+- the simulator should preserve whether the order was liquidity-taking or liquidity-providing
+
+This distinction matters because HFT PnL and adverse-selection risk depend heavily on execution role.
+
+### Stale-Book Invalidation
+
+Replay or simulation must invalidate book state when the underlying data is incomplete or stale.
+
+Minimum expectations:
+
+- missing depth deltas, gaps, or sequence breaks should mark the book stale
+- stale books should stop being used for precision fill estimates until the book is rebuilt
+- trade events without corresponding book continuity should be treated as fidelity degradation, not silently accepted as exact fills
+- the simulator should surface stale-book events so research runs can be filtered or discarded
+
+### Replay Fidelity Expectations
+
+For HFT research, replay fidelity must be explicit about what it preserves and what it does not.
+
+Minimum expectations:
+
+- preserve event order and timestamps for depth, trade, and cancellation events
+- preserve sequence continuity or mark the replay as degraded when continuity is lost
+- preserve enough depth history to reconstruct book changes between fills
+- preserve trade side/pressure signals well enough for short-horizon research
+- record when the replay is approximate rather than exact
+
+Current state note:
+
+- Phase 12 and Phase 13 provide bounded event capture, depth replay, and microstructure feature groundwork
+- they do not yet provide a full queue-sensitive, venue-faithful HFT fill simulator
+- HFT research should treat any results from the current replay stack as lower-fidelity until queue position and passive/aggressive fill behavior are modeled explicitly
+
 ## Interpreting Results
 
 ### Sharpe Ratio

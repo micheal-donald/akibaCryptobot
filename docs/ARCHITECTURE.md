@@ -160,6 +160,20 @@ Interpretation is intentionally conservative:
 
 Runtime event capture uses `src/runtime/event_capture.py` to write a bounded JSONL record of hot-path events for offline debugging. Replay support is for test and investigation flows, not for live hot-path execution.
 
+### HFT Replay Boundary
+
+The capture/replay path from Phases 12 and 13 is a research aid, not a venue-faithful HFT simulator.
+
+For HFT-oriented research, the architecture expects a later simulation layer to preserve or approximate:
+
+- queue position at the resting price level
+- aggressive versus passive execution role
+- partial fills across multiple depth updates
+- stale-book invalidation after missing deltas or sequence gaps
+- deterministic replay ordering for depth, trades, and cancels
+
+Until that simulation layer exists, the current replay helpers should be treated as low-fidelity research tools rather than production-grade execution proof.
+
 ### Phase 15 Latency SLO Targets
 
 These are documentation targets for the low-latency runtime and future HFT regime. They are not proof that the current deployment already meets HFT-grade timing.
