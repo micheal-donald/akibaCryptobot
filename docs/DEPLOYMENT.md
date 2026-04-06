@@ -208,6 +208,22 @@ Recommended validation order:
 4. Treat any `native_shadow_status=divergent` result as a rollout blocker until the mismatch is understood.
 5. Keep live trading behavior unchanged until a later phase introduces a real native transport and cutover policy.
 
+#### Phase 15 HFT Operating Modes
+
+The repository should describe three different operating regimes and keep operator expectations aligned with the actual current state:
+
+- **Standard algo**: the legacy candle-cycle bot and its supporting services. Expect slower but simpler behavior, especially around trade scanning and exit management.
+- **Low-latency runtime**: the event-driven runtime with runtime projections, rollout profiles, and native shadow comparison. This is the current transition path, not HFT.
+- **HFT**: a future venue-near, latency-budgeted, native hot-path regime. Do not use this label for the current production setup.
+
+Practical operator expectations:
+
+- Standard algo rollouts should be judged by cycle success, reconciliation, and conventional trade correctness.
+- Low-latency runtime rollouts should be judged by rollout health, queue lag, shadow divergence, and restart safety.
+- HFT rollouts will eventually need latency SLOs, kill-switch documentation, and venue-near infrastructure; those are future requirements, not the current baseline.
+
+If you are promoting or rolling back today, keep using the existing paper/live profile flow. The HFT mode described in Phase 15 is a documentation boundary and future operating model, not a new live deploy target yet.
+
 ---
 
 ## Docker Deployment

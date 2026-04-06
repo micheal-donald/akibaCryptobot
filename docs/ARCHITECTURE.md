@@ -179,6 +179,22 @@ How dual-run validation works:
 
 The native boundary is comparison-only until a real native transport/process is introduced in a later phase.
 
+## Operating Modes
+
+The platform should be described in three distinct operating regimes:
+
+| Mode | What it is | Operator expectation |
+|---|---|---|
+| **Standard algo** | The legacy candle/timeframe bot and its supporting services. This is the safest and simplest operating mode. | Prioritize correctness, reconciliation, and explainability. Expect coarse-cycle behavior and tolerate higher latency. |
+| **Low-latency runtime** | The event-driven runtime with websocket feeds, rollout profiles, shadow validation, and operator projections. | Prioritize freshness, queue health, rollout health, and restart safety. Do not confuse this with HFT. |
+| **HFT** | A future native hot-path regime with venue-near infrastructure, queue-sensitive execution, and strategy classes designed for market making or microstructure alpha. | Prioritize latency SLOs, fast kill-switch behavior, replay fidelity, and infrastructure discipline. This is not the current platform state. |
+
+Current platform state:
+
+- The repository now supports standard algo trading and a low-latency runtime migration path.
+- The Python/native boundary exists, but the native hot path is still comparison-only.
+- The repo should not describe itself as HFT-ready in production terms yet; it is still in the transition phase toward that goal.
+
 ## Trading Cycle Walkthrough
 
 Each iteration of the trading loop in `AkibaCryptoBot.trading_cycle()` performs the following steps:

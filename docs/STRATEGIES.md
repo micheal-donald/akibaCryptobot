@@ -2,6 +2,29 @@
 
 AkibaCryptoBot uses a pluggable strategy system. Every strategy inherits from `BaseStrategy`, and the `StrategyManager` handles registration, selection, and signal dispatch.
 
+## Operating Modes
+
+The documentation and operator expectations should distinguish three different trading regimes:
+
+| Mode | Typical cadence | Strategy style | Operator focus |
+|---|---|---|---|
+| **Standard algo** | Candle or fixed-cycle scans | Momentum, ensemble, and other timeframe-driven strategies | Correctness, stability, risk control, and explainability |
+| **Low-latency runtime** | Event-driven, websocket-fed, rollout-aware | Runtime-managed entries/exits, replay-backed validation, and microstructure-adjacent research | Feed freshness, queue lag, rollout health, and restart safety |
+| **HFT** | Venue-near, latency-budgeted, queue-sensitive | Market making, inventory-aware quoting, order-flow alpha, microstructure stat-arb | Latency SLOs, kill-switch response, fill quality, and infrastructure discipline |
+
+Current platform state:
+
+- Standard algo strategies are supported today.
+- The low-latency runtime exists and can be rolled out in paper/live stages.
+- The native hot-path boundary is in place for future extraction.
+- The repo is not yet a true HFT platform; HFT is a future operating regime and should be documented as such.
+
+When evaluating a strategy or an operator surface, use the operating mode to decide what “healthy” means:
+
+- Standard algo: successful signal generation, sensible risk controls, and reliable cycle completion.
+- Low-latency runtime: fresh market data, bounded queue lag, clean rollout health, and benign shadow divergence.
+- HFT: latency SLO compliance, order-book fidelity, fast anomaly handling, and venue-near execution discipline.
+
 ---
 
 ## Strategy Hierarchy
