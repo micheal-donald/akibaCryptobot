@@ -25,6 +25,29 @@ When evaluating a strategy or an operator surface, use the operating mode to dec
 - Low-latency runtime: fresh market data, bounded queue lag, clean rollout health, and benign shadow divergence.
 - HFT: latency SLO compliance, order-book fidelity, fast anomaly handling, and venue-near execution discipline.
 
+## HFT Strategy Families
+
+Phase 15 identifies the first HFT-oriented strategy families as future implementation targets. They are not current production capabilities.
+
+| Family | Description | Why it differs from current algo strategies |
+|---|---|---|
+| **Market making** | Passive bid/ask quoting around a local book, with inventory control and spread capture as the primary edge | Requires queue-sensitive order placement, fill modeling, and fast inventory/risk response rather than candle signals |
+| **Inventory-aware quoting** | Market making that dynamically skews quotes based on current inventory and adverse-selection risk | Needs tighter execution feedback loops and inventory state than the current indicator-driven bot |
+| **Short-horizon order-flow alpha** | Uses recent trade imbalance, aggression, and microstructure pressure over very short horizons | Depends on order-flow features and replay fidelity, not slow timeframe indicators |
+| **Microstructure stat-arb** | Exploits short-lived relative-value relationships in order-book and trade-flow data | Requires multi-venue or multi-instrument microstructure analysis and a replay model that can preserve queue effects |
+
+These families should be treated as distinct from the current candle/timeframe strategies:
+
+- **Momentum / ensemble / FreqAI** remain standard algo strategies.
+- **Low-latency runtime** research can use microstructure features and replay, but is still not HFT by itself.
+- **HFT families** should only be considered once the platform can meet latency discipline, kill-switch expectations, and replay quality requirements documented elsewhere in the repo.
+
+Operator expectation:
+
+- If a strategy is candle-driven, it belongs in the standard algo lane.
+- If a strategy depends on queue position, order-flow timing, or spread capture, it belongs in the low-latency or HFT lane.
+- If a strategy cannot be replayed with queue/fill realism, it should not be described as HFT-ready.
+
 ---
 
 ## Strategy Hierarchy
