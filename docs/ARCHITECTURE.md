@@ -103,6 +103,8 @@ flowchart TB
 | **Order Book Service** | `src/services/order_book_service.py` | Normalized local depth state with queryable best bid/ask and depth windows |
 | **Microstructure Features** | `src/indicators/microstructure_features.py` | Spread, depth imbalance, and replay-driven trade-pressure features for research and future low-latency strategies |
 | **Native Hot-Path Ports** | `src/ports/native_market_data.py`, `src/ports/native_execution.py`, `src/ports/native_hot_path.py` | Abstract boundary contracts for a future native market-data/execution data plane |
+| **Native IPC Protocol** | `src/runtime/ipc_protocol.py` | Versioned JSON envelope format for the Python/native hot-path boundary |
+| **Native Shadow Bridge** | `src/runtime/native_shadow.py` | Read-only Python/native comparison bridge used for dual-run mismatch reporting |
 | **Runtime Event Capture / Replay** | `src/runtime/event_capture.py`, `src/runtime/event_replay.py` | Bounded JSONL capture for hot-path events and deterministic replay helpers for debugging/tests |
 | **Reconciliation Manager** | `src/monitoring/reconciliation.py` | Syncs DB state with exchange balances to find orphaned/lost trades |
 | **FastAPI App** | `src/api/app.py` | Application factory with lifespan-managed bot |
@@ -157,6 +159,25 @@ Interpretation is intentionally conservative:
 - `startup_pending` is not a rollback signal by itself; it only means the runtime is still warming up.
 
 Runtime event capture uses `src/runtime/event_capture.py` to write a bounded JSONL record of hot-path events for offline debugging. Replay support is for test and investigation flows, not for live hot-path execution.
+
+## Native Hot-Path Boundary
+
+Phase 14 introduces a native control-plane boundary without changing live trading behavior.
+
+What moves first:
+
+- market-data normalization through `NativeMarketDataGateway`
+- execution submission through `NativeExecutionGateway`
+- boundary messaging through `IPCEnvelope` and `IPC_PROTOCOL_VERSION`
+
+How dual-run validation works:
+
+- `RuntimeApp` can carry optional `NativeHotPathPorts`
+- `runtime.native_shadow.NativeShadowBridge` compares Python runtime projections against an optional native snapshot
+- operator surfaces can expose `native_shadow_report` with mismatch counts and summary text
+- healthy cases stay benign when no native bundle or snapshot is present
+
+The native boundary is comparison-only until a real native transport/process is introduced in a later phase.
 
 ## Trading Cycle Walkthrough
 

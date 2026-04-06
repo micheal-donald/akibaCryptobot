@@ -189,6 +189,25 @@ Live canary commands:
 
 If any live canary or live primary rollout reports `rollout_health=rollback_recommended`, the expected immediate action is `rollback_to_live_legacy`.
 
+#### Phase 14 Native Hot-Path Boundary
+
+Phase 14 does not deploy a real native process yet. It defines and validates the boundary that a later native service will use.
+
+The intended first native migration targets are:
+
+- market-data normalization
+- execution submission and order-state updates
+
+Before any cutover, the Python runtime should continue to run the same trading logic while a native shadow path emits read-only comparison data through `runtime.native_shadow.NativeShadowBridge`. The operator-facing report appears as `native_shadow_report` in `/api/status` and `/ws/status`.
+
+Recommended validation order:
+
+1. Boot with the native ports wired through `NativeHotPathPorts`.
+2. Verify `native_shadow_report.native_shadow_status=awaiting_native_snapshot` while the native path is enabled but has no snapshot yet.
+3. Feed or synthesize a native snapshot and confirm `native_shadow_report.native_shadow_status=match`.
+4. Treat any `native_shadow_status=divergent` result as a rollout blocker until the mismatch is understood.
+5. Keep live trading behavior unchanged until a later phase introduces a real native transport and cutover policy.
+
 ---
 
 ## Docker Deployment
