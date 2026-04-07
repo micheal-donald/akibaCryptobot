@@ -11,7 +11,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
-| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, circuit breaker state, training job state, strategy, trading mode |
+| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, operational alerts, halt state, circuit breaker state, training job state, strategy, trading mode |
 | `GET` | `/api/reconcile` | Manually triggers a reconciliation check between DB and Exchange |
 
 **Example response** (`GET /api/status`):
@@ -394,12 +394,37 @@ The runtime emits counters with stable names so operators can tell backlog from 
 
 ---
 
+## Operational Alerts & Halt State
+
+When the runtime, model, or training control plane detects sustained degradation, `/api/status` and `/ws/status` include a canonical operational alert summary.
+
+### Status Fields
+
+| Field | Meaning |
+|---|---|
+| `operational_alerts` | Active alerts with code, severity, source, message, and recommended action |
+| `halt_state` | Current entry-blocking state: `none`, `entries_blocked`, `runtime_kill_switch`, or `legacy_circuit_breaker` |
+| `entries_blocked_reason` | Alert code that caused the current entry block, if any |
+| `active_critical_alert_count` | Number of currently active critical alerts |
+
+### Operator Semantics
+
+- `halt_state=none` means new entries are not blocked by operational alerts.
+- Any non-`none` halt state means do not re-enable entries until the alert set is empty and the reviewed recovery path is satisfied.
+- In runtime-owned modes, the alert path blocks new entries only; exits continue to run.
+- In legacy-owned modes, the same alert path uses the legacy entry-pause seam rather than forcing a full stop.
+- The recommended operator action is always shown in the alert records and should be preferred over ad hoc manual recovery.
+
+The same fields are mirrored through `/ws/status` and the Telegram `/status` and `/risk` summaries so the API, websocket stream, and chat notifier stay aligned.
+
+---
+
 ## WebSocket Streams
 
 | Endpoint | Push Interval | Description |
 |---|---|---|
 | `ws://<host>:<port>/ws/prices` | 1 second | Real-time price ticks from the Binance exchange cache |
-| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with deployment profile, effective runtime mode, ownership, training-job state, and projection metadata |
+| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with deployment profile, effective runtime mode, ownership, operational alerts, training-job state, and projection metadata |
 
 **Message format** (`/ws/prices`):
 ```json

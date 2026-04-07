@@ -40,6 +40,7 @@ AkibaCryptoBot includes a Telegram bot for real-time monitoring and control. The
 | `/reconcile` | Manual balance audit vs Exchange |
 | `/model` | Current FreqAI model health plus the latest training/reload snapshot |
 | `/train_status` | Current and last server-side training job state |
+| `/risk` | Risk report plus any active operational halt reason and blocked-entry summary |
 
 ### Trading
 
@@ -78,6 +79,7 @@ The bot sends these notifications automatically (when enabled in config):
 | **Trade Entry** | A new position is opened | Symbol, side, amount, entry price, stop loss, take profit |
 | **Trade Exit** | A position is closed | Symbol, exit price, PnL, exit reason |
 | **Training Job** | A server-side model training job changes state | Job id, requester, symbols, timeframe, progress, result or error |
+| **Operational Alert** | A sustained runtime/model/training issue is detected or cleared | Alert codes, halt state, blocked-entry reason, recommended action |
 | **Error Alert** | An error occurs | Error message and context |
 | **Daily Report** | End of trading day | Trades count, win rate, total PnL, drawdown |
 
@@ -159,3 +161,12 @@ The command shares the exact same guardrails as `POST /api/model/train`:
 - trading must already be paused
 - only one queued/running job at a time
 - the operator must fix the blocker before a new job can be queued
+
+### Operational Alert and Halt Messages
+
+When a critical operational alert appears, the bot sends a short alert transition message and the `/status` output reflects the same blocked-entry state shown by the API:
+
+- `halt_state=entries_blocked`, `runtime_kill_switch`, or `legacy_circuit_breaker` means new entries are blocked
+- exits continue to be managed by the runtime or legacy path that already owns them
+- `/risk` shows the active alert code and the reason entries are blocked
+- clearing the alert sends a recovery message and only then does the entry block clear

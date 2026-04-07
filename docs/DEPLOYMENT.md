@@ -234,6 +234,18 @@ Live canary commands:
 
 If any live canary or live primary rollout reports `rollout_health=rollback_recommended`, the expected immediate action is `rollback_to_live_legacy`.
 
+### Operational Alert Recovery Checklist
+
+If the runtime or model enters a blocked-entry state, inspect these surfaces before re-enabling entries:
+
+1. `GET /api/status` for `operational_alerts`, `halt_state`, `entries_blocked_reason`, `runtime_is_healthy`, and `rollout_health`.
+2. `GET /api/model/status` and `GET /api/model/train/status` for model freshness and any active training job.
+3. The Telegram `/status` and `/risk` summaries to confirm the same blocked-entry reason is visible to operators.
+4. The bot logs for repeated telemetry drops, reconnect storms, startup timeouts, or model reload failures.
+5. The same pinned deploy flow used for promotion or rollback if the reviewed profile or effective mode needs to change.
+
+Do not re-enable entries until the alert list is empty, the halt state returns to `none`, and the reviewed profile/mode pair matches the intended rollout target.
+
 #### Phase 14 Native Hot-Path Boundary
 
 Phase 14 does not deploy a real native process yet. It defines and validates the boundary that a later native service will use.

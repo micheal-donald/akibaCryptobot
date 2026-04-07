@@ -228,6 +228,21 @@ After a halt:
 5. Re-run the pinned deploy with the expected profile and mode assertions.
 6. Resume promotion only after the rollout state and telemetry return to healthy values.
 
+### Before Re-Enabling Entries
+
+Before you clear a blocked-entry state, check that all of the following are true:
+
+- `operational_alerts` is empty or only contains non-blocking warnings.
+- `halt_state` is `none`.
+- `entries_blocked_reason` is `null`.
+- `/api/model/status` shows `freqai_active=true`, `trained=true`, and `stale=false`.
+- `/api/model/train/status` shows no `current_job` or other active blocker.
+- `/api/status` reports `runtime_is_healthy=true` and the expected reviewed rollout profile.
+- Telegram `/status` and `/risk` show the same recovery state the API reports.
+- The logs no longer show repeated drops, reconnect storms, startup timeouts, or stale-feed escalation.
+
+If any of these are still failing, keep entries paused and resolve the root cause first.
+
 ### Degraded-Latency Expectations
 
 For future HFT operation, repeated latency degradation should be treated like a soft halt before it becomes a hard failure:

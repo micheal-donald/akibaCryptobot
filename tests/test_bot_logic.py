@@ -3,7 +3,12 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 from bot import AkibaCryptoBot
-from operations.alerts import OperationalAlertRecord, OperationalAlertState
+from operations.alert_evaluator import OperationalAlertEvaluator
+from operations.alerts import (
+    OperationalAlertRecord,
+    OperationalAlertState,
+    OperationsConfig,
+)
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
@@ -447,6 +452,115 @@ async def test_operational_alerts_clear_and_unblock_entries_on_recovery(bot):
 
     assert state.halt_state == "none"
     assert state.entries_blocked_reason is None
+    risk_service.set_entries_paused.assert_called_with(False)
+
+
+@pytest.mark.asyncio
+async def test_operational_alerts_escalate_from_repeated_telemetry_and_recover(bot):
+    risk_service = MagicMock()
+    bot.runtime_app = type("RuntimeApp", (), {"risk_service": risk_service})()
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_primary",
+        shadow_mode=False,
+    )
+    bot.operations_config = OperationsConfig(
+        critical_persistence_samples=2,
+        queue_lag_threshold_seconds=1.0,
+        queue_depth_threshold=5,
+        event_age_threshold_seconds=10.0,
+        exchange_age_threshold_seconds=10.0,
+        reconnect_count_threshold=3,
+        dropped_event_count_threshold=2,
+        model_staleness_warning_hours=48.0,
+        evaluation_interval_seconds=15.0,
+        runtime_startup_timeout_seconds=120,
+    )
+    bot.alert_evaluator = OperationalAlertEvaluator(bot.operations_config)
+    bot.get_runtime_projection = MagicMock(
+        return_value=type(
+            "Projection",
+            (),
+            {
+                "runtime_is_running": True,
+                "runtime_is_healthy": True,
+                "runtime_start_pending": False,
+                "runtime_start_status": "running",
+            },
+        )()
+    )
+    bot.get_runtime_telemetry_info = MagicMock(
+        return_value={
+            "queue_depths": {"runtime.event_bus": 6},
+            "latency": {"queue_lag_ms": {"runtime.event_bus": {"last_ms": 2000.0}}},
+        }
+    )
+    bot.get_native_shadow_report = MagicMock(return_value=None)
+    bot.get_model_status_info = AsyncMock(
+        return_value={"models": [{"name": "freqai", "age_hours": 1.0, "stale": False}]}
+    )
+    bot.get_training_job_status = AsyncMock(
+        return_value=type("Snapshot", (), {"to_dict": lambda self: {}})()
+    )
+
+    first = await bot.evaluate_operational_alerts()
+    second = await bot.evaluate_operational_alerts()
+
+    assert first.halt_state == "none"
+    assert second.halt_state == "runtime_kill_switch"
+    assert second.entries_blocked_reason == "runtime_queue_backlog"
+    risk_service.set_entries_paused.assert_called_with(True)
+
+    bot.get_runtime_telemetry_info = MagicMock(return_value={})
+    bot.get_model_status_info = AsyncMock(
+        return_value={"models": [{"name": "freqai", "age_hours": 1.0, "stale": False}]}
+    )
+    recovered = await bot.evaluate_operational_alerts()
+
+    assert recovered.halt_state == "none"
+    assert recovered.entries_blocked_reason is None
+    risk_service.set_entries_paused.assert_called_with(False)
+
+
+@pytest.mark.asyncio
+async def test_operational_alerts_warning_only_does_not_halt(bot):
+    risk_service = MagicMock()
+    bot.runtime_app = type("RuntimeApp", (), {"risk_service": risk_service})()
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_primary",
+        shadow_mode=False,
+    )
+    bot.operations_config = OperationsConfig()
+    bot.alert_evaluator = OperationalAlertEvaluator(bot.operations_config)
+    bot.get_runtime_projection = MagicMock(
+        return_value=type(
+            "Projection",
+            (),
+            {
+                "runtime_is_running": True,
+                "runtime_is_healthy": True,
+                "runtime_start_pending": False,
+                "runtime_start_status": "running",
+            },
+        )()
+    )
+    bot.get_runtime_telemetry_info = MagicMock(return_value={})
+    bot.get_native_shadow_report = MagicMock(return_value=None)
+    bot.get_model_status_info = AsyncMock(
+        return_value={"models": [{"name": "freqai", "age_hours": 60.0, "stale": True}]}
+    )
+    bot.get_training_job_status = AsyncMock(
+        return_value=type("Snapshot", (), {"to_dict": lambda self: {}})()
+    )
+
+    state = await bot.evaluate_operational_alerts()
+
+    assert state.halt_state == "none"
+    assert state.entries_blocked_reason is None
+    assert {alert.code for alert in state.operational_alerts} == {"model_stale"}
     risk_service.set_entries_paused.assert_called_with(False)
 
 
