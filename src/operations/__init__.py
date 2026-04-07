@@ -14,6 +14,19 @@ from .alerts import (
     OperationalAlertState,
     OperationsConfig,
 )
+from .alert_evaluator import (
+    ALERT_MODEL_STALE,
+    ALERT_NATIVE_SHADOW_DIVERGENT,
+    ALERT_RUNTIME_EVENT_DROP_DETECTED,
+    ALERT_RUNTIME_FEED_STALE,
+    ALERT_RUNTIME_QUEUE_BACKLOG,
+    ALERT_RUNTIME_RECONNECT_STORM,
+    ALERT_RUNTIME_START_TIMEOUT,
+    ALERT_RUNTIME_UNHEALTHY,
+    ALERT_TRAINING_FAILED,
+    ALERT_TRAINING_STUCK,
+    OperationalAlertEvaluator,
+)
 from .model_training_manager import ModelTrainingManager
 from .training_jobs import (
     ACTIVE_TRAINING_JOB_STATUSES,
@@ -41,6 +54,17 @@ __all__ = [
     "OperationalAlertRecord",
     "OperationalAlertState",
     "OperationsConfig",
+    "ALERT_MODEL_STALE",
+    "ALERT_NATIVE_SHADOW_DIVERGENT",
+    "ALERT_RUNTIME_EVENT_DROP_DETECTED",
+    "ALERT_RUNTIME_FEED_STALE",
+    "ALERT_RUNTIME_QUEUE_BACKLOG",
+    "ALERT_RUNTIME_RECONNECT_STORM",
+    "ALERT_RUNTIME_START_TIMEOUT",
+    "ALERT_RUNTIME_UNHEALTHY",
+    "ALERT_TRAINING_FAILED",
+    "ALERT_TRAINING_STUCK",
+    "OperationalAlertEvaluator",
     "TrainingJobRecord",
     "TrainingJobRequest",
     "TrainingJobSnapshot",

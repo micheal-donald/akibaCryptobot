@@ -178,6 +178,24 @@ def test_risk_service_allows_reduce_only_close_for_open_symbol() -> None:
     assert event_bus.empty()
 
 
+def test_risk_service_entry_pause_blocks_entries_but_allows_reduce_only() -> None:
+    service, event_bus = build_service()
+    service.set_entries_paused(True)
+
+    blocked_decision = service.evaluate_intent(build_intent())
+    allowed_decision = service.evaluate_intent(
+        build_intent(reduce_only=True, quantity=0.005, side="sell"),
+        runtime_positions=(build_open_position(),),
+    )
+
+    assert blocked_decision.allowed is False
+    assert blocked_decision.reason == "entries_paused"
+    assert allowed_decision.allowed is True
+    event = event_bus.get_nowait()
+    assert isinstance(event.payload, RiskBlockedPayload)
+    assert event.payload.reason == "entries_paused"
+
+
 def test_risk_service_blocks_reduce_only_same_side_as_open_position() -> None:
     service, event_bus = build_service()
     intent = build_intent(reduce_only=True, quantity=0.005, side="buy")

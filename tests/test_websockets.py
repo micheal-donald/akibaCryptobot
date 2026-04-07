@@ -38,6 +38,7 @@ class FakeStatusBot:
         trading_mode="paper",
         native_shadow_report=None,
         training_snapshot=None,
+        alert_state=None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
@@ -54,6 +55,11 @@ class FakeStatusBot:
             "StrategyManager", (), {"active_strategy": "ensemble"}
         )()
         self._trading_mode = trading_mode
+        self._alert_state = alert_state or {
+            "operational_alerts": [],
+            "halt_state": "none",
+            "entries_blocked_reason": None,
+        }
 
     def get_status_info(self):
         return {
@@ -124,6 +130,9 @@ class FakeStatusBot:
 
     async def get_training_job_status(self):
         return self._training_snapshot
+
+    def get_operational_alert_state(self):
+        return self._alert_state
 
 
 def make_projection(
@@ -225,6 +234,8 @@ async def test_ws_status_uses_runtime_projection_when_available(monkeypatch):
     assert data["trading_mode"] == "paper"
     assert data["training_job"]["current_job"]["job_id"] == "job-ws"
     assert data["training_job"]["current_job"]["status"] == "queued"
+    assert data["operational_alerts"] == []
+    assert data["halt_state"] == "none"
 
 
 @pytest.mark.asyncio
@@ -297,6 +308,45 @@ async def test_ws_status_surfaces_native_shadow_mismatch_report(monkeypatch):
         "active_position_count",
         "open_order_count",
     ]
+
+
+@pytest.mark.asyncio
+async def test_ws_status_surfaces_operational_halt_state(monkeypatch):
+    monkeypatch.setitem(
+        bot_state,
+        "bot",
+        FakeStatusBot(
+            make_projection(
+                source=ProjectionSource.RUNTIME_PROJECTION,
+                runtime_mode="runtime_primary",
+            ),
+            configured_deployment_profile="paper_runtime_primary",
+            alert_state={
+                "operational_alerts": [
+                    {
+                        "code": "runtime_feed_stale",
+                        "severity": "critical",
+                        "source": "telemetry",
+                        "message": "Feed is stale.",
+                        "recommended_action": "inspect_market_data_feed",
+                        "started_at": NOW.isoformat(),
+                        "last_seen_at": NOW.isoformat(),
+                        "active": True,
+                    }
+                ],
+                "halt_state": "runtime_kill_switch",
+                "entries_blocked_reason": "runtime_feed_stale",
+            },
+        ),
+    )
+    websocket = FakeWebSocket()
+
+    await ws_status(websocket)
+
+    data = websocket.sent[0]["data"]
+    assert data["halt_state"] == "runtime_kill_switch"
+    assert data["entries_blocked_reason"] == "runtime_feed_stale"
+    assert data["operational_alerts"][0]["code"] == "runtime_feed_stale"
 
 
 @pytest.mark.asyncio

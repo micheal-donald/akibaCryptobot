@@ -537,6 +537,17 @@ class TelegramNotifier:
         if bot is None:
             return {"freqai_active": False, "reason": "Bot instance not available"}
 
+        helper = getattr(bot, "get_model_status_info", None)
+        if callable(helper):
+            try:
+                result = helper()
+                if inspect.isawaitable(result):
+                    return {"freqai_active": False, "reason": "Model snapshot pending"}
+                if isinstance(result, dict):
+                    return result
+            except Exception:
+                logger.exception("Failed to load model status snapshot from bot helper")
+
         strategy_manager = getattr(bot, "strategy_manager", None)
         if strategy_manager is None:
             return {"freqai_active": False, "reason": "Strategy manager not available"}
@@ -609,6 +620,133 @@ class TelegramNotifier:
             exchange = config.get("exchange", {}) if isinstance(config, dict) else {}
             return "paper" if exchange.get("sandbox", True) else "live"
         return "paper"
+
+    async def _get_operational_alert_state(self) -> Dict[str, Any] | None:
+        result = await self._call_optional_helper("get_operational_alert_state")
+        if isinstance(result, dict):
+            return result
+
+        bot = getattr(self, "bot_instance", None)
+        if bot is None:
+            return None
+
+        if all(hasattr(bot, attr) for attr in ("operational_alerts", "halt_state")):
+            alerts = [
+                alert.to_dict() if hasattr(alert, "to_dict") else alert
+                for alert in getattr(bot, "operational_alerts", ())
+            ]
+            return {
+                "operational_alerts": alerts,
+                "halt_state": getattr(bot, "halt_state", "none"),
+                "entries_blocked_reason": getattr(bot, "entries_blocked_reason", None),
+            }
+        return None
+
+    @staticmethod
+    def _critical_alerts(alert_state: Dict[str, Any] | None) -> list[Dict[str, Any]]:
+        if not isinstance(alert_state, dict):
+            return []
+        alerts = alert_state.get("operational_alerts")
+        if not isinstance(alerts, list):
+            return []
+        return [
+            alert
+            for alert in alerts
+            if isinstance(alert, dict) and alert.get("severity") == "critical"
+        ]
+
+    def _format_operational_alert_lines(
+        self, alert_state: Dict[str, Any] | None
+    ) -> list[str]:
+        if not isinstance(alert_state, dict):
+            return []
+
+        halt_state = str(alert_state.get("halt_state", "none"))
+        entries_blocked_reason = alert_state.get("entries_blocked_reason")
+        alerts = alert_state.get("operational_alerts")
+        if not isinstance(alerts, list):
+            alerts = []
+
+        lines = [
+            "Operational Alerts",
+            f"Halt State: {halt_state}",
+        ]
+        if entries_blocked_reason:
+            lines.append(f"Entries Blocked Reason: {entries_blocked_reason}")
+        if not alerts:
+            lines.append("Alerts: none")
+            return lines
+
+        lines.append(f"Alerts: {len(alerts)} active")
+        for alert in alerts[:3]:
+            if not isinstance(alert, dict):
+                continue
+            lines.append(
+                f"- {alert.get('severity', 'info')} {alert.get('code', 'unknown')}: "
+                f"{alert.get('recommended_action', 'inspect')}"
+            )
+        if len(alerts) > 3:
+            lines.append(f"- plus {len(alerts) - 3} more alert(s)")
+        return lines
+
+    async def send_operational_alert_transition(
+        self,
+        previous_state: Dict[str, Any] | None,
+        current_state: Dict[str, Any] | None,
+    ) -> None:
+        if not self.enabled:
+            return
+
+        previous_critical = {
+            alert.get("code")
+            for alert in self._critical_alerts(previous_state)
+            if isinstance(alert, dict)
+        }
+        current_critical = {
+            alert.get("code")
+            for alert in self._critical_alerts(current_state)
+            if isinstance(alert, dict)
+        }
+        new_critical = sorted(
+            code for code in current_critical - previous_critical if code
+        )
+        cleared = sorted(code for code in previous_critical - current_critical if code)
+
+        current_halt = (
+            current_state.get("halt_state")
+            if isinstance(current_state, dict)
+            else "none"
+        )
+        current_reason = (
+            current_state.get("entries_blocked_reason")
+            if isinstance(current_state, dict)
+            else None
+        )
+        previous_halt = (
+            previous_state.get("halt_state")
+            if isinstance(previous_state, dict)
+            else "none"
+        )
+
+        if new_critical:
+            lines = [
+                "🚨 OPERATIONS ALERT",
+                f"Critical Alerts: {', '.join(new_critical)}",
+                f"Halt State: {current_halt}",
+            ]
+            if current_reason:
+                lines.append(f"Entries Blocked Reason: {current_reason}")
+            await self.send_message("\n".join(lines))
+            return
+
+        if previous_halt != "none" and current_halt == "none":
+            lines = [
+                "✅ OPERATIONS RECOVERY",
+                "Critical alerts cleared and entry blocking has been released.",
+            ]
+            if cleared:
+                lines.append(f"Recovered Alerts: {', '.join(cleared)}")
+            await self.send_message("\n".join(lines))
 
     @classmethod
     def _rollout_summary_for_visibility(
@@ -734,6 +872,9 @@ class TelegramNotifier:
                                 last_job, heading="Last Training Job"
                             )
                         )
+
+                alert_state = await self._get_operational_alert_state()
+                lines.extend(self._format_operational_alert_lines(alert_state))
 
                 message = "\n".join(lines)
             except Exception as e:
@@ -899,7 +1040,9 @@ class TelegramNotifier:
 
     async def cmd_model(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /model command"""
-        model_status = self._get_model_status_snapshot()
+        model_status = await self._call_optional_helper("get_model_status_info")
+        if not isinstance(model_status, dict):
+            model_status = self._get_model_status_snapshot()
         lines = self._format_model_status_lines(model_status)
 
         training_status = await self._get_training_job_status()
@@ -1243,6 +1386,18 @@ class TelegramNotifier:
                     f"  • Drawdown Threshold: {risk_report['circuit_breaker_parameters']['drawdown_threshold']:.1%}\n\n"
                     f"📈 Portfolio Risk: {risk_report['portfolio_heatmap']['total_risk']:.2f}%"
                 )
+
+                alert_state = await self._get_operational_alert_state()
+                if isinstance(alert_state, dict):
+                    message += f"\n\n🚦 Entry Halt State: {alert_state.get('halt_state', 'none')}"
+                    blocked_reason = alert_state.get("entries_blocked_reason")
+                    if blocked_reason:
+                        message += f"\nBlocked Reason: {blocked_reason}"
+                    critical_alerts = self._critical_alerts(alert_state)
+                    if critical_alerts:
+                        message += "\nCritical Alerts: " + ", ".join(
+                            alert.get("code", "unknown") for alert in critical_alerts
+                        )
 
                 await update.message.reply_text(message)
             except Exception as e:

@@ -124,6 +124,7 @@ class FakeStatusBot:
         trading_mode: str = "paper",
         native_shadow_report: dict[str, object] | None = None,
         training_snapshot: TrainingJobSnapshot | None = None,
+        alert_state: dict[str, object] | None = None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
@@ -142,6 +143,11 @@ class FakeStatusBot:
         )()
         self._active_trades = [{"symbol": "BTC/USDT"}]
         self._trading_mode = trading_mode
+        self._alert_state = alert_state or {
+            "operational_alerts": [],
+            "halt_state": "none",
+            "entries_blocked_reason": None,
+        }
 
     def get_status_info(self):
         return {
@@ -211,6 +217,9 @@ class FakeStatusBot:
     async def get_training_job_status(self):
         return self._training_snapshot
 
+    def get_operational_alert_state(self):
+        return self._alert_state
+
 
 @pytest.mark.asyncio
 async def test_status_route_includes_runtime_cutover_fields():
@@ -264,6 +273,8 @@ async def test_status_route_includes_runtime_cutover_fields():
     assert payload["projected_active_positions"] == 1
     assert payload["training_job"]["current_job"]["job_id"] == "job-status"
     assert payload["training_job"]["current_job"]["status"] == "running"
+    assert payload["operational_alerts"] == []
+    assert payload["halt_state"] == "none"
     assert payload["projected_open_orders"] == 2
     assert payload["projected_pending_exits"] == 1
     assert payload["projected_rejected_orders"] == 1
@@ -330,6 +341,40 @@ async def test_status_route_surfaces_native_shadow_mismatch_report():
         "active_position_count",
         "open_order_count",
     ]
+
+
+@pytest.mark.asyncio
+async def test_status_route_surfaces_operational_halt_state():
+    bot = FakeStatusBot(
+        make_projection(
+            source=ProjectionSource.RUNTIME_PROJECTION,
+            runtime_mode="runtime_primary",
+            active_positions=(make_projected_position(),),
+        ),
+        configured_deployment_profile="paper_runtime_primary",
+        alert_state={
+            "operational_alerts": [
+                {
+                    "code": "runtime_feed_stale",
+                    "severity": "critical",
+                    "source": "telemetry",
+                    "message": "Feed is stale.",
+                    "recommended_action": "inspect_market_data_feed",
+                    "started_at": NOW.isoformat(),
+                    "last_seen_at": NOW.isoformat(),
+                    "active": True,
+                }
+            ],
+            "halt_state": "runtime_kill_switch",
+            "entries_blocked_reason": "runtime_feed_stale",
+        },
+    )
+
+    payload = await get_status(bot=bot)
+
+    assert payload["halt_state"] == "runtime_kill_switch"
+    assert payload["entries_blocked_reason"] == "runtime_feed_stale"
+    assert payload["operational_alerts"][0]["code"] == "runtime_feed_stale"
 
 
 @pytest.mark.asyncio

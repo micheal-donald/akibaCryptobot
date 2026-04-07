@@ -795,9 +795,13 @@ function updateStatusUI(data) {
     const isRunning = data.is_running !== undefined ? data.is_running : true;
     isBotRunning = isRunning;
     isTradingPaused = Boolean(data.trading_paused);
+    const haltState = data.halt_state || 'none';
+    const entriesBlockedReason = data.entries_blocked_reason || null;
 
     if (data.circuit_breaker_active) {
         setStatusIndicator(false, 'CIRCUIT BREAKER', 'critical');
+    } else if (haltState !== 'none') {
+        setStatusIndicator(false, 'ENTRIES BLOCKED', 'critical');
     } else if (!isRunning) {
         setStatusIndicator(false, 'BOT STOPPED', 'offline');
     } else if (isTradingPaused) {
@@ -824,6 +828,11 @@ function updateStatusUI(data) {
     if (data.circuit_breaker_active) {
         dom.cbBanner.classList.remove('hidden');
         dom.cbReason.textContent = data.circuit_breaker_reason || 'Unknown reason';
+    } else if (haltState !== 'none') {
+        dom.cbBanner.classList.remove('hidden');
+        dom.cbReason.textContent = entriesBlockedReason
+            ? `Operational halt: ${entriesBlockedReason}`
+            : `Operational halt active (${haltState})`;
     } else if (!data.circuit_breaker_active) {
         dom.cbBanner.classList.add('hidden');
     }
@@ -956,13 +965,31 @@ function renderOperationalAlertsSection(statusData) {
     const alertLines = [
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Halt State</span><span class="${haltState === 'none' ? 'text-matrix-neon' : 'text-red-400'}">${haltState}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Entries Blocked</span><span class="${entriesBlockedReason === '—' ? 'text-matrix-neon' : 'text-yellow-400'}">${entriesBlockedReason}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Critical Alerts</span><span class="${(statusData?.active_critical_alert_count || 0) > 0 ? 'text-red-400' : 'text-matrix-neon'}">${statusData?.active_critical_alert_count || 0}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status Job Surface</span><span class="text-white">${trainingJob?.current_job?.status || trainingJob?.last_job?.status || 'idle'}</span></div>`,
     ];
 
     if (alerts.length === 0) {
         alertLines.push(
-            `<div class="text-[11px] text-matrix-dim">No active operational alerts. Phase 17 will promote this placeholder into the alert authority surface.</div>`
+            `<div class="text-[11px] text-matrix-dim">No active operational alerts.</div>`
         );
+    } else {
+        alertLines.push(
+            ...alerts.slice(0, 3).map(alert => {
+                const severity = alert?.severity || 'info';
+                const severityClass = severity === 'critical'
+                    ? 'text-red-400'
+                    : severity === 'warning'
+                        ? 'text-yellow-400'
+                        : 'text-matrix-dim';
+                return `<div class="text-[11px] ${severityClass} break-words">${severity}: ${alert.code} -> ${alert.recommended_action || 'inspect'}</div>`;
+            })
+        );
+        if (alerts.length > 3) {
+            alertLines.push(
+                `<div class="text-[11px] text-matrix-dim">Plus ${alerts.length - 3} more alert(s).</div>`
+            );
+        }
     }
 
     return `

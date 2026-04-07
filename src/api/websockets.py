@@ -70,11 +70,33 @@ async def _inject_training_job(status_info, bot):
     return status_info
 
 
+def _inject_operational_alert_state(status_info, bot):
+    getter = getattr(bot, "get_operational_alert_state", None)
+    if callable(getter):
+        alert_state = getter()
+        if isinstance(alert_state, dict):
+            status_info.setdefault(
+                "operational_alerts",
+                alert_state.get("operational_alerts", []),
+            )
+            status_info.setdefault("halt_state", alert_state.get("halt_state", "none"))
+            status_info.setdefault(
+                "entries_blocked_reason",
+                alert_state.get("entries_blocked_reason"),
+            )
+    status_info.setdefault("operational_alerts", [])
+    status_info.setdefault("halt_state", "none")
+    status_info.setdefault("entries_blocked_reason", None)
+    status_info.setdefault("active_critical_alert_count", 0)
+    return status_info
+
+
 async def _build_status_payload(bot):
     status_info = bot.get_status_info()
     _inject_runtime_visibility(status_info, bot)
     _inject_runtime_telemetry(status_info, bot)
     _inject_native_shadow_report(status_info, bot)
+    _inject_operational_alert_state(status_info, bot)
     await _inject_training_job(status_info, bot)
     projection = _get_runtime_projection(bot)
     rollout_summary = build_rollout_summary(
@@ -150,6 +172,12 @@ async def _build_status_payload(bot):
             "runtime_telemetry": status_info.get("runtime_telemetry"),
             "native_shadow_report": status_info.get("native_shadow_report"),
             "training_job": status_info.get("training_job"),
+            "operational_alerts": status_info.get("operational_alerts", []),
+            "halt_state": status_info.get("halt_state", "none"),
+            "entries_blocked_reason": status_info.get("entries_blocked_reason"),
+            "active_critical_alert_count": status_info.get(
+                "active_critical_alert_count", 0
+            ),
             "state_source": state_source,
             **rollout_summary,
             "projected_active_positions": projected_active_positions,

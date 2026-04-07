@@ -3,7 +3,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timedelta
 from bot import AkibaCryptoBot
-from operations.alerts import OperationalAlertState
+from operations.alerts import OperationalAlertRecord, OperationalAlertState
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
@@ -70,6 +70,9 @@ def bot(mock_config):
         bot.runtime_config = None
         bot.runtime_handle = None
         bot.runtime_app = None
+        bot.operations_config = MagicMock(evaluation_interval_seconds=15.0)
+        bot.alert_evaluator = MagicMock()
+        bot._runtime_start_started_at = None
         bot.position_manager = PositionManager(bot)
         bot.opportunity_scanner = OpportunityScanner(bot)
         return bot
@@ -350,6 +353,101 @@ async def test_bug3_risk_manager_synced_on_restart(bot):
         take_profit=62000.0,
         order_id="abc",
     )
+
+
+@pytest.mark.asyncio
+async def test_operational_alerts_block_runtime_entries_without_blocking_exits(bot):
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        runtime_mode="runtime_primary",
+        shadow_mode=False,
+    )
+    risk_service = MagicMock()
+    bot.runtime_app = type("RuntimeApp", (), {"risk_service": risk_service})()
+    bot.get_runtime_projection = MagicMock(
+        return_value=type(
+            "Projection",
+            (),
+            {
+                "runtime_is_running": True,
+                "runtime_is_healthy": True,
+                "runtime_start_pending": False,
+                "runtime_start_status": "running",
+            },
+        )()
+    )
+    bot.get_runtime_telemetry_info = MagicMock(return_value={})
+    bot.get_native_shadow_report = MagicMock(return_value=None)
+    bot.get_model_status_info = AsyncMock(return_value={})
+    bot.get_training_job_status = AsyncMock(
+        return_value=type("Snapshot", (), {"to_dict": lambda self: {}})()
+    )
+    bot.alert_evaluator.evaluate.return_value = OperationalAlertState(
+        operational_alerts=(
+            OperationalAlertRecord(
+                code="runtime_feed_stale",
+                severity="critical",
+                source="telemetry",
+                message="Feed stale.",
+                recommended_action="inspect_market_data_feed",
+            ),
+        ),
+        halt_state="entries_blocked",
+        entries_blocked_reason="runtime_feed_stale",
+    )
+
+    state = await bot.evaluate_operational_alerts()
+
+    assert state.halt_state == "runtime_kill_switch"
+    assert state.entries_blocked_reason == "runtime_feed_stale"
+    risk_service.set_entries_paused.assert_called_with(True)
+
+
+@pytest.mark.asyncio
+async def test_operational_alerts_clear_and_unblock_entries_on_recovery(bot):
+    risk_service = MagicMock()
+    bot.runtime_app = type("RuntimeApp", (), {"risk_service": risk_service})()
+    bot.get_runtime_projection = MagicMock(
+        return_value=type(
+            "Projection",
+            (),
+            {
+                "runtime_is_running": False,
+                "runtime_is_healthy": True,
+                "runtime_start_pending": False,
+                "runtime_start_status": "disabled",
+            },
+        )()
+    )
+    bot.get_runtime_telemetry_info = MagicMock(return_value={})
+    bot.get_native_shadow_report = MagicMock(return_value=None)
+    bot.get_model_status_info = AsyncMock(return_value={})
+    bot.get_training_job_status = AsyncMock(
+        return_value=type("Snapshot", (), {"to_dict": lambda self: {}})()
+    )
+    bot.set_operational_alert_state(
+        OperationalAlertState(
+            operational_alerts=(
+                OperationalAlertRecord(
+                    code="runtime_feed_stale",
+                    severity="critical",
+                    source="telemetry",
+                    message="Feed stale.",
+                    recommended_action="inspect_market_data_feed",
+                ),
+            ),
+            halt_state="legacy_circuit_breaker",
+            entries_blocked_reason="runtime_feed_stale",
+        )
+    )
+    bot.alert_evaluator.evaluate.return_value = OperationalAlertState()
+
+    state = await bot.evaluate_operational_alerts()
+
+    assert state.halt_state == "none"
+    assert state.entries_blocked_reason is None
+    risk_service.set_entries_paused.assert_called_with(False)
 
 
 class FakeRuntimeHandle:

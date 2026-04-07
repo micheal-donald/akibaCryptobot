@@ -56,6 +56,27 @@ async def _inject_training_job(status_info, bot):
     return status_info
 
 
+def _inject_operational_alert_state(status_info, bot):
+    getter = getattr(bot, "get_operational_alert_state", None)
+    if callable(getter):
+        alert_state = getter()
+        if isinstance(alert_state, dict):
+            status_info.setdefault(
+                "operational_alerts",
+                alert_state.get("operational_alerts", []),
+            )
+            status_info.setdefault("halt_state", alert_state.get("halt_state", "none"))
+            status_info.setdefault(
+                "entries_blocked_reason",
+                alert_state.get("entries_blocked_reason"),
+            )
+    status_info.setdefault("operational_alerts", [])
+    status_info.setdefault("halt_state", "none")
+    status_info.setdefault("entries_blocked_reason", None)
+    status_info.setdefault("active_critical_alert_count", 0)
+    return status_info
+
+
 @router.get("/health")
 async def health_check():
     """Liveness probe ? always returns OK if the server is up."""
@@ -69,6 +90,7 @@ async def get_status(bot=Depends(get_bot)):
     _inject_runtime_visibility(status_info, bot)
     _inject_runtime_telemetry(status_info, bot)
     _inject_native_shadow_report(status_info, bot)
+    _inject_operational_alert_state(status_info, bot)
     await _inject_training_job(status_info, bot)
     projection = bot.get_runtime_projection()
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active

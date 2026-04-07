@@ -143,6 +143,7 @@ class FakeBot:
         *,
         configured_deployment_profile: str | None = None,
         trading_mode: str = "paper",
+        alert_state: dict | None = None,
     ):
         self._projection = projection
         self.trade_store = object()
@@ -152,6 +153,36 @@ class FakeBot:
         self.config = {"exchange": {"sandbox": trading_mode != "live"}}
         self._trading_mode = trading_mode
         self.is_running = False
+        self.advanced_risk = type(
+            "AdvancedRisk",
+            (),
+            {
+                "get_risk_report": lambda self: {
+                    "position_sizing_parameters": {
+                        "atr_period": 14,
+                        "atr_multiplier": 2.0,
+                        "kelly_enabled": True,
+                        "kelly_cap": 0.25,
+                    },
+                    "correlation_parameters": {
+                        "threshold": 0.8,
+                        "max_correlated_positions": 2,
+                    },
+                    "circuit_breaker_parameters": {
+                        "volatility_threshold": 0.03,
+                        "drawdown_threshold": 0.2,
+                    },
+                    "portfolio_heatmap": {"total_risk": 12.5},
+                }
+            },
+        )()
+        self.circuit_breaker_active = False
+        self.circuit_breaker_reason = ""
+        self._alert_state = alert_state or {
+            "operational_alerts": [],
+            "halt_state": "none",
+            "entries_blocked_reason": None,
+        }
 
     def get_status_info(self):
         return {
@@ -188,6 +219,9 @@ class FakeBot:
             }
         }
 
+    def get_operational_alert_state(self):
+        return self._alert_state
+
 
 class TrainingBot:
     def __init__(
@@ -208,6 +242,11 @@ class TrainingBot:
             snapshot=snapshot, enqueue_result=enqueue_result
         )
         self.strategy_manager = FakeStrategyManager()
+        self._alert_state = {
+            "operational_alerts": [],
+            "halt_state": "none",
+            "entries_blocked_reason": None,
+        }
 
     def get_status_info(self):
         return {
@@ -235,6 +274,9 @@ class TrainingBot:
 
     def get_active_trades(self):
         return {}
+
+    def get_operational_alert_state(self):
+        return self._alert_state
 
 
 @pytest.mark.asyncio
@@ -296,6 +338,38 @@ async def test_cmd_status_includes_current_training_job():
     assert "Status: running" in message
     assert "Requested By: telegram" in message
     assert "Progress: 42%" in message
+
+
+@pytest.mark.asyncio
+async def test_cmd_status_includes_operational_halt_summary():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = FakeBot(
+        make_projection(
+            source=ProjectionSource.RUNTIME_PROJECTION,
+            runtime_mode="runtime_primary",
+        ),
+        alert_state={
+            "operational_alerts": [
+                {
+                    "code": "runtime_feed_stale",
+                    "severity": "critical",
+                    "source": "telemetry",
+                    "message": "Feed is stale.",
+                    "recommended_action": "inspect_market_data_feed",
+                }
+            ],
+            "halt_state": "runtime_kill_switch",
+            "entries_blocked_reason": "runtime_feed_stale",
+        },
+    )
+    update = FakeUpdate()
+
+    await notifier.cmd_status(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "Operational Alerts" in message
+    assert "Halt State: runtime_kill_switch" in message
+    assert "Entries Blocked Reason: runtime_feed_stale" in message
 
 
 @pytest.mark.asyncio
@@ -452,6 +526,38 @@ async def test_cmd_train_status_reports_current_job():
 
 
 @pytest.mark.asyncio
+async def test_cmd_risk_includes_halt_reason():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    notifier.bot_instance = FakeBot(
+        make_projection(
+            source=ProjectionSource.RUNTIME_PROJECTION,
+            runtime_mode="runtime_primary",
+        ),
+        alert_state={
+            "operational_alerts": [
+                {
+                    "code": "runtime_feed_stale",
+                    "severity": "critical",
+                    "source": "telemetry",
+                    "message": "Feed is stale.",
+                    "recommended_action": "inspect_market_data_feed",
+                }
+            ],
+            "halt_state": "runtime_kill_switch",
+            "entries_blocked_reason": "runtime_feed_stale",
+        },
+    )
+    update = FakeUpdate()
+
+    await notifier.cmd_risk(update, None)
+
+    message = update.message.calls[0]["text"]
+    assert "Entry Halt State: runtime_kill_switch" in message
+    assert "Blocked Reason: runtime_feed_stale" in message
+    assert "Critical Alerts: runtime_feed_stale" in message
+
+
+@pytest.mark.asyncio
 async def test_send_trade_notification_uses_directional_icons():
     notifier = TelegramNotifier(bot_token="token", chat_id="chat")
     messages = []
@@ -512,6 +618,71 @@ async def test_send_training_notification_uses_training_icons():
 
     assert "🧠⚙️ TRAINING JOB RUNNING" in messages[0]
     assert "Progress: 38%" in messages[0]
+
+
+@pytest.mark.asyncio
+async def test_send_operational_alert_transition_notifies_new_critical_alert():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    messages = []
+
+    async def fake_send_message(message, parse_mode=None):
+        messages.append(message)
+        return True
+
+    notifier.send_message = fake_send_message
+
+    await notifier.send_operational_alert_transition(
+        {
+            "operational_alerts": [],
+            "halt_state": "none",
+            "entries_blocked_reason": None,
+        },
+        {
+            "operational_alerts": [
+                {
+                    "code": "runtime_feed_stale",
+                    "severity": "critical",
+                    "recommended_action": "inspect_market_data_feed",
+                }
+            ],
+            "halt_state": "runtime_kill_switch",
+            "entries_blocked_reason": "runtime_feed_stale",
+        },
+    )
+
+    assert messages
+    assert "OPERATIONS ALERT" in messages[0]
+    assert "runtime_feed_stale" in messages[0]
+
+
+@pytest.mark.asyncio
+async def test_send_operational_alert_transition_notifies_recovery():
+    notifier = TelegramNotifier(bot_token="token", chat_id="chat")
+    messages = []
+
+    async def fake_send_message(message, parse_mode=None):
+        messages.append(message)
+        return True
+
+    notifier.send_message = fake_send_message
+
+    await notifier.send_operational_alert_transition(
+        {
+            "operational_alerts": [
+                {"code": "runtime_feed_stale", "severity": "critical"}
+            ],
+            "halt_state": "runtime_kill_switch",
+            "entries_blocked_reason": "runtime_feed_stale",
+        },
+        {
+            "operational_alerts": [],
+            "halt_state": "none",
+            "entries_blocked_reason": None,
+        },
+    )
+
+    assert messages
+    assert "OPERATIONS RECOVERY" in messages[0]
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,14 @@ from performance.metrics_tracker import PerformanceMetricsTracker
 from monitoring.reconciliation import ReconciliationManager
 from operations import ModelTrainingManager
 from operations.alerts import OperationalAlertState
+from operations.alert_evaluator import OperationalAlertEvaluator
+from operations.alerts import (
+    ALERT_SEVERITY_CRITICAL,
+    HALT_STATE_LEGACY_CIRCUIT_BREAKER,
+    HALT_STATE_NONE,
+    HALT_STATE_RUNTIME_KILL_SWITCH,
+    OperationsConfig,
+)
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
@@ -90,11 +98,16 @@ class AkibaCryptoBot:
 
         # Runtime supervisor (Phase 6): inactive unless explicitly configured.
         self.runtime_config = self._load_runtime_config()
+        self.operations_config = OperationsConfig.from_mapping(
+            self.config.get("operations", {})
+        )
+        self.alert_evaluator = OperationalAlertEvaluator(self.operations_config)
         self.runtime_handle = None
         self.runtime_app = None
         self._runtime_start_status = (
             "configured" if self.runtime_enabled else "disabled"
         )
+        self._runtime_start_started_at = None
 
         self.is_running = False
         self.trading_paused = False
@@ -273,6 +286,7 @@ class AkibaCryptoBot:
             return
 
         self._runtime_start_status = "starting"
+        self._runtime_start_started_at = datetime.now().astimezone()
         runtime_handle = self._build_runtime_handle()
         if runtime_handle is None:
             self._runtime_start_status = "failed"
@@ -301,7 +315,10 @@ class AkibaCryptoBot:
         risk_service = getattr(runtime_app, "risk_service", None)
         if risk_service is None or not hasattr(risk_service, "set_entries_paused"):
             return
-        risk_service.set_entries_paused(self.trading_paused)
+        risk_service.set_entries_paused(self._entries_blocked())
+
+    def _entries_blocked(self) -> bool:
+        return self.trading_paused or self.halt_state != HALT_STATE_NONE
 
     def _log_runtime_visibility(self) -> None:
         visibility = self.get_runtime_visibility_info()
@@ -359,6 +376,7 @@ class AkibaCryptoBot:
             timeout=self.CLEANUP_NETWORK_TIMEOUT_SECONDS,
         )
         self._runtime_start_status = "stopped"
+        self._runtime_start_started_at = None
 
     def signal_handler(self, signum, frame):
         self.logger.info(f"Received signal {signum}, shutting down gracefully...")
@@ -375,6 +393,9 @@ class AkibaCryptoBot:
             self.runtime_config = runtime_config
         self._runtime_start_status = (
             "configured" if self.runtime_enabled else "disabled"
+        )
+        self._runtime_start_started_at = (
+            datetime.now().astimezone() if self.runtime_enabled else None
         )
         self._log_runtime_visibility()
         self._validate_runtime_startup()
@@ -462,6 +483,9 @@ class AkibaCryptoBot:
                 )
 
             await self._start_runtime_if_enabled()
+            alert_task = asyncio.create_task(self._run_operational_alert_loop())
+            self._background_tasks.add(alert_task)
+            alert_task.add_done_callback(self._background_tasks.discard)
 
             # Perform initial reconciliation check
             await self.reconciliation.reconcile()
@@ -610,6 +634,18 @@ class AkibaCryptoBot:
             return True
         except asyncio.TimeoutError:
             return False
+
+    async def _run_operational_alert_loop(self) -> None:
+        interval = self.operations_config.evaluation_interval_seconds
+        while self.is_running and not self._stop_event.is_set():
+            try:
+                await self.evaluate_operational_alerts()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.logger.error("Operational alert evaluation failed: %s", exc)
+            if await self._wait_for_stop(interval):
+                break
 
     async def _run_cleanup_step(
         self, step_name: str, awaitable, timeout: float | None = None
@@ -778,8 +814,11 @@ class AkibaCryptoBot:
         # owns entries and the circuit breaker is inactive.
         if self.runtime_owns_entries:
             self.logger.debug("Skipping legacy opportunity scan - runtime owns entries")
-        elif self.trading_paused:
-            self.logger.debug("Skipping opportunity scan - trading is paused")
+        elif self._entries_blocked():
+            self.logger.debug(
+                "Skipping opportunity scan - entries are blocked (%s)",
+                self.entries_blocked_reason or "manual_pause",
+            )
         elif not self.circuit_breaker_active:
             await self.opportunity_scanner.scan_opportunities()
         else:
@@ -890,6 +929,12 @@ class AkibaCryptoBot:
         """Get bot status information for Telegram commands."""
         uptime = datetime.now() - self.start_time
         visibility_info = self.get_runtime_visibility_info()
+        alert_state = self.get_operational_alert_state()
+        critical_alert_count = sum(
+            1
+            for alert in alert_state["operational_alerts"]
+            if alert["severity"] == ALERT_SEVERITY_CRITICAL
+        )
         return {
             "active_trades": len(self.active_trades),
             "daily_pnl": 0.0,
@@ -916,6 +961,10 @@ class AkibaCryptoBot:
             "runtime_owns_exits": self.runtime_owns_exits,
             "runtime_telemetry": self.get_runtime_telemetry_info(),
             "native_shadow_report": self.get_native_shadow_report(),
+            "operational_alerts": alert_state["operational_alerts"],
+            "halt_state": alert_state["halt_state"],
+            "entries_blocked_reason": alert_state["entries_blocked_reason"],
+            "active_critical_alert_count": critical_alert_count,
         }
 
     def get_runtime_projection(self):
@@ -968,6 +1017,53 @@ class AkibaCryptoBot:
 
     def set_operational_alert_state(self, state: OperationalAlertState) -> None:
         self._operational_alert_state = state
+        self._sync_runtime_entry_pause()
+
+    async def evaluate_operational_alerts(self) -> OperationalAlertState:
+        previous_state = self.get_operational_alert_state()
+        projection = self.get_runtime_projection()
+        projection_payload = {
+            "runtime_is_running": projection.runtime_is_running,
+            "runtime_is_healthy": projection.runtime_is_healthy,
+            "runtime_start_pending": projection.runtime_start_pending,
+            "runtime_start_status": projection.runtime_start_status,
+            "runtime_start_started_at": self._runtime_start_started_at,
+        }
+        training_snapshot = await self.get_training_job_status()
+        model_status = await self.get_model_status_info()
+        evaluated = self.alert_evaluator.evaluate(
+            runtime_projection=projection_payload,
+            runtime_telemetry=self.get_runtime_telemetry_info(),
+            native_shadow_report=self.get_native_shadow_report(),
+            circuit_breaker_state={
+                "active": self.circuit_breaker_active,
+                "reason": self.circuit_breaker_reason,
+            },
+            model_status=model_status,
+            training_job_status=training_snapshot.to_dict(),
+        )
+
+        if evaluated.entries_blocked_reason:
+            halt_state = (
+                HALT_STATE_RUNTIME_KILL_SWITCH
+                if self.runtime_owns_entries
+                else HALT_STATE_LEGACY_CIRCUIT_BREAKER
+            )
+            evaluated = OperationalAlertState(
+                operational_alerts=evaluated.operational_alerts,
+                halt_state=halt_state,
+                entries_blocked_reason=evaluated.entries_blocked_reason,
+            )
+
+        self.set_operational_alert_state(evaluated)
+        if self.telegram and hasattr(
+            self.telegram, "send_operational_alert_transition"
+        ):
+            await self.telegram.send_operational_alert_transition(
+                previous_state,
+                evaluated.to_dict(),
+            )
+        return evaluated
 
     async def get_balance_info(self) -> Dict:
         """Get account balance for Telegram commands."""
