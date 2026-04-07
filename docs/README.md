@@ -32,6 +32,11 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Phase 13 Order Book and Replay Spec](specs/PHASE_13_ORDER_BOOK_AND_REPLAY_SPEC.md) | Local order-book state, depth capture/replay, and microstructure feature groundwork |
 | [Phase 14 Native Hot Path Spec](specs/PHASE_14_NATIVE_HOT_PATH_SPEC.md) | Native control-plane boundary, IPC contracts, and shadow validation for hot-path extraction |
 | [Phase 15 HFT Infrastructure and Strategy Spec](specs/PHASE_15_HFT_INFRASTRUCTURE_AND_STRATEGY_SPEC.md) | HFT operating modes, latency SLOs, strategy families, and infrastructure/runbook requirements |
+| [Phase 18 Runtime Trading Correctness Spec](specs/PHASE_18_RUNTIME_TRADING_CORRECTNESS_SPEC.md) | Carried-position hydration, restart recovery, runtime reconciliation, and runtime-primary correctness criteria |
+| [Phase 19 Live Approval and Audit Spec](specs/PHASE_19_LIVE_APPROVAL_AND_AUDIT_SPEC.md) | Explicit live promotion approval, rollout audit history, and minimal operator control for live runtime release |
+| [Phase 20 Live Runtime Execution Spec](specs/PHASE_20_LIVE_RUNTIME_EXECUTION_SPEC.md) | Live canary ladder execution, live-stage soak criteria, training restrictions, and rollback drills |
+| [Phase 21 Low-Latency Trading Product Spec](specs/PHASE_21_LOW_LATENCY_TRADING_PRODUCT_SPEC.md) | Order-book capture/replay productization, first microstructure-aware paper strategies, and latency/fill-quality reporting |
+| [Phase 22 Native Hot Path Activation Spec](specs/PHASE_22_NATIVE_HOT_PATH_ACTIVATION_SPEC.md) | First real native-side canary, native market-data/execution shadow validation, and operator-facing mismatch handling |
 | [LLM Agent Iteration Workflow](LLM_AGENT_ITERATION_WORKFLOW.md) | Reusable protocol for phased, spec-driven, worker-assisted development and deployment |
 
 ---
