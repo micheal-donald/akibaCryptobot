@@ -11,8 +11,8 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
-| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, operational alerts, halt state, circuit breaker state, training job state, strategy, trading mode |
-| `GET` | `/api/reconcile` | Manually triggers a reconciliation check between DB and Exchange |
+| `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, runtime recovery summary, operational alerts, halt state, circuit breaker state, training job state, strategy, trading mode |
+| `GET` | `/api/reconcile` | Manually triggers a reconciliation check between the authoritative trade source and the exchange |
 
 **Example response** (`GET /api/status`):
 ```json
@@ -88,6 +88,23 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
     ],
     "native_shadow_summary": "Native shadow diverges from Python runtime."
   },
+  "runtime_recovery": {
+    "processed_trades": 2,
+    "restored_symbols": ["BTC/USDT", "ETH/USDT"],
+    "protected_symbols": ["BTC/USDT"],
+    "orphaned_symbols": [],
+    "unprotected_symbols": ["ETH/USDT"],
+    "reconcile_error_symbols": [],
+    "skipped_symbols": [],
+    "issues": [
+      {
+        "symbol": "ETH/USDT",
+        "kind": "unprotected_position",
+        "reason": "native protection state unknown after restart; automatic reapply disabled"
+      }
+    ],
+    "issue_count": 1
+  },
   "training_job": {
     "current_job": null,
     "last_job": {
@@ -122,6 +139,39 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
   "projected_rejected_orders": 0
 }
 ```
+
+**Example response** (`GET /api/reconcile`):
+```json
+{
+  "source": "runtime_projection",
+  "orphans": [],
+  "inventory_only": [
+    {
+      "asset": "BTC",
+      "amount": 0.99266,
+      "reason": "Sandbox exchange inventory exists outside the runtime-owned state source"
+    }
+  ],
+  "inventory_only_count": 452,
+  "inventory_only_overflow_count": 427,
+  "lost_trades": [],
+  "mismatches": [],
+  "runtime_drift": [],
+  "runtime_recovery": {
+    "processed_trades": 0,
+    "restored_symbols": [],
+    "protected_symbols": [],
+    "orphaned_symbols": [],
+    "unprotected_symbols": [],
+    "reconcile_error_symbols": [],
+    "skipped_symbols": [],
+    "issues": [],
+    "issue_count": 0
+  }
+}
+```
+
+`/api/reconcile` now reports the authoritative `source` explicitly. In runtime-owned modes that source is `runtime_projection`. In sandbox/runtime mode, seeded exchange inventory is grouped under `inventory_only` instead of being mixed with actionable runtime drift.
 
 ---
 

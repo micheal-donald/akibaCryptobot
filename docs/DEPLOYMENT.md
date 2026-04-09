@@ -246,6 +246,39 @@ If the runtime or model enters a blocked-entry state, inspect these surfaces bef
 
 Do not re-enable entries until the alert list is empty, the halt state returns to `none`, and the reviewed profile/mode pair matches the intended rollout target.
 
+### Phase 18 Runtime-Primary Soak Checklist
+
+Before any live canary work, keep `paper_runtime_primary` on the server long enough to prove restart and reconciliation correctness, not just process liveness.
+
+Minimum runtime-primary soak checks:
+
+1. Restart the reviewed SHA with `paper_runtime_primary` and wait for `/api/status` to move from `startup_pending` to:
+   - `runtime_is_running=true`
+   - `runtime_is_healthy=true`
+   - `runtime_recovery.issue_count=0` unless a known carried-position issue is being investigated
+2. Confirm `/api/status.runtime_recovery` is populated after startup. This is the runtime-owned recovery summary, not a legacy fallback.
+3. Trigger `/api/reconcile` and confirm:
+   - `source=runtime_projection`
+   - `runtime_drift=[]`
+   - `lost_trades=[]`
+   - any seeded sandbox inventory appears under `inventory_only`, not `orphans`
+4. If there are carried positions, verify:
+   - `runtime_recovery.restored_symbols` matches the carried symbols
+   - `projected_active_positions` matches the restored runtime positions
+   - native protection state is either restored or explicitly listed in `runtime_recovery.unprotected_symbols`
+5. Hold promotion if any of these are non-empty:
+   - `runtime_recovery.orphaned_symbols`
+   - `runtime_recovery.reconcile_error_symbols`
+   - `runtime_drift`
+   - `lost_trades`
+
+Recommended pass criteria before Phase 19 / live approval work:
+
+- at least one clean restart with `runtime_recovery.issue_count=0`
+- `/api/reconcile` reports no actionable runtime drift
+- runtime telemetry remains healthy through the soak window
+- model status remains loaded and non-stale
+
 #### Phase 14 Native Hot-Path Boundary
 
 Phase 14 does not deploy a real native process yet. It defines and validates the boundary that a later native service will use.
