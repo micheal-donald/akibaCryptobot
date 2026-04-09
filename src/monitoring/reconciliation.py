@@ -26,6 +26,9 @@ class ReconciliationManager:
         discrepancies = {
             "source": "legacy",
             "orphans": [],  # Assets on exchange but NOT in DB
+            "inventory_only": [],
+            "inventory_only_count": 0,
+            "inventory_only_overflow_count": 0,
             "lost_trades": [],  # Trades in DB but assets NOT on exchange
             "mismatches": [],  # Amount in DB != Amount on exchange
             "runtime_drift": [],
@@ -64,22 +67,35 @@ class ReconciliationManager:
                 )
 
             # 4. Check for Orphans (Remaining items in live_balances)
+            sandbox_inventory_only = (
+                discrepancies["source"] == ProjectionSource.RUNTIME_PROJECTION.value
+                and self._is_sandbox_mode()
+            )
             for asset, amount in live_balances.items():
                 if asset in ["USDT", "BNB"]:  # Skip quote and fee tokens
                     continue
 
-                # Check value in USDT if possible
                 if amount > self.ignore_dust_threshold:
-                    discrepancies["orphans"].append(
-                        {
-                            "asset": asset,
-                            "amount": amount,
-                            "reason": (
-                                "Asset found on Exchange with no active "
-                                "trade record in the authoritative state source"
-                            ),
-                        }
-                    )
+                    entry = {
+                        "asset": asset,
+                        "amount": amount,
+                        "reason": (
+                            "Asset found on Exchange with no active "
+                            "trade record in the authoritative state source"
+                        ),
+                    }
+                    if sandbox_inventory_only:
+                        entry["reason"] = (
+                            "Sandbox exchange inventory exists outside the "
+                            "runtime-owned state source"
+                        )
+                        discrepancies["inventory_only_count"] += 1
+                        if len(discrepancies["inventory_only"]) < 25:
+                            discrepancies["inventory_only"].append(entry)
+                        else:
+                            discrepancies["inventory_only_overflow_count"] += 1
+                    else:
+                        discrepancies["orphans"].append(entry)
 
             self._report_discrepancies(discrepancies)
             return discrepancies
@@ -103,6 +119,17 @@ class ReconciliationManager:
             logger.warning(msg)
             # Orphans are common (dust), so maybe don't flood Telegram unless large
             found_issues = True
+
+        if discrepancies["inventory_only_count"] > 0:
+            sample_count = len(discrepancies["inventory_only"])
+            overflow_count = discrepancies["inventory_only_overflow_count"]
+            logger.info(
+                "ℹ️ SANDBOX INVENTORY: %s exchange-only assets detected outside "
+                "runtime state (%s shown, %s omitted).",
+                discrepancies["inventory_only_count"],
+                sample_count,
+                overflow_count,
+            )
 
         for item in discrepancies["mismatches"]:
             msg = f"⚖️ MISMATCH: {item['symbol']} amount mismatch. DB: {item['expected']}, Exchange: {item['actual']}"
@@ -231,3 +258,12 @@ class ReconciliationManager:
         if not callable(getter):
             return None
         return getter()
+
+    def _is_sandbox_mode(self) -> bool:
+        config = getattr(self.bot, "config", {})
+        if not isinstance(config, dict):
+            return False
+        exchange = config.get("exchange", {})
+        if not isinstance(exchange, dict):
+            return False
+        return bool(exchange.get("sandbox", False))

@@ -33,6 +33,7 @@ class FakeRuntimeReconcileBot:
         projection: RuntimeProjection,
         balance: dict[str, object],
         runtime_recovery: dict[str, object] | None = None,
+        sandbox: bool = False,
     ) -> None:
         self.exchange = FakeExchange(balance)
         self.telegram = FakeTelegram()
@@ -40,6 +41,7 @@ class FakeRuntimeReconcileBot:
         self.active_trades: dict[str, dict] = {}
         self._projection = projection
         self._runtime_recovery = runtime_recovery
+        self.config = {"exchange": {"sandbox": sandbox}}
 
     def get_runtime_projection(self) -> RuntimeProjection:
         return self._projection
@@ -173,4 +175,29 @@ def test_phase18_reconciliation_surfaces_runtime_drift_and_exchange_orphans() ->
                 "authoritative state source"
             ),
         }
+    ]
+
+
+def test_phase18_reconciliation_groups_sandbox_inventory_noise() -> None:
+    bot = FakeRuntimeReconcileBot(
+        projection=make_projection(positions=()),
+        balance={
+            "BTC": {"free": 1.0, "used": 0.0, "total": 1.0},
+            "ETH": {"free": 2.0, "used": 0.0, "total": 2.0},
+            "SOL": {"free": 3.0, "used": 0.0, "total": 3.0},
+            "USDT": {"free": 1000.0, "used": 0.0, "total": 1000.0},
+        },
+        sandbox=True,
+    )
+
+    result = asyncio.run(ReconciliationManager(bot).reconcile())
+
+    assert result["source"] == "runtime_projection"
+    assert result["orphans"] == []
+    assert result["inventory_only_count"] == 3
+    assert result["inventory_only_overflow_count"] == 0
+    assert [item["asset"] for item in result["inventory_only"]] == [
+        "BTC",
+        "ETH",
+        "SOL",
     ]
