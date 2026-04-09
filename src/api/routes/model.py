@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import secrets
-
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.dependencies import get_bot
+from api.operator_auth import require_operator_token
 
 router = APIRouter()
 
@@ -17,24 +15,6 @@ class TrainModelRequest(BaseModel):
     pairs: list[str] | None = None
     candles: int = Field(default=1000, gt=0)
     timeframe: str = "1h"
-
-
-def _require_operator_token(
-    x_operator_token: str | None = Header(default=None, alias="X-Operator-Token"),
-) -> None:
-    expected_token = os.getenv("AKIBA_OPERATOR_TOKEN")
-    if not expected_token:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="operator_token_not_configured",
-        )
-    if not x_operator_token or not secrets.compare_digest(
-        x_operator_token, expected_token
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="operator_token_invalid",
-        )
 
 
 def _map_training_error(reason: str) -> HTTPException:
@@ -78,7 +58,7 @@ async def get_model_training_status(bot=Depends(get_bot)):
     return payload
 
 
-@router.post("/model/train", dependencies=[Depends(_require_operator_token)])
+@router.post("/model/train", dependencies=[Depends(require_operator_token)])
 async def start_model_training(
     request: TrainModelRequest,
     bot=Depends(get_bot),

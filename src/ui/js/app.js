@@ -961,6 +961,8 @@ function renderOperationalAlertsSection(statusData) {
     const haltState = statusData?.halt_state || 'none';
     const entriesBlockedReason = statusData?.entries_blocked_reason || '—';
     const trainingJob = statusData?.training_job || null;
+    const liveRolloutApproval = statusData?.live_rollout_approval || null;
+    const latestLiveRolloutEvent = statusData?.latest_live_rollout_event || null;
 
     const alertLines = [
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Halt State</span><span class="${haltState === 'none' ? 'text-matrix-neon' : 'text-red-400'}">${haltState}</span></div>`,
@@ -968,6 +970,24 @@ function renderOperationalAlertsSection(statusData) {
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Critical Alerts</span><span class="${(statusData?.active_critical_alert_count || 0) > 0 ? 'text-red-400' : 'text-matrix-neon'}">${statusData?.active_critical_alert_count || 0}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status Job Surface</span><span class="text-white">${trainingJob?.current_job?.status || trainingJob?.last_job?.status || 'idle'}</span></div>`,
     ];
+
+    if (liveRolloutApproval) {
+        alertLines.push(
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Live Approval Required</span><span class="${liveRolloutApproval.approval_required ? 'text-yellow-400' : 'text-matrix-neon'}">${liveRolloutApproval.approval_required ? 'yes' : 'no'}</span></div>`,
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Live Approval Status</span><span class="${liveRolloutApproval.current_approval ? 'text-matrix-neon' : 'text-red-400'}">${liveRolloutApproval.current_approval?.status || 'missing'}</span></div>`
+        );
+        if (liveRolloutApproval.current_approval?.actor) {
+            alertLines.push(
+                `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Approved By</span><span class="text-white">${liveRolloutApproval.current_approval.actor}</span></div>`
+            );
+        }
+    }
+
+    if (latestLiveRolloutEvent) {
+        alertLines.push(
+            `<div class="text-[11px] text-matrix-dim break-words">Latest rollout event: ${latestLiveRolloutEvent.event_type || 'unknown'} -> ${latestLiveRolloutEvent.reason || 'inspect'}</div>`
+        );
+    }
 
     if (alerts.length === 0) {
         alertLines.push(

@@ -173,30 +173,31 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 
 `/api/reconcile` now reports the authoritative `source` explicitly. In runtime-owned modes that source is `runtime_projection`. In sandbox/runtime mode, seeded exchange inventory is grouped under `inventory_only` instead of being mixed with actionable runtime drift.
 
+### Live Rollout Approval Fields
+
+When a reviewed live profile is prepared, `/api/status` and `/ws/status` also expose approval and audit metadata:
+
+- `live_rollout_approval.approval_required`
+- `live_rollout_approval.target_profile`
+- `live_rollout_approval.current_approval`
+- `live_rollout_approval.latest_approval`
+- `latest_live_rollout_event`
+
+`current_approval` is the active approval record that permits startup for a reviewed live runtime profile. `latest_live_rollout_event` captures the last approval lifecycle event, such as `approval_granted`, `startup_validated`, `startup_rejected`, or `rollback_recorded`.
 
 ### Native Shadow Canary States
 
-When 
-ative_hot_path_ports are enabled, /api/status and /ws/status may return a richer 
-ative_shadow_report:
+When `native_hot_path_ports` are enabled, `/api/status` and `/ws/status` may return a richer `native_shadow_report`:
 
-- 
-ative_shadow_status: waiting_native_snapshot, stale_native_snapshot, match, divergent
-- 
-ative_shadow_is_match: boolean
-- 
-ative_shadow_mismatch_count and 
-ative_shadow_mismatches
-- 
-ative_shadow_last_seen_at
-- 
-ative_shadow_age_seconds
-- 
-ative_shadow_recommended_action
-- 
-ative_shadow_stale_after_seconds
+- `native_shadow_status`: `awaiting_native_snapshot`, `stale_native_snapshot`, `match`, `divergent`
+- `native_shadow_is_match`: boolean
+- `native_shadow_mismatch_count` and `native_shadow_mismatches`
+- `native_shadow_last_seen_at`
+- `native_shadow_age_seconds`
+- `native_shadow_recommended_action`
+- `native_shadow_stale_after_seconds`
 
-waiting_native_snapshot means the native bridge is enabled but has not emitted a usable snapshot yet. stale_native_snapshot means the last snapshot is older than the canary freshness budget. divergent means the native snapshot and Python runtime disagree and promotion should be blocked.
+`awaiting_native_snapshot` means the native bridge is enabled but has not emitted a usable snapshot yet. `stale_native_snapshot` means the last snapshot is older than the canary freshness budget. `divergent` means the native snapshot and Python runtime disagree and promotion should be blocked.
 ---
 
 ## Account
@@ -215,21 +216,80 @@ ative_shadow_stale_after_seconds
 | `GET` | `/api/trades` | All currently open positions with entry prices |
 | `POST` | `/api/trading/pause` | Pause new entries while leaving the bot lifecycle, exits, and API online |
 | `POST` | `/api/trading/resume` | Resume new entries |
+| `GET` | `/api/trading/live/approval` | Current live rollout approval requirement, active approval, and latest audit event |
+| `POST` | `/api/trading/live/approve` | Grant a time-bounded approval for a reviewed live runtime profile. Requires `X-Operator-Token` |
+| `POST` | `/api/trading/live/rollback` | Revoke active live rollout approvals and record a rollback audit event. Requires `X-Operator-Token` |
 
 **Example response** (`GET /api/trades`):
 ```json
 {
   "count": 1,
-  "trades": {
-    "BTC/USDT": {
+  "trades": [
+    {
+      "position_id": "pos-1",
+      "symbol": "BTC/USDT",
       "side": "buy",
       "amount": 0.001,
       "entry_price": 42500.0,
       "stop_loss": 41650.0,
       "take_profit": 44200.0,
-      "timestamp": "2024-01-15T10:30:00"
+      "trailing_stop_price": null,
+      "status": "open",
+      "source": "runtime_projection"
     }
+  ],
+  "source": "runtime_projection",
+  "runtime_mode": "runtime_primary"
+}
+```
+
+**Example response** (`GET /api/trading/live/approval`):
+```json
+{
+  "target_profile": "live_shadow",
+  "approval_required": true,
+  "current_approval": {
+    "target_profile": "live_shadow",
+    "approved_by": "ops",
+    "reason": "Approved canary rollout.",
+    "approved_at": "2026-04-09T08:00:00+00:00",
+    "expires_at": "2026-04-10T08:00:00+00:00",
+    "status": "active"
+  },
+  "latest_approval": {
+    "target_profile": "live_shadow",
+    "approved_by": "ops",
+    "reason": "Approved canary rollout.",
+    "approved_at": "2026-04-09T08:00:00+00:00",
+    "expires_at": "2026-04-10T08:00:00+00:00",
+    "status": "active"
+  },
+  "latest_event": {
+    "event_type": "startup_validated",
+    "target_profile": "live_shadow",
+    "actor": "system",
+    "reason": "Startup approval validated.",
+    "created_at": "2026-04-09T08:01:00+00:00"
   }
+}
+```
+
+**Request body** (`POST /api/trading/live/approve`):
+```json
+{
+  "target_profile": "live_shadow",
+  "actor": "ops",
+  "reason": "Approved canary rollout",
+  "expires_in_hours": 24
+}
+```
+
+**Request body** (`POST /api/trading/live/rollback`):
+```json
+{
+  "actor": "ops",
+  "reason": "Canary degraded after warm-up",
+  "target_profile": "live_shadow"
 }
 ```
 
@@ -555,7 +615,7 @@ If `/api/status` reports `halt_state` other than `none`, treat live promotion as
 | Endpoint | Push Interval | Description |
 |---|---|---|
 | `ws://<host>:<port>/ws/prices` | 1 second | Real-time price ticks from the Binance exchange cache |
-| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with deployment profile, effective runtime mode, ownership, operational alerts, training-job state, and projection metadata |
+| `ws://<host>:<port>/ws/status` | 5 seconds | Bot status updates with deployment profile, live approval/audit state, effective runtime mode, ownership, operational alerts, training-job state, and projection metadata |
 
 **Message format** (`/ws/prices`):
 ```json
@@ -603,6 +663,13 @@ If `/api/status` reports `halt_state` other than `none`, treat live promotion as
       }
     },
     "runtime_is_healthy": true,
+    "live_rollout_approval": {
+      "approval_required": false,
+      "target_profile": null,
+      "current_approval": null,
+      "latest_approval": null
+    },
+    "latest_live_rollout_event": null,
     "rollout_environment": "paper",
     "rollout_stage": "primary",
     "state_source": "runtime_projection",
@@ -658,7 +725,6 @@ python start_bot.py --no-api
 ```
 
 API docs: `http://localhost:8000/docs`
-
 
 
 

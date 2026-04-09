@@ -106,6 +106,7 @@ flowchart TB
 | **Native IPC Protocol** | `src/runtime/ipc_protocol.py` | Versioned JSON envelope format for the Python/native hot-path boundary |
 | **Native Shadow Bridge** | `src/runtime/native_shadow.py` | Read-only Python/native comparison bridge used for dual-run mismatch reporting |
 | **Native Shadow Canary Bridge** | `src/runtime/native_bridge.py` | Ingests native IPC snapshots and builds operator-facing native-shadow canary reports |
+| **Live Rollout Approval Store** | `src/operations/live_rollout_approval.py`, `src/persistence/trade_store.py` | Durable approval and audit trail for reviewed live runtime promotions and rollbacks |
 | **Runtime Event Capture / Replay** | `src/runtime/event_capture.py`, `src/runtime/event_replay.py` | Bounded JSONL capture for hot-path events and deterministic replay helpers for debugging/tests |
 | **Reconciliation Manager** | `src/monitoring/reconciliation.py` | Syncs DB state with exchange balances to find orphaned/lost trades |
 | **FastAPI App** | `src/api/app.py` | Application factory with lifespan-managed bot |
@@ -320,6 +321,5 @@ akibaCryptobot/
 â”œâ”€â”€ Dockerfile                 # Multi-stage Docker build
 â””â”€â”€ docker-compose.yml         # Container orchestration
 ```
-
 
 

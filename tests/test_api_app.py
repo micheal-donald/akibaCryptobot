@@ -6,6 +6,11 @@ import pytest
 from api.app import shutdown_trading_bot
 from api.routes.status import get_status
 from api.routes.trading import get_active_trades
+from operations.live_rollout_approval import (
+    LiveRolloutApprovalRecord,
+    LiveRolloutApprovalSnapshot,
+    LiveRolloutAuditEvent,
+)
 from operations.training_jobs import TrainingJobRecord, TrainingJobSnapshot
 from runtime.view_models import (
     ProjectedPositionView,
@@ -126,6 +131,7 @@ class FakeStatusBot:
         runtime_recovery: dict[str, object] | None = None,
         training_snapshot: TrainingJobSnapshot | None = None,
         alert_state: dict[str, object] | None = None,
+        live_rollout_status: LiveRolloutApprovalSnapshot | None = None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
@@ -150,6 +156,7 @@ class FakeStatusBot:
             "halt_state": "none",
             "entries_blocked_reason": None,
         }
+        self._live_rollout_status = live_rollout_status
 
     def get_status_info(self):
         return {
@@ -225,6 +232,14 @@ class FakeStatusBot:
     def get_operational_alert_state(self):
         return self._alert_state
 
+    async def get_live_rollout_approval_status(self):
+        if self._live_rollout_status is not None:
+            return self._live_rollout_status
+        return LiveRolloutApprovalSnapshot(
+            target_profile=self._configured_deployment_profile,
+            approval_required=False,
+        )
+
 
 @pytest.mark.asyncio
 async def test_status_route_includes_runtime_cutover_fields():
@@ -291,6 +306,8 @@ async def test_status_route_includes_runtime_cutover_fields():
     assert payload["runtime_recovery"]["restored_symbols"] == ["BTC/USDT"]
     assert payload["training_job"]["current_job"]["job_id"] == "job-status"
     assert payload["training_job"]["current_job"]["status"] == "running"
+    assert payload["live_rollout_approval"]["approval_required"] is False
+    assert payload["latest_live_rollout_event"] is None
     assert payload["operational_alerts"] == []
     assert payload["halt_state"] == "none"
     assert payload["projected_open_orders"] == 2
@@ -447,6 +464,12 @@ async def test_status_route_marks_runtime_startup_pending():
 
 @pytest.mark.asyncio
 async def test_status_route_distinguishes_live_canary_rollout():
+    approval = LiveRolloutApprovalRecord(
+        approval_id="approval-1",
+        target_profile="live_shadow",
+        actor="ops",
+        reason="canary approved",
+    )
     bot = FakeStatusBot(
         make_projection(
             source=ProjectionSource.SHADOW,
@@ -454,6 +477,19 @@ async def test_status_route_distinguishes_live_canary_rollout():
         ),
         configured_deployment_profile="live_shadow",
         trading_mode="live",
+        live_rollout_status=LiveRolloutApprovalSnapshot(
+            target_profile="live_shadow",
+            approval_required=True,
+            current_approval=approval,
+            latest_approval=approval,
+            latest_event=LiveRolloutAuditEvent(
+                event_id="event-1",
+                event_type="approval_granted",
+                target_profile="live_shadow",
+                actor="ops",
+                reason="canary approved",
+            ),
+        ),
     )
 
     payload = await get_status(bot=bot)
@@ -465,6 +501,9 @@ async def test_status_route_distinguishes_live_canary_rollout():
     assert payload["rollout_health"] == "shadow_ready"
     assert payload["rollout_recommended_action"] == "promote_live_runtime_entries"
     assert "Live runtime shadow canary is healthy" in payload["rollout_summary"]
+    assert payload["live_rollout_approval"]["approval_required"] is True
+    assert payload["live_rollout_approval"]["current_approval"]["actor"] == "ops"
+    assert payload["latest_live_rollout_event"]["event_type"] == "approval_granted"
 
 
 @pytest.mark.asyncio

@@ -215,6 +215,8 @@ DEPLOY_SHA=$(git rev-parse HEAD) bash scripts/deploy_snapshot.sh --expected-prof
 
 Use the same pinned-SHA deploy flow for live runtime activation, but keep the live override explicit in the reviewed config diff. The profile helper sets `deployment_profile`, `runtime_mode`, and `shadow_mode`; it does not silently enable live runtime ownership. For `live_shadow`, `live_runtime_entries`, and `live_runtime_primary`, the same reviewed commit must also contain `runtime.allow_live_runtime=true`.
 
+Before a reviewed live runtime profile is started, an operator must create an approval record through `POST /api/trading/live/approve`. Startup validates that approval and records a matching audit event. Rolling back or cancelling a live promotion should call `POST /api/trading/live/rollback` so the approval trail and the deploy trail stay aligned.
+
 Recommended live progression:
 
 1. `live_legacy`
@@ -255,6 +257,7 @@ Phase 20 turns the reviewed live profiles into an explicit canary ladder. Use th
 5. Roll back to `live_legacy` immediately if the reviewed live stage reports `rollback_recommended` after warm-up.
 6. Keep `POST /api/model/train` and Telegram `/train_model` blocked in live mode; live rollout does not relax training restrictions.
 7. Treat `halt_state=runtime_kill_switch` or `halt_state=legacy_circuit_breaker` as a hard hold on new entries until the alert clears.
+8. Treat a missing, expired, or revoked `live_rollout_approval.current_approval` record as a startup blocker for `live_shadow`, `live_runtime_entries`, and `live_runtime_primary`.
 
 ### Operational Alert Recovery Checklist
 
@@ -615,7 +618,5 @@ ssh root@<SERVER_IP> "systemctl restart akibabot"
 | View trade logs | `tail -f logs/trades.log` |
 | View error logs | `tail -f logs/errors.log` |
 | Check DB | `sqlite3 data/trades.db "SELECT * FROM trades WHERE status='open'"` |
-
-
 
 

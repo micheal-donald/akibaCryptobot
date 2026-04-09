@@ -60,6 +60,14 @@ class DeploymentProfile(str, Enum):
             DeploymentProfile.LIVE_RUNTIME_ENTRIES,
         }
 
+    @property
+    def requires_live_runtime_approval(self) -> bool:
+        return self in {
+            DeploymentProfile.LIVE_SHADOW,
+            DeploymentProfile.LIVE_RUNTIME_ENTRIES,
+            DeploymentProfile.LIVE_RUNTIME_PRIMARY,
+        }
+
 
 class RuntimeMode(str, Enum):
     """Defines which runtime path owns trading decisions."""

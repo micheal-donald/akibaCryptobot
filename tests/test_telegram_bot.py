@@ -144,6 +144,7 @@ class FakeBot:
         configured_deployment_profile: str | None = None,
         trading_mode: str = "paper",
         alert_state: dict | None = None,
+        live_rollout_status: dict | None = None,
     ):
         self._projection = projection
         self.trade_store = object()
@@ -183,6 +184,7 @@ class FakeBot:
             "halt_state": "none",
             "entries_blocked_reason": None,
         }
+        self._live_rollout_status = live_rollout_status
 
     def get_status_info(self):
         return {
@@ -221,6 +223,9 @@ class FakeBot:
 
     def get_operational_alert_state(self):
         return self._alert_state
+
+    async def get_live_rollout_approval_status(self):
+        return self._live_rollout_status
 
 
 class TrainingBot:
@@ -797,11 +802,30 @@ async def test_cmd_status_shows_runtime_startup_pending():
 
 @pytest.mark.asyncio
 async def test_cmd_status_distinguishes_live_canary_rollout():
+    live_rollout_status = {
+        "target_profile": "live_shadow",
+        "approval_required": True,
+        "current_approval": {
+            "approval_id": "approval-1",
+            "target_profile": "live_shadow",
+            "actor": "ops",
+            "reason": "canary approved",
+            "status": "active",
+        },
+        "latest_event": {
+            "event_id": "event-1",
+            "event_type": "approval_granted",
+            "target_profile": "live_shadow",
+            "actor": "ops",
+            "reason": "canary approved",
+        },
+    }
     notifier = TelegramNotifier(bot_token="token", chat_id="chat")
     notifier.bot_instance = FakeBot(
         make_projection(source=ProjectionSource.SHADOW, runtime_mode="shadow"),
         configured_deployment_profile="live_shadow",
         trading_mode="live",
+        live_rollout_status=live_rollout_status,
     )
     update = FakeUpdate()
 
@@ -813,6 +837,10 @@ async def test_cmd_status_distinguishes_live_canary_rollout():
     assert "Rollout Stage: canary" in message
     assert "Rollout Recommended Action: promote_live_runtime_entries" in message
     assert "Live runtime shadow canary is healthy" in message
+    assert "Live Rollout Approval" in message
+    assert "Approval Required: True" in message
+    assert "Approved By: ops" in message
+    assert "Last Rollout Event: approval_granted (live_shadow)" in message
 
 
 @pytest.mark.asyncio

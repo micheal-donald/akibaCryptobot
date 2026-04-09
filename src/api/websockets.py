@@ -85,6 +85,20 @@ async def _inject_training_job(status_info, bot):
     return status_info
 
 
+async def _inject_live_rollout_approval(status_info, bot):
+    getter = getattr(bot, "get_live_rollout_approval_status", None)
+    if not callable(getter):
+        status_info["live_rollout_approval"] = None
+        status_info["latest_live_rollout_event"] = None
+        return status_info
+
+    snapshot = await getter()
+    payload = snapshot.to_dict()
+    status_info["live_rollout_approval"] = payload
+    status_info["latest_live_rollout_event"] = payload.get("latest_event")
+    return status_info
+
+
 def _inject_operational_alert_state(status_info, bot):
     getter = getattr(bot, "get_operational_alert_state", None)
     if callable(getter):
@@ -113,6 +127,7 @@ async def _build_status_payload(bot):
     _inject_native_shadow_report(status_info, bot)
     _inject_operational_alert_state(status_info, bot)
     await _inject_training_job(status_info, bot)
+    await _inject_live_rollout_approval(status_info, bot)
     projection = _get_runtime_projection(bot)
     rollout_summary = build_rollout_summary(
         projection,
@@ -187,6 +202,8 @@ async def _build_status_payload(bot):
             "runtime_telemetry": status_info.get("runtime_telemetry"),
             "native_shadow_report": status_info.get("native_shadow_report"),
             "training_job": status_info.get("training_job"),
+            "live_rollout_approval": status_info.get("live_rollout_approval"),
+            "latest_live_rollout_event": status_info.get("latest_live_rollout_event"),
             "operational_alerts": status_info.get("operational_alerts", []),
             "halt_state": status_info.get("halt_state", "none"),
             "entries_blocked_reason": status_info.get("entries_blocked_reason"),

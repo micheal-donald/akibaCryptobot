@@ -170,3 +170,15 @@ When a critical operational alert appears, the bot sends a short alert transitio
 - exits continue to be managed by the runtime or legacy path that already owns them
 - `/risk` shows the active alert code and the reason entries are blocked
 - clearing the alert sends a recovery message and only then does the entry block clear
+
+### Phase 20 Live Rollout Messages
+
+The Telegram surface now reflects the live canary ladder explicitly so operators can tell whether a live promotion is safe to continue or needs to be rolled back.
+
+- `/status` also shows the live approval block for reviewed live profiles: `Approval Required`, `Target Profile`, `Approved By`, `Approval Status`, `Approval Expires`, and `Last Rollout Event`.
+- `/status` for `live_shadow` should show `Deployment Profile: live_shadow`, `Rollout Environment: live`, `Rollout Stage: canary`, and `Rollout Recommended Action: promote_live_runtime_entries`.
+- `/status` for `live_runtime_entries` should show `Rollout Stage: canary` and `Rollout Recommended Action: promote_live_runtime_primary`.
+- `/status` for `live_runtime_primary` should show `Rollout Stage: primary` and `Rollout Recommended Action: stay_live_runtime_primary`.
+- `/risk` should show the same `halt_state` and `entries_blocked_reason` values as the API when a live alert blocks new entries.
+- `/train_model` should refuse live mode with a paper-only message. Live rollout does not relax training restrictions.
+- When a live stage degrades after warm-up, Telegram should surface the rollback recommendation to `live_legacy` rather than implying another live promotion.

@@ -11,7 +11,7 @@ import asyncio
 import json
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Sequence
 from uuid import uuid4
 
@@ -27,6 +27,12 @@ from operations.training_jobs import (
     TrainingJobRecord,
     TrainingJobRequest,
     TrainingJobSnapshot,
+)
+from operations.live_rollout_approval import (
+    LIVE_ROLLOUT_AUDIT_APPROVAL_GRANTED,
+    LIVE_ROLLOUT_AUDIT_ROLLBACK_RECORDED,
+    LiveRolloutApprovalRecord,
+    LiveRolloutAuditEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,6 +96,33 @@ CREATE TABLE IF NOT EXISTS model_training_jobs (
 )
 """
 
+CREATE_LIVE_ROLLOUT_APPROVALS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS live_rollout_approvals (
+    approval_id          TEXT    PRIMARY KEY,
+    target_profile       TEXT    NOT NULL,
+    actor                TEXT    NOT NULL,
+    reason               TEXT    NOT NULL,
+    approved_at          INTEGER NOT NULL,
+    expires_at           INTEGER,
+    revoked_at           INTEGER,
+    revoked_by           TEXT,
+    revocation_reason    TEXT
+)
+"""
+
+CREATE_LIVE_ROLLOUT_AUDIT_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS live_rollout_audit_events (
+    event_id             TEXT    PRIMARY KEY,
+    event_type           TEXT    NOT NULL,
+    target_profile       TEXT    NOT NULL,
+    actor                TEXT    NOT NULL,
+    reason               TEXT    NOT NULL,
+    created_at           INTEGER NOT NULL,
+    approval_id          TEXT,
+    metadata             TEXT
+)
+"""
+
 
 class TradeStore:
     """Thin async wrapper around an SQLite database for trade persistence."""
@@ -98,6 +131,7 @@ class TradeStore:
         self.db_path = db_path
         self._db: Optional[aiosqlite.Connection] = None
         self._training_job_lock: asyncio.Lock | None = None
+        self._live_rollout_lock: asyncio.Lock | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -112,6 +146,8 @@ class TradeStore:
         await self._db.execute(CREATE_SESSIONS_TABLE_SQL)
         await self._db.execute(CREATE_PORTFOLIO_HISTORY_TABLE_SQL)
         await self._db.execute(CREATE_TRAINING_JOBS_TABLE_SQL)
+        await self._db.execute(CREATE_LIVE_ROLLOUT_APPROVALS_TABLE_SQL)
+        await self._db.execute(CREATE_LIVE_ROLLOUT_AUDIT_TABLE_SQL)
         # Time-series optimizations: indices for fast range scans and filtering
         await self._db.execute(
             "CREATE INDEX IF NOT EXISTS idx_trades_status_exit ON trades(status, exit_timestamp);"
@@ -121,6 +157,12 @@ class TradeStore:
         )
         await self._db.execute(
             "CREATE INDEX IF NOT EXISTS idx_training_jobs_status_requested_at ON model_training_jobs(status, requested_at);"
+        )
+        await self._db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_live_rollout_approvals_profile_approved_at ON live_rollout_approvals(target_profile, approved_at DESC);"
+        )
+        await self._db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_live_rollout_audit_profile_created_at ON live_rollout_audit_events(target_profile, created_at DESC);"
         )
         await self._db.commit()
         logger.info(f"TradeStore initialised → {self.db_path}")
@@ -177,6 +219,27 @@ class TradeStore:
         if self._training_job_lock is None:
             self._training_job_lock = asyncio.Lock()
         return self._training_job_lock
+
+    def _live_rollout_mutex(self) -> asyncio.Lock:
+        if self._live_rollout_lock is None:
+            self._live_rollout_lock = asyncio.Lock()
+        return self._live_rollout_lock
+
+    @staticmethod
+    def _serialize_metadata(value: Dict[str, object] | None) -> str:
+        return json.dumps(value or {})
+
+    @staticmethod
+    def _deserialize_metadata(value: str | None) -> Dict[str, object]:
+        if not value:
+            return {}
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(decoded, dict):
+            return {}
+        return {str(key): item for key, item in decoded.items()}
 
     async def _fetch_training_job_row(
         self, query: str, params: Sequence[object] = ()
@@ -453,6 +516,295 @@ class TradeStore:
             reload_status=reload_status,
             finished_at=datetime.now(),
         )
+
+    def _row_to_live_rollout_approval(
+        self, row: aiosqlite.Row | None
+    ) -> LiveRolloutApprovalRecord | None:
+        if row is None:
+            return None
+        return LiveRolloutApprovalRecord(
+            approval_id=row["approval_id"],
+            target_profile=row["target_profile"],
+            actor=row["actor"],
+            reason=row["reason"],
+            approved_at=self._timestamp_or_none(row["approved_at"]),
+            expires_at=self._timestamp_or_none(row["expires_at"]),
+            revoked_at=self._timestamp_or_none(row["revoked_at"]),
+            revoked_by=row["revoked_by"],
+            revocation_reason=row["revocation_reason"],
+        )
+
+    def _row_to_live_rollout_event(
+        self, row: aiosqlite.Row | None
+    ) -> LiveRolloutAuditEvent | None:
+        if row is None:
+            return None
+        return LiveRolloutAuditEvent(
+            event_id=row["event_id"],
+            event_type=row["event_type"],
+            target_profile=row["target_profile"],
+            actor=row["actor"],
+            reason=row["reason"],
+            created_at=self._timestamp_or_none(row["created_at"]),
+            approval_id=row["approval_id"],
+            metadata=self._deserialize_metadata(row["metadata"]),
+        )
+
+    async def get_active_live_rollout_approval(
+        self,
+        target_profile: str,
+    ) -> LiveRolloutApprovalRecord | None:
+        now_ts = int(datetime.now().timestamp())
+        row = await self._fetch_training_job_row(
+            """
+            SELECT *
+              FROM live_rollout_approvals
+             WHERE target_profile = ?
+               AND revoked_at IS NULL
+               AND (expires_at IS NULL OR expires_at > ?)
+          ORDER BY approved_at DESC, rowid DESC
+             LIMIT 1
+            """,
+            (target_profile, now_ts),
+        )
+        return self._row_to_live_rollout_approval(row)
+
+    async def get_latest_live_rollout_approval(
+        self,
+        target_profile: str | None = None,
+    ) -> LiveRolloutApprovalRecord | None:
+        if target_profile is None:
+            row = await self._fetch_training_job_row(
+                """
+                SELECT *
+                  FROM live_rollout_approvals
+              ORDER BY approved_at DESC, rowid DESC
+                 LIMIT 1
+                """
+            )
+        else:
+            row = await self._fetch_training_job_row(
+                """
+                SELECT *
+                  FROM live_rollout_approvals
+                 WHERE target_profile = ?
+              ORDER BY approved_at DESC, rowid DESC
+                 LIMIT 1
+                """,
+                (target_profile,),
+            )
+        return self._row_to_live_rollout_approval(row)
+
+    async def append_live_rollout_audit_event(
+        self,
+        *,
+        event_type: str,
+        target_profile: str,
+        actor: str,
+        reason: str,
+        approval_id: str | None = None,
+        metadata: Dict[str, object] | None = None,
+    ) -> LiveRolloutAuditEvent:
+        event = LiveRolloutAuditEvent(
+            event_type=event_type,
+            target_profile=target_profile,
+            actor=actor,
+            reason=reason,
+            created_at=datetime.now(),
+            approval_id=approval_id,
+            metadata=metadata or {},
+        )
+        async with self._live_rollout_mutex():
+            await self._db.execute(
+                """
+                INSERT INTO live_rollout_audit_events (
+                    event_id,
+                    event_type,
+                    target_profile,
+                    actor,
+                    reason,
+                    created_at,
+                    approval_id,
+                    metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.event_id,
+                    event.event_type,
+                    event.target_profile,
+                    event.actor,
+                    event.reason,
+                    int(event.created_at.timestamp()) if event.created_at else None,
+                    event.approval_id,
+                    self._serialize_metadata(dict(event.metadata)),
+                ),
+            )
+            await self._db.commit()
+        return event
+
+    async def get_latest_live_rollout_audit_event(self) -> LiveRolloutAuditEvent | None:
+        row = await self._fetch_training_job_row(
+            """
+            SELECT *
+              FROM live_rollout_audit_events
+          ORDER BY created_at DESC, rowid DESC
+             LIMIT 1
+            """
+        )
+        return self._row_to_live_rollout_event(row)
+
+    async def create_live_rollout_approval(
+        self,
+        *,
+        target_profile: str,
+        actor: str,
+        reason: str,
+        expires_in_hours: int | None = None,
+    ) -> LiveRolloutApprovalRecord:
+        approved_at = datetime.now()
+        expires_at = (
+            None
+            if expires_in_hours is None
+            else approved_at + timedelta(hours=int(expires_in_hours))
+        )
+        record = LiveRolloutApprovalRecord(
+            target_profile=target_profile,
+            actor=actor,
+            reason=reason,
+            approved_at=approved_at,
+            expires_at=expires_at,
+        )
+        async with self._live_rollout_mutex():
+            await self._db.execute(
+                """
+                INSERT INTO live_rollout_approvals (
+                    approval_id,
+                    target_profile,
+                    actor,
+                    reason,
+                    approved_at,
+                    expires_at,
+                    revoked_at,
+                    revoked_by,
+                    revocation_reason
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.approval_id,
+                    record.target_profile,
+                    record.actor,
+                    record.reason,
+                    int(record.approved_at.timestamp()) if record.approved_at else None,
+                    int(record.expires_at.timestamp()) if record.expires_at else None,
+                    None,
+                    None,
+                    None,
+                ),
+            )
+            await self._db.commit()
+        await self.append_live_rollout_audit_event(
+            event_type=LIVE_ROLLOUT_AUDIT_APPROVAL_GRANTED,
+            target_profile=record.target_profile,
+            actor=record.actor,
+            reason=record.reason,
+            approval_id=record.approval_id,
+            metadata={"expires_in_hours": expires_in_hours},
+        )
+        return record
+
+    async def revoke_live_rollout_approvals(
+        self,
+        *,
+        actor: str,
+        reason: str,
+        target_profile: str | None = None,
+    ) -> tuple[LiveRolloutApprovalRecord, ...]:
+        if target_profile is None:
+            cursor = await self._db.execute(
+                """
+                SELECT *
+                  FROM live_rollout_approvals
+                 WHERE revoked_at IS NULL
+                """
+            )
+        else:
+            cursor = await self._db.execute(
+                """
+                SELECT *
+                  FROM live_rollout_approvals
+                 WHERE revoked_at IS NULL
+                   AND target_profile = ?
+                """,
+                (target_profile,),
+            )
+        rows = await cursor.fetchall()
+        approvals = tuple(
+            self._row_to_live_rollout_approval(row) for row in rows if row is not None
+        )
+        current_time = datetime.now()
+        current_time_ts = int(current_time.timestamp())
+        async with self._live_rollout_mutex():
+            if target_profile is None:
+                await self._db.execute(
+                    """
+                    UPDATE live_rollout_approvals
+                       SET revoked_at = ?,
+                           revoked_by = ?,
+                           revocation_reason = ?
+                     WHERE revoked_at IS NULL
+                    """,
+                    (current_time_ts, actor, reason),
+                )
+            else:
+                await self._db.execute(
+                    """
+                    UPDATE live_rollout_approvals
+                       SET revoked_at = ?,
+                           revoked_by = ?,
+                           revocation_reason = ?
+                     WHERE revoked_at IS NULL
+                       AND target_profile = ?
+                    """,
+                    (current_time_ts, actor, reason, target_profile),
+                )
+            await self._db.commit()
+
+        profiles = {approval.target_profile for approval in approvals if approval is not None}
+        if not profiles and target_profile is not None:
+            profiles = {target_profile}
+        for profile in profiles:
+            await self.append_live_rollout_audit_event(
+                event_type=LIVE_ROLLOUT_AUDIT_ROLLBACK_RECORDED,
+                target_profile=profile,
+                actor=actor,
+                reason=reason,
+                metadata={
+                    "revoked_approval_ids": [
+                        approval.approval_id
+                        for approval in approvals
+                        if approval is not None and approval.target_profile == profile
+                    ]
+                },
+            )
+
+        refreshed: list[LiveRolloutApprovalRecord] = []
+        for approval in approvals:
+            if approval is None:
+                continue
+            refreshed.append(
+                LiveRolloutApprovalRecord(
+                    approval_id=approval.approval_id,
+                    target_profile=approval.target_profile,
+                    actor=approval.actor,
+                    reason=approval.reason,
+                    approved_at=approval.approved_at,
+                    expires_at=approval.expires_at,
+                    revoked_at=current_time,
+                    revoked_by=actor,
+                    revocation_reason=reason,
+                )
+            )
+        return tuple(refreshed)
 
     # ------------------------------------------------------------------
     # Reads

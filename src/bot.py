@@ -14,6 +14,11 @@ from bot_logging.logger import setup_logging
 from risk_management import RiskManager
 from advanced_risk_management import AdvancedRiskManager
 from notifications.telegram_bot import TelegramNotifier
+from operations.live_rollout_approval import (
+    LIVE_ROLLOUT_AUDIT_STARTUP_REJECTED,
+    LIVE_ROLLOUT_AUDIT_STARTUP_VALIDATED,
+    LiveRolloutApprovalSnapshot,
+)
 from strategies.momentum_strategy import MomentumStrategy
 from strategies.base_strategy import StrategyManager
 from persistence.trade_store import TradeStore
@@ -32,7 +37,7 @@ from operations.alerts import (
 from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
-from runtime.mode import RuntimeMode
+from runtime.mode import DeploymentProfile, RuntimeMode
 from runtime.projection import build_runtime_projection
 
 
@@ -365,6 +370,78 @@ class AkibaCryptoBot:
             exchange_sandbox=self.config["exchange"].get("sandbox", True)
         )
 
+    def _requires_live_rollout_approval(self) -> bool:
+        if self.runtime_config is None:
+            return False
+        profile = self.runtime_config.deployment_profile
+        if profile is None:
+            return False
+        return (
+            not self.config["exchange"].get("sandbox", True)
+            and profile.requires_live_runtime_approval
+        )
+
+    async def _validate_live_rollout_approval(self) -> None:
+        if not self._requires_live_rollout_approval():
+            return
+
+        profile = self.runtime_config.deployment_profile
+        if profile is None:
+            return
+
+        active_approval = await self.trade_store.get_active_live_rollout_approval(
+            profile.value
+        )
+        if active_approval is None:
+            latest = await self.trade_store.get_latest_live_rollout_approval(
+                profile.value
+            )
+            approval_reason = "no active approval record is present"
+            if latest is not None:
+                latest_status = latest.status()
+                if latest_status == "expired":
+                    approval_reason = "the most recent approval has expired"
+                elif latest_status == "revoked":
+                    approval_reason = "the most recent approval has been revoked"
+
+            await self.trade_store.append_live_rollout_audit_event(
+                event_type=LIVE_ROLLOUT_AUDIT_STARTUP_REJECTED,
+                target_profile=profile.value,
+                actor="system",
+                reason=approval_reason,
+                metadata={"runtime_mode": self.runtime_mode.value},
+            )
+            raise ValueError(
+                f"Live runtime startup for {profile.value!r} requires an active operator approval. "
+                f"Current blocker: {approval_reason}. Use POST /api/trading/live/approve first."
+            )
+
+        await self.trade_store.append_live_rollout_audit_event(
+            event_type=LIVE_ROLLOUT_AUDIT_STARTUP_VALIDATED,
+            target_profile=profile.value,
+            actor="system",
+            reason="startup validated against active live rollout approval",
+            approval_id=active_approval.approval_id,
+            metadata={
+                "approved_by": active_approval.actor,
+                "expires_at": (
+                    active_approval.expires_at.isoformat()
+                    if active_approval.expires_at is not None
+                    else None
+                ),
+            },
+        )
+        self.logger.info(
+            "Live rollout approval validated for %s (actor=%s expires_at=%s)",
+            profile.value,
+            active_approval.actor,
+            (
+                active_approval.expires_at.isoformat()
+                if active_approval.expires_at is not None
+                else "none"
+            ),
+        )
+
     async def _stop_runtime(self) -> None:
         runtime_handle = self.runtime_handle
         self.runtime_handle = None
@@ -408,6 +485,7 @@ class AkibaCryptoBot:
         try:
             # Initialize trade persistence and reload open positions
             await self.trade_store.initialize()
+            await self._validate_live_rollout_approval()
             await self.training_manager.initialize()
             self.active_trades = await self.trade_store.load_open_trades()
 
@@ -967,6 +1045,74 @@ class AkibaCryptoBot:
             "entries_blocked_reason": alert_state["entries_blocked_reason"],
             "active_critical_alert_count": critical_alert_count,
         }
+
+    async def get_live_rollout_approval_status(self) -> LiveRolloutApprovalSnapshot:
+        profile_name = None
+        approval_required = False
+        if self.runtime_config is not None and self.runtime_config.deployment_profile:
+            profile_name = self.runtime_config.deployment_profile.value
+            approval_required = self._requires_live_rollout_approval()
+
+        if getattr(self.trade_store, "_db", None) is None:
+            return LiveRolloutApprovalSnapshot(
+                target_profile=profile_name,
+                approval_required=approval_required,
+            )
+
+        current_approval = None
+        latest_approval = None
+        if profile_name is not None:
+            current_approval = await self.trade_store.get_active_live_rollout_approval(
+                profile_name
+            )
+            latest_approval = await self.trade_store.get_latest_live_rollout_approval(
+                profile_name
+            )
+        latest_event = await self.trade_store.get_latest_live_rollout_audit_event()
+        return LiveRolloutApprovalSnapshot(
+            target_profile=profile_name,
+            approval_required=approval_required,
+            current_approval=current_approval,
+            latest_approval=latest_approval,
+            latest_event=latest_event,
+        )
+
+    async def approve_live_rollout(
+        self,
+        *,
+        actor: str,
+        reason: str,
+        target_profile: str,
+        expires_in_hours: int | None = None,
+    ):
+        profile = DeploymentProfile.parse(target_profile)
+        if not profile.requires_live_runtime_approval:
+            raise ValueError("live_approval_not_required_for_profile")
+        return await self.trade_store.create_live_rollout_approval(
+            target_profile=profile.value,
+            actor=actor,
+            reason=reason,
+            expires_in_hours=expires_in_hours,
+        )
+
+    async def record_live_rollback(
+        self,
+        *,
+        actor: str,
+        reason: str,
+        target_profile: str | None = None,
+    ):
+        normalized_profile = None
+        if target_profile is not None:
+            profile = DeploymentProfile.parse(target_profile)
+            if not profile.is_live:
+                raise ValueError("rollback_target_must_be_live_profile")
+            normalized_profile = profile.value
+        return await self.trade_store.revoke_live_rollout_approvals(
+            actor=actor,
+            reason=reason,
+            target_profile=normalized_profile,
+        )
 
     def get_runtime_projection(self):
         runtime_app = self.runtime_app

@@ -13,6 +13,7 @@ from trading.position_manager import PositionManager
 from trading.opportunity_scanner import OpportunityScanner
 from runtime.config import RuntimeConfig
 from runtime.mode import RuntimeMode
+from operations.live_rollout_approval import LiveRolloutApprovalRecord
 
 
 @pytest.fixture
@@ -632,6 +633,50 @@ def test_validate_runtime_startup_allows_live_legacy_without_override(bot):
     )
 
     bot._validate_runtime_startup()
+
+
+@pytest.mark.asyncio
+async def test_validate_live_rollout_approval_requires_active_record(bot):
+    bot.config["exchange"]["sandbox"] = False
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        deployment_profile="live_shadow",
+        allow_live_runtime=True,
+    )
+    bot.trade_store.get_active_live_rollout_approval = AsyncMock(return_value=None)
+    bot.trade_store.get_latest_live_rollout_approval = AsyncMock(return_value=None)
+    bot.trade_store.append_live_rollout_audit_event = AsyncMock()
+
+    with pytest.raises(ValueError, match="requires an active operator approval"):
+        await bot._validate_live_rollout_approval()
+
+    bot.trade_store.append_live_rollout_audit_event.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_validate_live_rollout_approval_accepts_active_record(bot):
+    bot.config["exchange"]["sandbox"] = False
+    bot.runtime_config = RuntimeConfig(
+        symbols=("BTC/USDT",),
+        kline_intervals=("1m",),
+        deployment_profile="live_runtime_entries",
+        allow_live_runtime=True,
+    )
+    approval = LiveRolloutApprovalRecord(
+        approval_id="approval-1",
+        target_profile="live_runtime_entries",
+        actor="ops",
+        reason="canary approved",
+    )
+    bot.trade_store.get_active_live_rollout_approval = AsyncMock(
+        return_value=approval
+    )
+    bot.trade_store.append_live_rollout_audit_event = AsyncMock()
+
+    await bot._validate_live_rollout_approval()
+
+    bot.trade_store.append_live_rollout_audit_event.assert_awaited_once()
 
 
 @pytest.mark.asyncio

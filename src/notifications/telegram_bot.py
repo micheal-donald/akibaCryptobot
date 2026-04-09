@@ -478,6 +478,9 @@ class TelegramNotifier:
             result = await result
         return result
 
+    async def _get_live_rollout_approval_status(self):
+        return await self._call_optional_helper("get_live_rollout_approval_status")
+
     async def _enqueue_training_job(self, request: Dict[str, Any]):
         result = await self._call_optional_helper(
             "enqueue_training_job",
@@ -689,6 +692,46 @@ class TelegramNotifier:
             lines.append(f"- plus {len(alerts) - 3} more alert(s)")
         return lines
 
+    @staticmethod
+    def _format_live_rollout_lines(
+        live_rollout_status: Dict[str, Any] | None,
+    ) -> list[str]:
+        if not isinstance(live_rollout_status, dict):
+            return []
+
+        lines = [
+            "Live Rollout Approval",
+            f"Approval Required: {live_rollout_status.get('approval_required', False)}",
+        ]
+        target_profile = live_rollout_status.get("target_profile")
+        if target_profile:
+            lines.append(f"Target Profile: {target_profile}")
+
+        current_approval = live_rollout_status.get("current_approval")
+        if isinstance(current_approval, dict):
+            lines.extend(
+                [
+                    f"Approval Status: {current_approval.get('status', 'unknown')}",
+                    f"Approved By: {current_approval.get('actor', 'unknown')}",
+                    f"Approval Reason: {current_approval.get('reason', 'n/a')}",
+                ]
+            )
+            expires_at = current_approval.get("expires_at")
+            if expires_at:
+                lines.append(f"Approval Expires: {expires_at}")
+        else:
+            lines.append("Approval Status: missing")
+
+        latest_event = live_rollout_status.get("latest_event")
+        if isinstance(latest_event, dict):
+            lines.append(
+                "Last Rollout Event: "
+                f"{latest_event.get('event_type', 'unknown')} "
+                f"({latest_event.get('target_profile', 'unknown')})"
+            )
+            lines.append(f"Event Reason: {latest_event.get('reason', 'n/a')}")
+        return lines
+
     async def send_operational_alert_transition(
         self,
         previous_state: Dict[str, Any] | None,
@@ -875,6 +918,8 @@ class TelegramNotifier:
 
                 alert_state = await self._get_operational_alert_state()
                 lines.extend(self._format_operational_alert_lines(alert_state))
+                live_rollout_status = await self._get_live_rollout_approval_status()
+                lines.extend(self._format_live_rollout_lines(live_rollout_status))
 
                 message = "\n".join(lines)
             except Exception as e:

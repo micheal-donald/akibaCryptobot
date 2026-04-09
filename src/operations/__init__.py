@@ -28,6 +28,18 @@ from .alert_evaluator import (
     OperationalAlertEvaluator,
 )
 from .model_training_manager import ModelTrainingManager
+from .live_rollout_approval import (
+    LIVE_ROLLOUT_AUDIT_APPROVAL_GRANTED,
+    LIVE_ROLLOUT_AUDIT_ROLLBACK_RECORDED,
+    LIVE_ROLLOUT_AUDIT_STARTUP_REJECTED,
+    LIVE_ROLLOUT_AUDIT_STARTUP_VALIDATED,
+    LIVE_ROLLOUT_APPROVAL_ACTIVE,
+    LIVE_ROLLOUT_APPROVAL_EXPIRED,
+    LIVE_ROLLOUT_APPROVAL_REVOKED,
+    LiveRolloutApprovalRecord,
+    LiveRolloutApprovalSnapshot,
+    LiveRolloutAuditEvent,
+)
 from .training_jobs import (
     ACTIVE_TRAINING_JOB_STATUSES,
     TRAINING_JOB_REQUESTERS,
@@ -65,6 +77,16 @@ __all__ = [
     "ALERT_TRAINING_FAILED",
     "ALERT_TRAINING_STUCK",
     "OperationalAlertEvaluator",
+    "LIVE_ROLLOUT_AUDIT_APPROVAL_GRANTED",
+    "LIVE_ROLLOUT_AUDIT_ROLLBACK_RECORDED",
+    "LIVE_ROLLOUT_AUDIT_STARTUP_REJECTED",
+    "LIVE_ROLLOUT_AUDIT_STARTUP_VALIDATED",
+    "LIVE_ROLLOUT_APPROVAL_ACTIVE",
+    "LIVE_ROLLOUT_APPROVAL_EXPIRED",
+    "LIVE_ROLLOUT_APPROVAL_REVOKED",
+    "LiveRolloutApprovalRecord",
+    "LiveRolloutApprovalSnapshot",
+    "LiveRolloutAuditEvent",
     "TrainingJobRecord",
     "TrainingJobRequest",
     "TrainingJobSnapshot",
