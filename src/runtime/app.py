@@ -27,6 +27,7 @@ from services.execution_service import ExecutionService
 from services.market_data_service import MarketDataService
 from services.persistence_service import PersistenceService
 from services.position_service import PositionService
+from services.recovery_service import RecoveryReport, RestartRecoveryService
 from services.signal_service import SignalService
 from services.risk_service import RiskService
 from services.telemetry_service import TelemetryService
@@ -171,6 +172,12 @@ class RuntimeApp:
         default=None, init=False, repr=False
     )
     position_service: PositionService | None = field(
+        default=None, init=False, repr=False
+    )
+    recovery_service: RestartRecoveryService | None = field(
+        default=None, init=False, repr=False
+    )
+    recovery_report: RecoveryReport | None = field(
         default=None, init=False, repr=False
     )
     event_capture: RuntimeEventCaptureBuffer | None = field(default=None, repr=False)
@@ -356,6 +363,7 @@ class RuntimeApp:
         execution_gateway: ExecutionGateway,
         runtime_store: RuntimeStore,
         strategy: RuntimeStrategy,
+        trade_store: object | None = None,
         market_data_bootstrap_gateway: MarketDataBootstrapGateway | None = None,
         user_stream_gateway: UserStreamGateway | None = None,
         max_open_positions: int = 0,
@@ -399,18 +407,46 @@ class RuntimeApp:
 
         app.register_service("market-data", app.market_data_service)
         app.register_service("signal", app.signal_service)
+        if trade_store is not None and config.runtime_mode.runtime_enabled:
+            app.recovery_service = RestartRecoveryService(
+                name="recovery",
+                trade_store=trade_store,
+                execution_gateway=execution_gateway,
+                execution_service=app.execution_service,
+                position_service=app.position_service,
+                reapply_native_protection=config.runtime_mode.owns_exits,
+            )
+            app.register_service("recovery", app.recovery_service)
         return app
 
     async def start(self) -> None:
         if self.is_running:
             return
+        services_started = False
+        previous_entries_paused: bool | None = None
         try:
             await self._initialize_runtime_store()
+            if self.risk_service is not None:
+                previous_entries_paused = self.risk_service.entries_paused
+                self.risk_service.set_entries_paused(True)
             await self.services.start_all()
+            services_started = True
+            await self._recover_runtime_state()
         except Exception:
+            if services_started:
+                try:
+                    await self.services.stop_all()
+                except Exception:
+                    logging.getLogger(__name__).warning(
+                        "runtime service shutdown failed during startup recovery",
+                        exc_info=True,
+                    )
             await self._close_runtime_store()
             self.is_running = False
             raise
+        finally:
+            if previous_entries_paused is not None and self.risk_service is not None:
+                self.risk_service.set_entries_paused(previous_entries_paused)
         self.is_running = True
 
     async def stop(self) -> None:
@@ -454,3 +490,30 @@ class RuntimeApp:
         result = close()
         if inspect.isawaitable(result):
             await result
+
+    async def _recover_runtime_state(self) -> None:
+        recovery_service = self.recovery_service
+        if recovery_service is None:
+            self.recovery_report = None
+            return
+
+        report = await recovery_service.recover()
+        self.recovery_report = report
+
+        persistence_service = self.persistence_service
+        if persistence_service is None:
+            return
+
+        enqueued = persistence_service.enqueue_recovery_report(report)
+        if not enqueued:
+            logging.getLogger(__name__).warning(
+                "recovery report dropped before persistence: queue full"
+            )
+            return
+
+        try:
+            await persistence_service.wait_until_drained(timeout_seconds=1.0)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logging.getLogger(__name__).warning(
+                "recovery report persistence failed: %s", exc
+            )

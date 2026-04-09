@@ -263,6 +263,7 @@ class AkibaCryptoBot:
             execution_gateway=execution_gateway,
             runtime_store=runtime_store,
             strategy=runtime_strategy,
+            trade_store=self.trade_store,
             market_data_bootstrap_gateway=bootstrap_gateway,
             user_stream_gateway=user_stream_gateway,
             max_open_positions=self.config.get("trading", {}).get("max_open_trades", 0),
