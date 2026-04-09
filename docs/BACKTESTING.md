@@ -264,6 +264,36 @@ Current state note:
 - they do not yet provide a full queue-sensitive, venue-faithful HFT fill simulator
 - HFT research should treat any results from the current replay stack as lower-fidelity until queue position and passive/aggressive fill behavior are modeled explicitly
 
+## Phase 21 Replay Engine
+
+Phase 21 adds a product-facing replay path in `src/backtesting/replay_engine.py` that turns captured depth JSONL into low-latency strategy reports.
+
+The replay engine:
+
+- loads `runtime.depth_capture` JSONL exports through the existing replay harness
+- feeds `runtime.depth_replay` steps into a microstructure shadow strategy contract
+- builds feature rows from `src/indicators/microstructure_features.py`
+- reports decision latency, submit latency, fill quality, slippage, and spread capture
+- summarizes capture health with gap, stale, and sequence-issue counts
+
+Primary result object:
+
+- `LowLatencyReplayReport`
+
+Important fields:
+
+- `capture_health`
+- `feature_rows`
+- `decision_count`
+- `fill_count`
+- `average_decision_latency_ms`
+- `average_submit_latency_ms`
+- `average_fill_quality_bps`
+- `average_slippage_bps`
+- `average_spread_capture_bps`
+
+This replay path is intended for low-latency paper-shadow validation, not native HFT fill fidelity.
+
 ## Interpreting Results
 
 ### Sharpe Ratio

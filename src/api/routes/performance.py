@@ -1,11 +1,38 @@
-"""
-Performance Metrics endpoints
-"""
+"""Performance metrics and low-latency reporting endpoints."""
+
+import inspect
 
 from fastapi import APIRouter, Depends, Query
+
 from api.dependencies import get_bot
 
 router = APIRouter()
+
+
+def _build_low_latency_fallback(bot):
+    projection = bot.get_runtime_projection()
+    telemetry_getter = getattr(bot, "get_runtime_telemetry_info", None)
+    telemetry = telemetry_getter() if callable(telemetry_getter) else None
+    event_latency = None
+    if isinstance(telemetry, dict):
+        latency = telemetry.get("latency", {})
+        event_age = latency.get("event_age_ms", {})
+        if isinstance(event_age, dict):
+            event_latency = event_age.get("average_ms")
+    return {
+        "available": False,
+        "source": "api.performance.low_latency",
+        "runtime_mode": projection.runtime_mode,
+        "state_source": projection.source.value,
+        "runtime_is_running": projection.runtime_is_running,
+        "runtime_is_healthy": projection.runtime_is_healthy,
+        "decision_latency_ms": event_latency,
+        "submit_latency_ms": None,
+        "fill_quality_bps": None,
+        "spread_capture_bps": None,
+        "capture_health": None,
+        "report": None,
+    }
 
 
 @router.get("/metrics")
@@ -82,3 +109,20 @@ async def get_trade_history(
 async def get_strategy_performance(bot=Depends(get_bot)):
     """Get per-strategy performance breakdown."""
     return bot.strategy_manager.get_all_performance()
+
+
+@router.get("/low-latency")
+async def get_low_latency_performance(bot=Depends(get_bot)):
+    """Get low-latency replay/shadow performance if available."""
+    getter = getattr(bot, "get_low_latency_performance", None)
+    if callable(getter):
+        report = getter()
+        if inspect.isawaitable(report):
+            report = await report
+        if hasattr(report, "as_dict"):
+            return report.as_dict()
+        if isinstance(report, dict):
+            return report
+        return {"available": True, "report": report}
+
+    return _build_low_latency_fallback(bot)

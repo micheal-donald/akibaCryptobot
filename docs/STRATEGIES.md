@@ -48,6 +48,30 @@ Operator expectation:
 - If a strategy depends on queue position, order-flow timing, or spread capture, it belongs in the low-latency or HFT lane.
 - If a strategy cannot be replayed with queue/fill realism, it should not be described as HFT-ready.
 
+## Phase 21 Microstructure Shadow Strategy
+
+Phase 21 adds a first-pass paper-shadow contract for microstructure-aware research in `src/strategies/microstructure/`.
+
+The current contract is intentionally small:
+
+- `MicrostructureShadowStrategyContract` defines `evaluate(snapshot, features, decision_latency_ms=...)`
+- `MicrostructureDecision` carries action, confidence, execution style, and feature context
+- `PaperShadowMicrostructureStrategy` evaluates spread, depth imbalance, trade pressure, and latency budget
+
+Operating assumptions:
+
+- this strategy is not a candle/indicator strategy
+- it is designed for captured/replayed order-book data
+- it should run in paper shadow before any ownership cutover
+
+Signal interpretation:
+
+- `buy` means bullish imbalance or flow on a narrow spread
+- `sell` means bearish imbalance or flow on a narrow spread
+- `passive` execution style is the default because Phase 21 is measuring fill quality and spread capture
+
+The strategy contract is not an HFT claim. It is the first productized low-latency research surface.
+
 ---
 
 ## Strategy Hierarchy
