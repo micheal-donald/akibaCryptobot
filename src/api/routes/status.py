@@ -1,4 +1,4 @@
-﻿"""
+"""
 Status & Health endpoints
 """
 
@@ -78,7 +78,7 @@ async def _inject_training_job(status_info, bot):
         return status_info
 
     snapshot = await training_getter()
-    status_info["training_job"] = snapshot.to_dict()
+    status_info["training_job"] = snapshot.to_dict() if snapshot is not None else None
     return status_info
 
 
@@ -90,6 +90,10 @@ async def _inject_live_rollout_approval(status_info, bot):
         return status_info
 
     snapshot = await getter()
+    if snapshot is None:
+        status_info["live_rollout_approval"] = None
+        status_info["latest_live_rollout_event"] = None
+        return status_info
     payload = snapshot.to_dict()
     status_info["live_rollout_approval"] = payload
     status_info["latest_live_rollout_event"] = payload.get("latest_event")
@@ -134,7 +138,8 @@ async def get_status(bot=Depends(get_bot)):
     _inject_operational_alert_state(status_info, bot)
     await _inject_training_job(status_info, bot)
     await _inject_live_rollout_approval(status_info, bot)
-    projection = bot.get_runtime_projection()
+    projection_getter = getattr(bot, "get_runtime_projection", None)
+    projection = projection_getter() if callable(projection_getter) else None
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active
     status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason
     status_info["strategy"] = bot.strategy_manager.active_strategy
@@ -145,21 +150,35 @@ async def get_status(bot=Depends(get_bot)):
         projection,
         configured_deployment_profile=status_info.get("configured_deployment_profile"),
         trading_mode=status_info["trading_mode"],
+        halt_state=status_info.get("halt_state"),
     )
-    status_info["state_source"] = projection.source.value
-    status_info["runtime_mode"] = projection.runtime_mode
-    status_info["runtime_is_running"] = projection.runtime_is_running
-    status_info["runtime_start_status"] = projection.runtime_start_status
-    status_info["runtime_start_pending"] = projection.runtime_start_pending
-    status_info["runtime_owns_entries"] = projection.runtime_owns_entries
-    status_info["runtime_owns_exits"] = projection.runtime_owns_exits
+    if projection is not None:
+        status_info["state_source"] = projection.source.value
+        status_info["runtime_mode"] = projection.runtime_mode
+        status_info["runtime_is_running"] = projection.runtime_is_running
+        status_info["runtime_start_status"] = projection.runtime_start_status
+        status_info["runtime_start_pending"] = projection.runtime_start_pending
+        status_info["runtime_owns_entries"] = projection.runtime_owns_entries
+        status_info["runtime_owns_exits"] = projection.runtime_owns_exits
+        status_info["projected_active_positions"] = projection.active_position_count
+        status_info["projected_open_orders"] = projection.open_order_count
+        status_info["projected_pending_exits"] = projection.pending_exit_count
+        status_info["projected_rejected_orders"] = projection.rejected_order_count
+        if projection.source is ProjectionSource.RUNTIME_PROJECTION:
+            status_info["active_trades"] = projection.active_position_count
+    else:
+        status_info.setdefault("state_source", ProjectionSource.LEGACY.value)
+        status_info.setdefault("runtime_mode", "legacy")
+        status_info.setdefault("runtime_is_running", False)
+        status_info.setdefault("runtime_start_status", "disabled")
+        status_info.setdefault("runtime_start_pending", False)
+        status_info.setdefault("runtime_owns_entries", False)
+        status_info.setdefault("runtime_owns_exits", False)
+        status_info.setdefault("projected_active_positions", 0)
+        status_info.setdefault("projected_open_orders", 0)
+        status_info.setdefault("projected_pending_exits", 0)
+        status_info.setdefault("projected_rejected_orders", 0)
     status_info.update(rollout_summary)
-    status_info["projected_active_positions"] = projection.active_position_count
-    status_info["projected_open_orders"] = projection.open_order_count
-    status_info["projected_pending_exits"] = projection.pending_exit_count
-    status_info["projected_rejected_orders"] = projection.rejected_order_count
-    if projection.source is ProjectionSource.RUNTIME_PROJECTION:
-        status_info["active_trades"] = projection.active_position_count
     return status_info
 
 

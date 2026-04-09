@@ -47,7 +47,12 @@ class PaperShadowMicrostructureStrategy(MicrostructureShadowStrategyContract):
         if imbalance is None:
             return None
 
-        if imbalance >= self.min_abs_imbalance or pressure >= self.min_trade_pressure:
+        bullish_signal = (
+            imbalance >= self.min_abs_imbalance and pressure >= 0.0
+        ) or (
+            pressure >= self.min_trade_pressure and imbalance >= 0.0
+        )
+        if bullish_signal:
             confidence = _confidence(
                 imbalance,
                 pressure,
@@ -69,7 +74,12 @@ class PaperShadowMicrostructureStrategy(MicrostructureShadowStrategyContract):
                 reason="bullish_imbalance",
             )
 
-        if imbalance <= -self.min_abs_imbalance or pressure <= -self.min_trade_pressure:
+        bearish_signal = (
+            imbalance <= -self.min_abs_imbalance and pressure <= 0.0
+        ) or (
+            pressure <= -self.min_trade_pressure and imbalance <= 0.0
+        )
+        if bearish_signal:
             confidence = _confidence(
                 abs(imbalance),
                 abs(pressure),

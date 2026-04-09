@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from typing import Dict, List
-from datetime import datetime
+from datetime import datetime, timezone
 import signal
 from dotenv import load_dotenv
 
@@ -1088,6 +1088,8 @@ class AkibaCryptoBot:
         profile = DeploymentProfile.parse(target_profile)
         if not profile.requires_live_runtime_approval:
             raise ValueError("live_approval_not_required_for_profile")
+        if expires_in_hours is not None and int(expires_in_hours) <= 0:
+            raise ValueError("expires_in_hours_must_be_positive")
         return await self.trade_store.create_live_rollout_approval(
             target_profile=profile.value,
             actor=actor,
@@ -1316,10 +1318,11 @@ class AkibaCryptoBot:
                         key=lambda f: os.path.getmtime(os.path.join(models_dir, f)),
                     )
                     mtime = os.path.getmtime(os.path.join(models_dir, newest))
-                    model_info["last_trained"] = datetime.fromtimestamp(
-                        mtime
-                    ).isoformat()
-                    age_hours = (datetime.now().timestamp() - mtime) / 3600
+                    trained_at = datetime.fromtimestamp(mtime, tz=timezone.utc)
+                    model_info["last_trained"] = trained_at.isoformat()
+                    age_hours = (
+                        datetime.now(timezone.utc).timestamp() - mtime
+                    ) / 3600
                     model_info["age_hours"] = round(age_hours, 1)
                     model_info["stale"] = age_hours > 48
 

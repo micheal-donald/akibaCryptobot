@@ -196,18 +196,19 @@ async function fetchTrades() {
 
         dom.positionsTbody.innerHTML = trades.map(t => {
             if (!t) return '';
-            const symbol = t.symbol || '—';
-            const entryPrice = parseFloat(t.entry_price || 0);
-            const currentPrice = latestPrices[symbol] || entryPrice;
+            const rawSymbol = String(t.symbol || '');
+            const symbol = safeText(rawSymbol);
+            const entryPrice = toFiniteNumber(t.entry_price);
+            const currentPrice = toFiniteNumber(latestPrices[rawSymbol], entryPrice);
             const pnlPct = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice * 100) : 0;
             const side = (t.side || 'long').toLowerCase();
             const isLong = side === 'long' || side === 'buy';
             const effectivePnl = isLong ? pnlPct : -pnlPct;
-            const amount = parseFloat(t.amount || 0);
+            const amount = toFiniteNumber(t.amount);
 
             // Map either entry_time or timestamp
             const rawTime = t.entry_time || t.timestamp;
-            const entryTime = rawTime ? new Date(rawTime).toLocaleTimeString() : '—';
+            const entryTime = rawTime ? safeText(new Date(rawTime).toLocaleTimeString()) : '—';
 
             return `
                 <tr class="border-b border-matrix-border/50 hover:bg-matrix-border/30 transition-colors">
@@ -217,7 +218,7 @@ async function fetchTrades() {
                     <td class="py-3 text-gray-400">$${entryPrice.toLocaleString()}</td>
                     <td class="py-3 text-white">$${currentPrice.toLocaleString()}</td>
                     <td class="py-3 ${effectivePnl >= 0 ? 'text-matrix-neon' : 'text-red-500'}">${effectivePnl >= 0 ? '+' : ''}${effectivePnl.toFixed(2)}%</td>
-                    <td class="py-3 text-matrix-dim">${t.strategy || '—'}</td>
+                    <td class="py-3 text-matrix-dim">${safeText(t.strategy)}</td>
                     <td class="py-3 text-gray-500 text-xs">${entryTime}</td>
                 </tr>`;
         }).join('');
@@ -338,17 +339,19 @@ async function fetchTradeHistory() {
 
         dom.activityFeed.innerHTML = trades.map(t => {
             const isBuy = (t.side || '').toLowerCase() === 'buy';
-            const pnl = t.pnl || 0;
+            const pnl = toFiniteNumber(t.pnl);
             const pnlPct = t.pnl_percent != null ? t.pnl_percent : null;
-            const duration = t.duration || '';
-            const exitReason = t.exit_reason || '';
-            const time = t.exit_time ? new Date(t.exit_time).toLocaleTimeString() : '';
+            const duration = safeText(t.duration, '');
+            const exitReason = String(t.exit_reason || '');
+            const time = t.exit_time ? safeText(new Date(t.exit_time).toLocaleTimeString(), '') : '';
+            const symbol = safeText(t.symbol);
+            const strategyName = safeText(t.strategy, '');
 
             const typeClass = isBuy
                 ? 'text-matrix-neon bg-matrix-neon/10 border-matrix-neon/20'
                 : 'text-red-500 bg-red-500/10 border-red-500/20';
 
-            const exitBadge = exitReason ? `<span class="exit-badge ${getExitReasonClass(exitReason)}">${formatExitReason(exitReason)}</span>` : '';
+            const exitBadge = exitReason ? `<span class="exit-badge ${getExitReasonClass(exitReason)}">${safeText(formatExitReason(exitReason), '')}</span>` : '';
 
             const pnlStr = pnlPct != null
                 ? `<span class="${pnl >= 0 ? 'text-matrix-neon' : 'text-red-500'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)</span>`
@@ -358,11 +361,11 @@ async function fetchTradeHistory() {
                 <div class="flex items-start space-x-3 p-2 rounded hover:bg-matrix-border/30 transition-colors border border-transparent hover:border-matrix-border/50">
                     <div class="${typeClass} px-2 py-0.5 rounded text-xs font-bold border shrink-0">${isBuy ? 'BUY' : 'SELL'}</div>
                     <div class="flex flex-col min-w-0 gap-0.5">
-                        <span class="text-white text-xs truncate">${t.symbol} @ $${parseFloat(t.exit_price || 0).toLocaleString()} → ${pnlStr}</span>
+                        <span class="text-white text-xs truncate">${symbol} @ $${toFiniteNumber(t.exit_price).toLocaleString()} &rarr; ${pnlStr}</span>
                         <div class="flex items-center gap-2 flex-wrap">
                             ${exitBadge}
                             ${duration ? `<span class="text-matrix-dim text-[10px]">${duration}</span>` : ''}
-                            <span class="text-matrix-dim text-[10px]">${t.strategy || ''} · ${time}</span>
+                            <span class="text-matrix-dim text-[10px]">${strategyName}${strategyName && time ? ' &middot; ' : ''}${time}</span>
                         </div>
                     </div>
                 </div>`;
@@ -385,7 +388,7 @@ async function fetchStrategy() {
         if (data.available_strategies && data.available_strategies.length > 0) {
             dom.strategySelect.innerHTML = data.available_strategies.map(s => {
                 const selected = s === data.active_strategy ? ' selected' : '';
-                return `<option value="${s}"${selected}>${s}</option>`;
+                return `<option value="${safeText(s, '')}"${selected}>${safeText(s, '')}</option>`;
             }).join('');
         }
 
@@ -395,9 +398,9 @@ async function fetchStrategy() {
             const comps = data.components;
             dom.ensembleComponents.innerHTML = Object.entries(comps).map(([key, val]) => {
                 if (typeof val === 'object') {
-                    return `<div class="text-matrix-dim">${key}: <span class="text-white">${JSON.stringify(val)}</span></div>`;
+                    return `<div class="text-matrix-dim">${safeText(key, '')}: <span class="text-white">${safeText(JSON.stringify(val), '')}</span></div>`;
                 }
-                return `<div class="text-matrix-dim">${key}: <span class="text-white">${val}</span></div>`;
+                return `<div class="text-matrix-dim">${safeText(key, '')}: <span class="text-white">${safeText(val, '')}</span></div>`;
             }).join('');
         } else {
             dom.ensembleSection.classList.add('hidden');
@@ -414,11 +417,11 @@ async function fetchConfig() {
 
         if (data.trading_mode) {
             const modeColor = data.trading_mode === 'paper' ? 'text-yellow-400 border-yellow-400/30' : 'text-red-400 border-red-400/30';
-            items.push(`<span class="px-2 py-0.5 rounded border ${modeColor} font-semibold">${data.trading_mode.toUpperCase()}</span>`);
+            items.push(`<span class="px-2 py-0.5 rounded border ${modeColor} font-semibold">${safeText(data.trading_mode.toUpperCase(), '')}</span>`);
         }
 
         if (data.pairs && data.pairs.length > 0) {
-            const tags = data.pairs.map(p => `<span class="config-tag">${p}</span>`).join('');
+            const tags = data.pairs.map(p => `<span class="config-tag">${safeText(p, '')}</span>`).join('');
             items.push(`<span class="text-matrix-dim">Pairs:</span> ${tags}`);
         }
 
@@ -473,12 +476,13 @@ async function fetchRisk() {
         if (heatmap && heatmap.asset_exposures) {
             html += `<div class="space-y-2 mt-2">`;
             for (const [asset, exposure] of Object.entries(heatmap.asset_exposures)) {
-                const pct = Math.min(Math.abs(exposure) * 100, 100);
+                const exposureValue = toFiniteNumber(exposure);
+                const pct = Math.min(Math.abs(exposureValue) * 100, 100);
                 html += `
                     <div>
                         <div class="flex justify-between text-xs mb-1">
-                            <span class="text-matrix-dim">${asset}</span>
-                            <span class="text-white">${(exposure * 100).toFixed(1)}%</span>
+                            <span class="text-matrix-dim">${safeText(asset, '')}</span>
+                            <span class="text-white">${(exposureValue * 100).toFixed(1)}%</span>
                         </div>
                         <div class="w-full bg-matrix-border rounded-full h-1.5">
                             <div class="bg-matrix-neon h-1.5 rounded-full" style="width: ${pct}%"></div>
@@ -494,9 +498,9 @@ async function fetchRisk() {
             html += `
                 <div class="mt-3 pt-3 border-t border-matrix-border space-y-1">
                     <div class="text-matrix-dim text-xs font-semibold tracking-wide mb-1">POSITION SIZING</div>
-                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">ATR Period</span><span class="text-white">${ps.atr_period}</span></div>
-                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">ATR Multiplier</span><span class="text-white">${ps.atr_multiplier}</span></div>
-                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">Kelly</span><span class="text-white">${ps.kelly_enabled ? `ON (cap: ${ps.kelly_cap})` : 'OFF'}</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">ATR Period</span><span class="text-white">${safeText(ps.atr_period, '—')}</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">ATR Multiplier</span><span class="text-white">${safeText(ps.atr_multiplier, '—')}</span></div>
+                    <div class="flex justify-between text-xs"><span class="text-matrix-dim">Kelly</span><span class="text-white">${ps.kelly_enabled ? `ON (cap: ${safeText(ps.kelly_cap, '—')})` : 'OFF'}</span></div>
                 </div>`;
         }
 
@@ -534,7 +538,7 @@ async function fetchCorrelations() {
         const corrs = data.correlations || {};
 
         if (Object.keys(corrs).length === 0) {
-            dom.correlationContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">${data.message || 'No correlation data yet'}</div>`;
+            dom.correlationContainer.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">${safeText(data.message, 'No correlation data yet')}</div>`;
             return;
         }
 
@@ -557,13 +561,13 @@ async function fetchCorrelations() {
         // Build NxN grid table
         let tableHtml = '<table class="corr-table w-full border-collapse text-xs font-mono"><thead><tr><th></th>';
         for (const sym of symbols) {
-            const short = sym.replace('/USDT', '').replace('/BTC', '');
+            const short = safeText(sym.replace('/USDT', '').replace('/BTC', ''), '');
             tableHtml += `<th class="corr-header">${short}</th>`;
         }
         tableHtml += '</tr></thead><tbody>';
 
         for (const rowSym of symbols) {
-            const rowShort = rowSym.replace('/USDT', '').replace('/BTC', '');
+            const rowShort = safeText(rowSym.replace('/USDT', '').replace('/BTC', ''), '');
             tableHtml += `<tr><td class="corr-header text-right pr-2">${rowShort}</td>`;
             for (const colSym of symbols) {
                 if (rowSym === colSym) {
@@ -572,9 +576,10 @@ async function fetchCorrelations() {
                     const key1 = `${rowSym}_${colSym}`;
                     const key2 = `${colSym}_${rowSym}`;
                     const val = corrs[key1] ?? corrs[key2] ?? null;
-                    if (val !== null) {
-                        const cls = getCorrClass(val);
-                        tableHtml += `<td class="corr-cell ${cls}">${val.toFixed(2)}</td>`;
+                    const numericValue = val == null ? Number.NaN : toFiniteNumber(val, Number.NaN);
+                    if (Number.isFinite(numericValue)) {
+                        const cls = getCorrClass(numericValue);
+                        tableHtml += `<td class="corr-cell ${cls}">${numericValue.toFixed(2)}</td>`;
                     } else {
                         tableHtml += `<td class="corr-cell text-gray-600">—</td>`;
                     }
@@ -654,17 +659,17 @@ async function fetchStrategyPerformance() {
         }
 
         dom.strategyPerfContainer.innerHTML = strategies.map(([name, perf]) => {
-            const wr = perf.win_rate != null ? `${(perf.win_rate * 100).toFixed(1)}%` : '—';
-            const pnl = perf.total_pnl != null ? perf.total_pnl : 0;
+            const wr = perf.win_rate != null ? `${(toFiniteNumber(perf.win_rate) * 100).toFixed(1)}%` : '—';
+            const pnl = perf.total_pnl != null ? toFiniteNumber(perf.total_pnl) : 0;
             const pnlColor = pnl >= 0 ? 'text-matrix-neon' : 'text-red-500';
             const signals = perf.total_signals ?? 0;
-            const lastSig = perf.last_signal || '—';
-            const lastUpdate = perf.last_update ? new Date(perf.last_update).toLocaleTimeString() : '—';
+            const lastSig = safeText(perf.last_signal);
+            const lastUpdate = perf.last_update ? safeText(new Date(perf.last_update).toLocaleTimeString()) : '—';
 
             return `
                 <div class="border border-matrix-border rounded-lg p-3 hover:border-matrix-dim transition-colors">
                     <div class="flex justify-between items-start mb-2">
-                        <span class="text-white text-sm font-bold">${name}</span>
+                        <span class="text-white text-sm font-bold">${safeText(name, '')}</span>
                         <span class="${pnlColor} text-sm font-mono font-bold">${pnl >= 0 ? '+' : ''}$${Math.abs(pnl).toFixed(2)}</span>
                     </div>
                     <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs font-mono">
@@ -878,17 +883,17 @@ function formatTimestamp(value) {
 function getTrainingStatusMeta(status) {
     switch (status) {
         case 'queued':
-            return { icon: '🧠⏳', cls: 'text-yellow-400' };
+            return { icon: '\u{1F9E0}\u23F3', cls: 'text-yellow-400' };
         case 'running':
-            return { icon: '🧠⚙️', cls: 'text-blue-400' };
+            return { icon: '\u{1F9E0}\u2699\uFE0F', cls: 'text-blue-400' };
         case 'succeeded':
-            return { icon: '🧠✅', cls: 'text-matrix-neon' };
+            return { icon: '\u{1F9E0}\u2705', cls: 'text-matrix-neon' };
         case 'failed':
-            return { icon: '🧠❌', cls: 'text-red-500' };
+            return { icon: '\u{1F9E0}\u274C', cls: 'text-red-500' };
         case 'blocked':
-            return { icon: '🧠⛔', cls: 'text-red-500' };
+            return { icon: '\u{1F9E0}\u26D4', cls: 'text-red-500' };
         default:
-            return { icon: '🧠', cls: 'text-matrix-dim' };
+            return { icon: '\u{1F9E0}', cls: 'text-matrix-dim' };
     }
 }
 
@@ -898,12 +903,15 @@ function renderTrainingSection(trainingData, modelData, statusData) {
     const activeJob = currentJob || lastJob;
     const activeStatus = activeJob?.status || 'idle';
     const statusMeta = getTrainingStatusMeta(activeStatus);
-    const reloadStatus = modelData?.reload_status || activeJob?.reload_status || '—';
-    const startBlocker = trainingData?.start_blocker || '—';
+    const reloadStatus = safeText(
+        modelData?.reload_status || activeJob?.reload_status,
+        '—'
+    );
+    const startBlocker = safeText(trainingData?.start_blocker, '—');
     const tradingPaused = Boolean(statusData?.trading_paused);
 
     const summaryLines = [
-        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status</span><span class="${statusMeta.cls}">${statusMeta.icon} ${activeStatus.toUpperCase()}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status</span><span class="${statusMeta.cls}">${statusMeta.icon} ${safeText(String(activeStatus).toUpperCase(), 'IDLE')}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Trading Paused</span><span class="${tradingPaused ? 'text-yellow-400' : 'text-red-400'}">${tradingPaused ? 'yes' : 'no'}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Can Start</span><span class="${trainingData?.can_start_training ? 'text-matrix-neon' : 'text-red-400'}">${trainingData?.can_start_training ? 'yes' : 'no'}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Reload Status</span><span class="text-white">${reloadStatus}</span></div>`,
@@ -912,24 +920,24 @@ function renderTrainingSection(trainingData, modelData, statusData) {
 
     if (activeJob) {
         summaryLines.push(
-            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Job ID</span><span class="text-white truncate max-w-[180px]">${activeJob.job_id}</span></div>`,
-            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Requested By</span><span class="text-white">${activeJob.requested_by || '—'}</span></div>`,
-            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Timeframe</span><span class="text-white">${activeJob.timeframe || '—'}</span></div>`,
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Job ID</span><span class="text-white truncate max-w-[180px]">${safeText(activeJob.job_id, '—')}</span></div>`,
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Requested By</span><span class="text-white">${safeText(activeJob.requested_by, '—')}</span></div>`,
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Timeframe</span><span class="text-white">${safeText(activeJob.timeframe, '—')}</span></div>`,
             `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Candles</span><span class="text-white">${activeJob.candles ?? '—'}</span></div>`,
         );
         if (activeJob.progress != null) {
             summaryLines.push(
-                `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Progress</span><span class="text-white">${Number(activeJob.progress).toFixed(0)}%</span></div>`
+                `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Progress</span><span class="text-white">${toFiniteNumber(activeJob.progress).toFixed(0)}%</span></div>`
             );
         }
         if (activeJob.error) {
             summaryLines.push(
-                `<div class="text-[11px] text-red-400 break-words">Error: ${activeJob.error}</div>`
+                `<div class="text-[11px] text-red-400 break-words">Error: ${safeText(activeJob.error, '')}</div>`
             );
         }
         if (activeJob.result_summary) {
             summaryLines.push(
-                `<div class="text-[11px] text-matrix-dim break-words">Result: ${activeJob.result_summary}</div>`
+                `<div class="text-[11px] text-matrix-dim break-words">Result: ${safeText(activeJob.result_summary, '')}</div>`
             );
         }
     } else {
@@ -959,33 +967,33 @@ function renderOperationalAlertsSection(statusData) {
         ? statusData.operational_alerts
         : [];
     const haltState = statusData?.halt_state || 'none';
-    const entriesBlockedReason = statusData?.entries_blocked_reason || '—';
+    const entriesBlockedReason = safeText(statusData?.entries_blocked_reason, '—');
     const trainingJob = statusData?.training_job || null;
     const liveRolloutApproval = statusData?.live_rollout_approval || null;
     const latestLiveRolloutEvent = statusData?.latest_live_rollout_event || null;
 
     const alertLines = [
-        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Halt State</span><span class="${haltState === 'none' ? 'text-matrix-neon' : 'text-red-400'}">${haltState}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Halt State</span><span class="${haltState === 'none' ? 'text-matrix-neon' : 'text-red-400'}">${safeText(haltState, 'none')}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Entries Blocked</span><span class="${entriesBlockedReason === '—' ? 'text-matrix-neon' : 'text-yellow-400'}">${entriesBlockedReason}</span></div>`,
         `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Critical Alerts</span><span class="${(statusData?.active_critical_alert_count || 0) > 0 ? 'text-red-400' : 'text-matrix-neon'}">${statusData?.active_critical_alert_count || 0}</span></div>`,
-        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status Job Surface</span><span class="text-white">${trainingJob?.current_job?.status || trainingJob?.last_job?.status || 'idle'}</span></div>`,
+        `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Status Job Surface</span><span class="text-white">${safeText(trainingJob?.current_job?.status || trainingJob?.last_job?.status, 'idle')}</span></div>`,
     ];
 
     if (liveRolloutApproval) {
         alertLines.push(
             `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Live Approval Required</span><span class="${liveRolloutApproval.approval_required ? 'text-yellow-400' : 'text-matrix-neon'}">${liveRolloutApproval.approval_required ? 'yes' : 'no'}</span></div>`,
-            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Live Approval Status</span><span class="${liveRolloutApproval.current_approval ? 'text-matrix-neon' : 'text-red-400'}">${liveRolloutApproval.current_approval?.status || 'missing'}</span></div>`
+            `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Live Approval Status</span><span class="${liveRolloutApproval.current_approval ? 'text-matrix-neon' : 'text-red-400'}">${safeText(liveRolloutApproval.current_approval?.status, 'missing')}</span></div>`
         );
         if (liveRolloutApproval.current_approval?.actor) {
             alertLines.push(
-                `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Approved By</span><span class="text-white">${liveRolloutApproval.current_approval.actor}</span></div>`
+                `<div class="flex justify-between text-[11px]"><span class="text-matrix-dim">Approved By</span><span class="text-white">${safeText(liveRolloutApproval.current_approval.actor, '')}</span></div>`
             );
         }
     }
 
     if (latestLiveRolloutEvent) {
         alertLines.push(
-            `<div class="text-[11px] text-matrix-dim break-words">Latest rollout event: ${latestLiveRolloutEvent.event_type || 'unknown'} -> ${latestLiveRolloutEvent.reason || 'inspect'}</div>`
+            `<div class="text-[11px] text-matrix-dim break-words">Latest rollout event: ${safeText(latestLiveRolloutEvent.event_type, 'unknown')} -&gt; ${safeText(latestLiveRolloutEvent.reason, 'inspect')}</div>`
         );
     }
 
@@ -1002,7 +1010,7 @@ function renderOperationalAlertsSection(statusData) {
                     : severity === 'warning'
                         ? 'text-yellow-400'
                         : 'text-matrix-dim';
-                return `<div class="text-[11px] ${severityClass} break-words">${severity}: ${alert.code} -> ${alert.recommended_action || 'inspect'}</div>`;
+                return `<div class="text-[11px] ${severityClass} break-words">${safeText(severity, 'info')}: ${safeText(alert.code, 'unknown')} -&gt; ${safeText(alert.recommended_action, 'inspect')}</div>`;
             })
         );
         if (alerts.length > 3) {
@@ -1033,7 +1041,7 @@ function renderModelCardsSection(modelData) {
     if (!modelData.freqai_active) {
         return `
             <div class="border border-matrix-border rounded-lg p-3">
-                <div class="text-matrix-dim text-xs text-center py-4">${modelData.reason || 'FreqAI not active'}</div>
+                <div class="text-matrix-dim text-xs text-center py-4">${safeText(modelData.reason, 'FreqAI not active')}</div>
             </div>`;
     }
 
@@ -1047,22 +1055,23 @@ function renderModelCardsSection(modelData) {
 
     return models.map(m => {
         const staleClass = m.stale ? 'model-card-stale' : '';
-        const ageStr = m.age_hours != null ? `${m.age_hours.toFixed(1)}h ago` : 'Unknown';
+        const ageStr = m.age_hours != null ? `${toFiniteNumber(m.age_hours).toFixed(1)}h ago` : 'Unknown';
 
         let featuresHtml = '';
         if (m.top_features && m.top_features.length > 0) {
-            const maxImp = Math.max(...m.top_features.map(f => f.importance));
+            const maxImp = Math.max(...m.top_features.map(f => toFiniteNumber(f.importance)));
             featuresHtml = `
                 <div class="mt-2 space-y-1">
                     ${m.top_features.map(f => {
-                        const pct = maxImp > 0 ? (f.importance / maxImp * 100) : 0;
+                        const importance = toFiniteNumber(f.importance);
+                        const pct = maxImp > 0 ? (importance / maxImp * 100) : 0;
                         return `
                             <div class="flex items-center gap-2">
-                                <span class="text-matrix-dim w-20 truncate text-[10px]">${f.name}</span>
+                                <span class="text-matrix-dim w-20 truncate text-[10px]">${safeText(f.name, '')}</span>
                                 <div class="flex-grow bg-matrix-border rounded-full h-1">
                                     <div class="bg-matrix-neon h-1 rounded-full" style="width: ${pct}%"></div>
                                 </div>
-                                <span class="text-matrix-dim text-[10px] w-10 text-right">${f.importance.toFixed(3)}</span>
+                                <span class="text-matrix-dim text-[10px] w-10 text-right">${importance.toFixed(3)}</span>
                             </div>`;
                     }).join('')}
                 </div>`;
@@ -1071,11 +1080,11 @@ function renderModelCardsSection(modelData) {
         return `
             <div class="border border-matrix-border rounded-lg p-3 ${staleClass}">
                 <div class="flex justify-between items-start mb-1">
-                    <span class="text-white text-xs font-bold">${m.name}</span>
+                    <span class="text-white text-xs font-bold">${safeText(m.name, '')}</span>
                     <span class="text-[10px] ${m.stale ? 'text-red-400' : 'text-matrix-dim'}">${ageStr}</span>
                 </div>
                 <div class="flex gap-3 text-[10px] text-matrix-dim">
-                    <span>W: ${m.weight != null ? m.weight.toFixed(2) : '—'}</span>
+                    <span>W: ${m.weight != null ? toFiniteNumber(m.weight).toFixed(2) : '—'}</span>
                     <span>Feat: ${m.feature_count ?? '—'}</span>
                     <span>${m.trained ? 'Trained' : 'Untrained'}</span>
                 </div>
@@ -1086,8 +1095,29 @@ function renderModelCardsSection(modelData) {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function safeText(value, fallback = '—') {
+    if (value === null || value === undefined || value === '') {
+        return fallback;
+    }
+    return escapeHtml(String(value));
+}
+
+function toFiniteNumber(value, fallback = 0) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+}
+
 function getExitReasonClass(reason) {
-    const r = reason.toLowerCase();
+    const r = String(reason || '').toLowerCase();
     if (r.includes('take_profit') || r.includes('takeprofit') || r.includes('tp')) return 'exit-badge-tp';
     if (r.includes('stop_loss') || r.includes('stoploss') || r.includes('sl')) return 'exit-badge-sl';
     if (r.includes('trailing') || r.includes('trail')) return 'exit-badge-ts';
@@ -1095,7 +1125,7 @@ function getExitReasonClass(reason) {
 }
 
 function formatExitReason(reason) {
-    return reason.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    return String(reason || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function getCorrClass(val) {

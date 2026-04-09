@@ -11,7 +11,7 @@ import asyncio
 import json
 import os
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Sequence
 from uuid import uuid4
 
@@ -174,6 +174,18 @@ class TradeStore:
             self._db = None
             logger.info("TradeStore closed")
 
+    @staticmethod
+    def _utc_now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @staticmethod
+    def _normalize_datetime(value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
     def _parse_timestamp(self, ts) -> Optional[datetime]:
         """Robustly parse a timestamp that could be an ISO string or a Unix integer."""
         if ts is None:
@@ -181,17 +193,17 @@ class TradeStore:
         if isinstance(ts, str):
             # Try Unix epoch first (in case it's string-encoded int)
             try:
-                return datetime.fromtimestamp(int(ts))
+                return datetime.fromtimestamp(int(ts), tz=timezone.utc)
             except (ValueError, TypeError):
                 # Fallback to ISO parsing
                 try:
-                    return datetime.fromisoformat(ts)
+                    return self._normalize_datetime(datetime.fromisoformat(ts))
                 except ValueError:
                     logger.error(f"Failed to parse timestamp: {ts}")
-                    return datetime.now()
+                    return self._utc_now()
         elif isinstance(ts, (int, float)):
-            return datetime.fromtimestamp(ts)
-        return datetime.now()
+            return datetime.fromtimestamp(ts, tz=timezone.utc)
+        return self._utc_now()
 
     @staticmethod
     def _serialize_json(values: Sequence[str]) -> str:
@@ -213,7 +225,7 @@ class TradeStore:
     def _timestamp_or_none(value: int | float | None) -> datetime | None:
         if value is None:
             return None
-        return datetime.fromtimestamp(value)
+        return datetime.fromtimestamp(value, tz=timezone.utc)
 
     def _training_job_mutex(self) -> asyncio.Lock:
         if self._training_job_lock is None:
@@ -347,7 +359,7 @@ class TradeStore:
                     TRAINING_JOB_QUEUED if active_job is None else TRAINING_JOB_BLOCKED
                 ),
                 requested_by=request.requested_by,
-                requested_at=datetime.now(),
+                requested_at=self._utc_now(),
                 pairs=request.pairs,
                 candles=request.candles,
                 timeframe=request.timeframe,
@@ -444,10 +456,10 @@ class TradeStore:
                 params.append(reload_status)
             if started_at is not None:
                 updates.append("started_at = ?")
-                params.append(int(started_at.timestamp()))
+                params.append(int(self._normalize_datetime(started_at).timestamp()))
             if finished_at is not None:
                 updates.append("finished_at = ?")
-                params.append(int(finished_at.timestamp()))
+                params.append(int(self._normalize_datetime(finished_at).timestamp()))
 
             if not updates:
                 return await self.get_latest_training_job()
@@ -477,7 +489,7 @@ class TradeStore:
         return await self.update_training_job(
             job_id,
             status=TRAINING_JOB_RUNNING,
-            started_at=datetime.now(),
+            started_at=self._utc_now(),
             reload_status="running",
         )
 
@@ -496,7 +508,7 @@ class TradeStore:
             result_summary=result_summary,
             promoted_model_paths=promoted_model_paths,
             reload_status=reload_status,
-            finished_at=datetime.now(),
+            finished_at=self._utc_now(),
         )
 
     async def mark_training_job_failed(
@@ -514,7 +526,7 @@ class TradeStore:
             error=error,
             result_summary=result_summary,
             reload_status=reload_status,
-            finished_at=datetime.now(),
+            finished_at=self._utc_now(),
         )
 
     def _row_to_live_rollout_approval(
@@ -554,7 +566,7 @@ class TradeStore:
         self,
         target_profile: str,
     ) -> LiveRolloutApprovalRecord | None:
-        now_ts = int(datetime.now().timestamp())
+        now_ts = int(self._utc_now().timestamp())
         row = await self._fetch_training_job_row(
             """
             SELECT *
@@ -610,7 +622,7 @@ class TradeStore:
             target_profile=target_profile,
             actor=actor,
             reason=reason,
-            created_at=datetime.now(),
+            created_at=self._utc_now(),
             approval_id=approval_id,
             metadata=metadata or {},
         )
@@ -661,7 +673,10 @@ class TradeStore:
         reason: str,
         expires_in_hours: int | None = None,
     ) -> LiveRolloutApprovalRecord:
-        approved_at = datetime.now()
+        if expires_in_hours is not None and int(expires_in_hours) <= 0:
+            raise ValueError("expires_in_hours_must_be_positive")
+
+        approved_at = self._utc_now()
         expires_at = (
             None
             if expires_in_hours is None
@@ -719,31 +734,33 @@ class TradeStore:
         reason: str,
         target_profile: str | None = None,
     ) -> tuple[LiveRolloutApprovalRecord, ...]:
-        if target_profile is None:
-            cursor = await self._db.execute(
-                """
-                SELECT *
-                  FROM live_rollout_approvals
-                 WHERE revoked_at IS NULL
-                """
-            )
-        else:
-            cursor = await self._db.execute(
-                """
-                SELECT *
-                  FROM live_rollout_approvals
-                 WHERE revoked_at IS NULL
-                   AND target_profile = ?
-                """,
-                (target_profile,),
-            )
-        rows = await cursor.fetchall()
-        approvals = tuple(
-            self._row_to_live_rollout_approval(row) for row in rows if row is not None
-        )
-        current_time = datetime.now()
+        current_time = self._utc_now()
         current_time_ts = int(current_time.timestamp())
         async with self._live_rollout_mutex():
+            if target_profile is None:
+                cursor = await self._db.execute(
+                    """
+                    SELECT *
+                      FROM live_rollout_approvals
+                     WHERE revoked_at IS NULL
+                    """
+                )
+            else:
+                cursor = await self._db.execute(
+                    """
+                    SELECT *
+                      FROM live_rollout_approvals
+                     WHERE revoked_at IS NULL
+                       AND target_profile = ?
+                    """,
+                    (target_profile,),
+                )
+            rows = await cursor.fetchall()
+            approvals = tuple(
+                self._row_to_live_rollout_approval(row)
+                for row in rows
+                if row is not None
+            )
             if target_profile is None:
                 await self._db.execute(
                     """
@@ -769,7 +786,9 @@ class TradeStore:
                 )
             await self._db.commit()
 
-        profiles = {approval.target_profile for approval in approvals if approval is not None}
+        profiles = {
+            approval.target_profile for approval in approvals if approval is not None
+        }
         if not profiles and target_profile is not None:
             profiles = {target_profile}
         for profile in profiles:
@@ -884,7 +903,7 @@ class TradeStore:
 
     async def insert_trade(self, trade: Dict) -> int:
         """Insert a new open trade and return the row id."""
-        ts_int = int(datetime.now().timestamp())
+        ts_int = int(self._utc_now().timestamp())
 
         cursor = await self._db.execute(
             """
@@ -913,7 +932,7 @@ class TradeStore:
 
     async def insert_portfolio_snapshot(self, total_value: float):
         """Insert a new portfolio value snapshot."""
-        now_ts = int(datetime.now().timestamp())
+        now_ts = int(self._utc_now().timestamp())
         await self._db.execute(
             "INSERT OR REPLACE INTO portfolio_history (timestamp, total_value) VALUES (?, ?)",
             (now_ts, total_value),
@@ -942,7 +961,7 @@ class TradeStore:
             """,
             (
                 exit_price,
-                int(datetime.now().timestamp()),
+                int(self._utc_now().timestamp()),
                 exit_reason,
                 pnl,
                 fees,
@@ -977,7 +996,7 @@ class TradeStore:
             INSERT INTO bot_sessions (start_time, strategy, trading_mode)
             VALUES (?, ?, ?)
             """,
-            (int(datetime.now().timestamp()), strategy, trading_mode),
+            (int(self._utc_now().timestamp()), strategy, trading_mode),
         )
         await self._db.commit()
         session_id = cursor.lastrowid
@@ -994,7 +1013,7 @@ class TradeStore:
             logger.warning("TradeStore end_session called after database close")
             return
 
-        now_ts = int(datetime.now().timestamp())
+        now_ts = int(self._utc_now().timestamp())
         # Fetch start_time to compute duration
         cursor = await self._db.execute(
             "SELECT start_time FROM bot_sessions WHERE id = ?", (session_id,)

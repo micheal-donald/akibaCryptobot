@@ -200,15 +200,17 @@ async def test_phase20_live_runtime_entries_preflight_and_alert_gate():
         projection,
         configured_deployment_profile="live_runtime_entries",
         trading_mode="live",
+        halt_state="runtime_kill_switch",
     )
 
     assert payload["rollout_stage"] == "canary"
-    assert payload["rollout_health"] == "promotion_ready"
-    assert payload["rollout_recommended_action"] == "promote_live_runtime_primary"
+    assert payload["rollout_health"] == "promotion_blocked"
+    assert payload["rollout_recommended_action"] == "clear_halt_before_promotion"
     assert payload["halt_state"] == "runtime_kill_switch"
     assert payload["entries_blocked_reason"] == "runtime_feed_stale"
     assert payload["operational_alerts"][0]["code"] == "runtime_feed_stale"
-    assert summary["rollout_recommended_action"] == "promote_live_runtime_primary"
+    assert summary["rollout_health"] == "promotion_blocked"
+    assert summary["rollout_recommended_action"] == "clear_halt_before_promotion"
 
 
 @pytest.mark.asyncio

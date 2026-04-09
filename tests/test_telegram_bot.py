@@ -353,6 +353,8 @@ async def test_cmd_status_includes_operational_halt_summary():
             source=ProjectionSource.RUNTIME_PROJECTION,
             runtime_mode="runtime_primary",
         ),
+        configured_deployment_profile="live_runtime_primary",
+        trading_mode="live",
         alert_state={
             "operational_alerts": [
                 {
@@ -375,6 +377,8 @@ async def test_cmd_status_includes_operational_halt_summary():
     assert "Operational Alerts" in message
     assert "Halt State: runtime_kill_switch" in message
     assert "Entries Blocked Reason: runtime_feed_stale" in message
+    assert "Rollout Health: promotion_blocked" in message
+    assert "Rollout Recommended Action: clear_halt_before_continuing_live_primary" in message
 
 
 @pytest.mark.asyncio

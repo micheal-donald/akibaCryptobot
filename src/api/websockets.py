@@ -1,4 +1,4 @@
-﻿"""
+"""
 WebSocket streams for real-time data push to browser clients.
 """
 
@@ -81,7 +81,7 @@ async def _inject_training_job(status_info, bot):
         return status_info
 
     snapshot = await training_getter()
-    status_info["training_job"] = snapshot.to_dict()
+    status_info["training_job"] = snapshot.to_dict() if snapshot is not None else None
     return status_info
 
 
@@ -93,6 +93,10 @@ async def _inject_live_rollout_approval(status_info, bot):
         return status_info
 
     snapshot = await getter()
+    if snapshot is None:
+        status_info["live_rollout_approval"] = None
+        status_info["latest_live_rollout_event"] = None
+        return status_info
     payload = snapshot.to_dict()
     status_info["live_rollout_approval"] = payload
     status_info["latest_live_rollout_event"] = payload.get("latest_event")
@@ -133,6 +137,7 @@ async def _build_status_payload(bot):
         projection,
         configured_deployment_profile=status_info.get("configured_deployment_profile"),
         trading_mode=status_info.get("trading_mode", "paper"),
+        halt_state=status_info.get("halt_state"),
     )
 
     active_trades = status_info.get("active_trades", 0)

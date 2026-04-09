@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from backtesting.replay_engine import ReplayEngine
 from runtime.depth_capture import DepthCaptureBuffer
 from services.order_book_service import OrderBookService
+from strategies.microstructure.contracts import MicrostructureDecision
 from strategies.microstructure.paper_shadow_strategy import (
     PaperShadowMicrostructureStrategy,
 )
@@ -114,3 +117,44 @@ def test_phase21_capture_report_marks_sequence_gaps(tmp_path) -> None:
     assert report.capture_health.sequence_issues == 1
     assert report.feature_rows == 2
     assert report.as_dict()["capture_health"]["gap_snapshots"] == 1
+
+
+def test_phase21_capture_report_tracks_spread_capture_separately_from_fill_quality(
+    tmp_path,
+) -> None:
+    class DummyAggressiveStrategy:
+        def evaluate(self, snapshot, features=None, *, decision_latency_ms=0.0):
+            del features, decision_latency_ms
+            return MicrostructureDecision(
+                action="buy",
+                confidence=0.8,
+                execution_style="aggressive",
+                decision_price=snapshot.best_bid.price if snapshot.best_bid else None,
+                spread_bps=40.0,
+                depth_imbalance=0.5,
+                trade_pressure=0.2,
+                reason="aggressive_test",
+            )
+
+    service = OrderBookService(name="phase21-spread-capture")
+    capture = DepthCaptureBuffer(max_records=8)
+    snapshot = _build_snapshot(service, sequence=1)
+    captured_at = datetime(2026, 4, 9, 8, 15, tzinfo=timezone.utc)
+
+    capture.capture_snapshot(
+        snapshot,
+        event_id="depth-1",
+        event_type="market.depth_snapshot",
+        source="binance.ws.depth",
+        captured_at=captured_at,
+    )
+
+    report = ReplayEngine(
+        DummyAggressiveStrategy(),
+        decision_latency_ms=5.0,
+        submit_latency_ms=1.0,
+    ).run(capture.write_jsonl(tmp_path / "spread-capture.jsonl"))
+
+    assert report.fill_count == 1
+    assert report.average_fill_quality_bps == pytest.approx(-24.93765586034913)
+    assert report.average_spread_capture_bps == pytest.approx(-20.0)

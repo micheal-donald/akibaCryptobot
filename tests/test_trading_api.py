@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -68,7 +68,7 @@ class FakeTradingBot:
                 target_profile=target_profile or "live_shadow",
                 actor="operator",
                 reason="canary approved",
-                revoked_at=datetime.now(),
+                revoked_at=datetime.now(timezone.utc),
                 revoked_by=actor,
                 revocation_reason=reason,
             ),
@@ -131,6 +131,25 @@ def test_post_live_approval_returns_snapshot(monkeypatch):
     assert payload["approval"]["target_profile"] == "live_runtime_entries"
     assert payload["approval"]["actor"] == "ops"
     assert payload["status"]["approval_required"] is True
+
+
+def test_post_live_approval_rejects_wrong_operator_token(monkeypatch):
+    monkeypatch.setenv("AKIBA_OPERATOR_TOKEN", "secret")
+    client = build_client(FakeTradingBot())
+
+    response = client.post(
+        "/api/trading/live/approve",
+        json={
+            "target_profile": "live_runtime_entries",
+            "actor": "ops",
+            "reason": "approve live canary",
+            "expires_in_hours": 8,
+        },
+        headers={"X-Operator-Token": "wrong"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "operator_token_invalid"
 
 
 def test_post_live_rollback_returns_revoked_approvals(monkeypatch):

@@ -1,4 +1,4 @@
-﻿# REST & WebSocket API Reference
+# REST & WebSocket API Reference
 
 AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST endpoints are prefixed with `/api`. Interactive docs are available at `/docs` (Swagger UI) when the server is running.
 
@@ -10,7 +10,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/health` | Liveness probe â€” returns `{"status": "ok"}` |
+| `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
 | `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, runtime recovery summary, operational alerts, halt state, circuit breaker state, training job state, strategy, trading mode |
 | `GET` | `/api/reconcile` | Manually triggers a reconciliation check between the authoritative trade source and the exchange |
 
@@ -337,7 +337,7 @@ When `native_hot_path_ports` are enabled, `/api/status` and `/ws/status` may ret
 
 | Param | Type | Default | Range | Description |
 |---|---|---|---|---|
-| `limit` | int | 20 | 1â€“100 | Number of recent trades to return |
+| `limit` | int | 20 | 1–100 | Number of recent trades to return |
 
 ---
 
@@ -594,6 +594,8 @@ The live runtime ladder is now documented as an operator workflow rather than ju
 | `live_runtime_entries` | `rollout_environment=live`, `rollout_stage=canary`, `rollout_health=promotion_ready`, `runtime_owns_entries=true`, `runtime_owns_exits=false`, `halt_state=none` | `promote_live_runtime_primary` |
 | `live_runtime_primary` | `rollout_environment=live`, `rollout_stage=primary`, `rollout_health=promotion_ready`, `runtime_owns_entries=true`, `runtime_owns_exits=true`, `halt_state=none` | `stay_live_runtime_primary` |
 | `live_legacy` rollback | `rollout_environment=live`, `rollout_stage=legacy`, `rollout_health=legacy`, `runtime_is_healthy=true`, `halt_state=none` | `stay_live_legacy` |
+| Live canary with halt | `halt_state!=none`, `rollout_health=promotion_blocked`, runtime still healthy enough to report status | `clear_halt_before_promotion` |
+| Live primary with halt | `halt_state!=none`, `rollout_health=promotion_blocked`, `runtime_owns_exits=true` | `clear_halt_before_continuing_live_primary` |
 
 ### Live Training Restriction
 
@@ -606,7 +608,7 @@ Live canary profiles keep training locked down:
 
 ### Live Alert Gating
 
-If `/api/status` reports `halt_state` other than `none`, treat live promotion as blocked until the alert clears. A live stage that reports `rollback_recommended` should be rolled back to `live_legacy` after the warm-up window, not promoted further.
+If `/api/status` reports `halt_state` other than `none`, live promotion is blocked and the rollout summary changes to `rollout_health=promotion_blocked`. A live canary should report `clear_halt_before_promotion`; a halted `live_runtime_primary` stage should report `clear_halt_before_continuing_live_primary`. A live stage that reports `rollback_recommended` should be rolled back to `live_legacy` after the warm-up window, not promoted further.
 
 ---
 
@@ -725,7 +727,6 @@ python start_bot.py --no-api
 ```
 
 API docs: `http://localhost:8000/docs`
-
 
 
 

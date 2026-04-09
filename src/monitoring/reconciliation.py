@@ -262,8 +262,8 @@ class ReconciliationManager:
     def _is_sandbox_mode(self) -> bool:
         config = getattr(self.bot, "config", {})
         if not isinstance(config, dict):
-            return False
+            return True
         exchange = config.get("exchange", {})
         if not isinstance(exchange, dict):
-            return False
-        return bool(exchange.get("sandbox", False))
+            return True
+        return bool(exchange.get("sandbox", True))

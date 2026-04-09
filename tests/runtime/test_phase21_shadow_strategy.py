@@ -81,6 +81,44 @@ def test_phase21_shadow_strategy_holds_on_wide_spread():
     assert decision is None
 
 
+def test_phase21_shadow_strategy_generates_sell_signal_from_bearish_imbalance():
+    strategy = PaperShadowMicrostructureStrategy(
+        min_abs_imbalance=0.1,
+        min_trade_pressure=0.0,
+        min_confidence=0.3,
+        max_spread_bps=40.0,
+    )
+
+    decision = strategy.evaluate(
+        _make_snapshot(),
+        _make_features(imbalance=-0.6, pressure=-0.2, spread_bps=18.0),
+        decision_latency_ms=8.0,
+    )
+
+    assert decision is not None
+    assert decision.action == "sell"
+    assert decision.execution_style == "passive"
+    assert decision.confidence >= 0.3
+    assert decision.reason == "bearish_imbalance"
+
+
+def test_phase21_shadow_strategy_holds_on_conflicting_buy_inputs():
+    strategy = PaperShadowMicrostructureStrategy(
+        min_abs_imbalance=0.1,
+        min_trade_pressure=0.0,
+        min_confidence=0.3,
+        max_spread_bps=40.0,
+    )
+
+    decision = strategy.evaluate(
+        _make_snapshot(),
+        _make_features(imbalance=0.21, pressure=-0.5, spread_bps=18.0),
+        decision_latency_ms=8.0,
+    )
+
+    assert decision is None
+
+
 @pytest.mark.asyncio
 async def test_phase21_low_latency_performance_route_uses_runtime_telemetry_fallback():
     class FakeBot:

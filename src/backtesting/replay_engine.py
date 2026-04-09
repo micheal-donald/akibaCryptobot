@@ -80,6 +80,21 @@ def _slippage_bps(
     return None
 
 
+def _spread_capture_bps(
+    *,
+    execution_style: str,
+    spread_bps: float | None,
+) -> float | None:
+    if spread_bps is None:
+        return None
+    half_spread_bps = max(float(spread_bps), 0.0) / 2.0
+    if execution_style == "passive":
+        return half_spread_bps
+    if execution_style == "aggressive":
+        return -half_spread_bps
+    return None
+
+
 @dataclass(slots=True, frozen=True)
 class ReplayDecisionRecord:
     """Structured decision emitted by the replay engine."""
@@ -219,6 +234,7 @@ class ReplayEngine:
 
         decisions: list[ReplayDecisionRecord] = []
         fills: list[ReplayFillRecord] = []
+        spread_capture_values: list[float] = []
         sequence_issue_count = 0
         stale_snapshots = 0
         gap_snapshots = 0
@@ -299,6 +315,12 @@ class ReplayEngine:
                     reason=decision.reason,
                 )
             )
+            spread_capture_bps = _spread_capture_bps(
+                execution_style=decision.execution_style,
+                spread_bps=decision.spread_bps,
+            )
+            if spread_capture_bps is not None:
+                spread_capture_values.append(spread_capture_bps)
 
         return LowLatencyReplayReport(
             source="depth_capture_replay",
@@ -336,11 +358,7 @@ class ReplayEngine:
                 [fill.slippage_bps for fill in fills if fill.slippage_bps is not None]
             ),
             average_spread_capture_bps=_mean(
-                [
-                    fill.fill_quality_bps
-                    for fill in fills
-                    if fill.fill_quality_bps is not None
-                ]
+                spread_capture_values
             ),
             decisions=tuple(decisions),
             fills=tuple(fills),

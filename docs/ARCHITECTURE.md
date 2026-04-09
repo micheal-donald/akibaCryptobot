@@ -1,4 +1,4 @@
-﻿# AkibaCryptoBot â€” System Architecture
+# AkibaCryptoBot - System Architecture
 
 AkibaCryptoBot is an automated, **fully asynchronous** cryptocurrency trading engine built in Python using `asyncio`. It connects to Binance (spot and futures) via CCXT's async support, analyses the market with pluggable strategies (technical-analysis **and** machine-learning), enforces multi-layer risk controls, maintains database-exchange consistency via a dedicated reconciliation layer, and exposes a FastAPI REST/WebSocket API plus a Telegram bot for monitoring and control.
 
@@ -82,7 +82,7 @@ flowchart TB
 
 | Component | Directory / File | Purpose |
 |---|---|---|
-| **Trading Engine** | `src/bot.py` | Main `AkibaCryptoBot` class â€” lifecycle, market data, circuit breakers |
+| **Trading Engine** | `src/bot.py` | Main `AkibaCryptoBot` class - lifecycle, market data, circuit breakers |
 | **Position Manager** | `src/trading/position_manager.py` | Manages open positions: trailing stops, exit signals, closing trades |
 | **Opportunity Scanner** | `src/trading/opportunity_scanner.py` | Scans for new trades: signal validation, spread checks, order placement |
 | **Exchange Connector** | `src/exchange/binance_client.py` | Binance REST client via ccxt (spot + futures) |
@@ -92,7 +92,7 @@ flowchart TB
 | **Ensemble Strategy** | `src/strategies/ensemble_strategy.py` | Weighted voting: 40% Momentum + 60% ML |
 | **FreqAI ML Strategy** | `src/strategies/freqai/ml_freqai_strategy.py` | LightGBM classifier with feature engineering |
 | **FreqAI Base** | `src/strategies/freqai/base_freqai_strategy.py` | Abstract base for ML-based strategies |
-| **Technical Indicators** | `src/indicators/technical_indicators.py` | 20+ indicators (SMA, EMA, RSI, MACD, ATR, Ichimoku, SuperTrend, â€¦) |
+| **Technical Indicators** | `src/indicators/technical_indicators.py` | 20+ indicators (SMA, EMA, RSI, MACD, ATR, Ichimoku, SuperTrend, etc.) |
 | **Pattern Recognition** | `src/indicators/technical_indicators.py` | Support/resistance, trend detection, divergence |
 | **Risk Manager** | `src/risk_management.py` | Position sizing, stop loss, trailing stops, daily limits |
 | **Advanced Risk** | `src/advanced_risk_management.py` | ATR/Kelly sizing, correlation analysis, portfolio heatmap |
@@ -235,33 +235,33 @@ Each iteration of the trading loop in `AkibaCryptoBot.trading_cycle()` performs 
 
 ```
 1. UPDATE MARKET DATA
-   â””â”€ Fetch OHLCV candles + current prices for all configured pairs
+   `- Fetch OHLCV candles + current prices for all configured pairs
 
 2. UPDATE PORTFOLIO VALUE
-   â””â”€ Record current portfolio value for drawdown tracking
-   â””â”€ Check circuit breakers (volatility spike, max drawdown)
+   |- Record current portfolio value for drawdown tracking
+   `- Check circuit breakers (volatility spike, max drawdown)
 
 3. MANAGE EXISTING POSITIONS  (PositionManager)
-   â””â”€ For each open trade:
-       â”œâ”€ Update trailing stop loss
-       â”œâ”€ Check stop-loss / take-profit triggers
-       â””â”€ Close position if exit condition met
+   `- For each open trade:
+      |- Update trailing stop loss
+      |- Check stop-loss / take-profit triggers
+      `- Close position if exit condition met
 
 4. RECONCILIATION  (ReconciliationManager)
-   â””â”€ Periodic check (~1 hour) to ensure DB trades match actual exchange balances
-   â””â”€ Report orphaned assets or lost trades via Telegram
+   |- Periodic check (~1 hour) to ensure DB trades match actual exchange balances
+   `- Report orphaned assets or lost trades via Telegram
 
 5. SCAN FOR OPPORTUNITIES  (OpportunityScanner)
-   â””â”€ For each configured pair (up to max_open_trades):
-       â”œâ”€ Fetch market snapshot (OHLCV + price)
-       â”œâ”€ Generate signal via active strategy
-       â”œâ”€ Validate signal (strength, risk budget, correlations)
-       â”œâ”€ Check bid-ask spread
-       â”œâ”€ Calculate position size (risk-adjusted)
-       â””â”€ Place trade if all checks pass
+   `- For each configured pair (up to max_open_trades):
+      |- Fetch market snapshot (OHLCV + price)
+      |- Generate signal via active strategy
+      |- Validate signal (strength, risk budget, correlations)
+      |- Check bid-ask spread
+      |- Calculate position size (risk-adjusted)
+      `- Place trade if all checks pass
 
 6. SLEEP
-   â””â”€ Wait for the configured interval before next cycle
+   `- Wait for the configured interval before next cycle
 ```
 
 ---
@@ -270,56 +270,54 @@ Each iteration of the trading loop in `AkibaCryptoBot.trading_cycle()` performs 
 
 ```
 akibaCryptobot/
-â”œâ”€â”€ start_bot.py               # CLI entry point
-â”œâ”€â”€ config/
-â”‚   â”œâ”€â”€ config.json            # Main configuration
-â”‚   â””â”€â”€ freqai_config.json     # ML model configuration
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ bot.py                 # Trading engine orchestrator
-â”‚   â”œâ”€â”€ runtime/
-â”‚   â”‚   â”œâ”€â”€ event_capture.py   # Bounded JSONL event capture
-â”‚   â”‚   â””â”€â”€ event_replay.py    # Deterministic replay helpers for tests/debugging
-â”‚   â”œâ”€â”€ trading/
-â”‚   â”‚   â”œâ”€â”€ position_manager.py   # Open position management
-â”‚   â”‚   â””â”€â”€ opportunity_scanner.py # New trade scanning + execution
-â”‚   â”œâ”€â”€ risk_management.py     # Core risk controls
-â”‚   â”œâ”€â”€ advanced_risk_management.py  # ATR/Kelly/correlation
-â”‚   â”œâ”€â”€ config_validator.py    # Config validation
-â”‚   â”œâ”€â”€ exchange/
-â”‚   â”‚   â”œâ”€â”€ binance_client.py  # Binance REST client
-â”‚   â”‚   â””â”€â”€ websocket_manager.py  # WebSocket streaming
-â”‚   â”œâ”€â”€ strategies/
-â”‚   â”‚   â”œâ”€â”€ base_strategy.py   # Strategy ABC + Manager
-â”‚   â”‚   â”œâ”€â”€ momentum_strategy.py  # Technical analysis
-â”‚   â”‚   â”œâ”€â”€ ensemble_strategy.py  # Multi-strategy voting
-â”‚   â”‚   â””â”€â”€ freqai/            # ML strategies
-â”‚   â”‚       â”œâ”€â”€ base_freqai_strategy.py
-â”‚   â”‚       â””â”€â”€ ml_freqai_strategy.py
-â”‚   â”œâ”€â”€ indicators/
-â”‚   â”‚   â””â”€â”€ technical_indicators.py  # 20+ indicators
-â”‚   â”œâ”€â”€ api/
-â”‚   â”‚   â”œâ”€â”€ app.py             # FastAPI factory
-â”‚   â”‚   â”œâ”€â”€ dependencies.py    # DI (bot_state)
-â”‚   â”‚   â”œâ”€â”€ websockets.py      # WS endpoint
-â”‚   â”‚   â””â”€â”€ routes/            # REST route modules
-â”‚   â”œâ”€â”€ persistence/
-â”‚   â”‚   â””â”€â”€ trade_store.py     # SQLite trade DB
-â”‚   â”œâ”€â”€ performance/
-â”‚   â”‚   â””â”€â”€ metrics_tracker.py # Performance analytics
-â”‚   â”œâ”€â”€ notifications/
-â”‚   â”‚   â””â”€â”€ telegram_bot.py    # Telegram integration
-â”‚   â”œâ”€â”€ backtesting/
-â”‚   â”‚   â”œâ”€â”€ engine.py          # Backtest engine
-â”‚   â”‚   â”œâ”€â”€ walkforward.py     # Walk-forward analysis
-â”‚   â”‚   â””â”€â”€ backtest_runner.py # CLI runner
-â”‚   â”œâ”€â”€ bot_logging/
-â”‚   â”‚   â””â”€â”€ logger.py          # Logging setup
-â”‚   â””â”€â”€ ui/                    # Web dashboard
-â”œâ”€â”€ tests/                     # Test suite
-â”œâ”€â”€ docs/                      # Documentation (you are here)
-â”œâ”€â”€ .github/workflows/         # CI/CD pipelines
-â”œâ”€â”€ Dockerfile                 # Multi-stage Docker build
-â””â”€â”€ docker-compose.yml         # Container orchestration
+|- start_bot.py                 # CLI entry point
+|- config/
+|  |- config.json               # Main configuration
+|  `- freqai_config.json        # ML model configuration
+|- src/
+|  |- bot.py                    # Trading engine orchestrator
+|  |- runtime/
+|  |  |- event_capture.py       # Bounded JSONL event capture
+|  |  `- event_replay.py        # Deterministic replay helpers for tests/debugging
+|  |- trading/
+|  |  |- position_manager.py    # Open position management
+|  |  `- opportunity_scanner.py # New trade scanning + execution
+|  |- risk_management.py        # Core risk controls
+|  |- advanced_risk_management.py # ATR/Kelly/correlation
+|  |- config_validator.py       # Config validation
+|  |- exchange/
+|  |  |- binance_client.py      # Binance REST client
+|  |  `- websocket_manager.py   # WebSocket streaming
+|  |- strategies/
+|  |  |- base_strategy.py       # Strategy ABC + Manager
+|  |  |- momentum_strategy.py   # Technical analysis
+|  |  |- ensemble_strategy.py   # Multi-strategy voting
+|  |  `- freqai/                # ML strategies
+|  |     |- base_freqai_strategy.py
+|  |     `- ml_freqai_strategy.py
+|  |- indicators/
+|  |  `- technical_indicators.py # 20+ indicators
+|  |- api/
+|  |  |- app.py                 # FastAPI factory
+|  |  |- dependencies.py        # DI (bot_state)
+|  |  |- websockets.py          # WS endpoint
+|  |  `- routes/                # REST route modules
+|  |- persistence/
+|  |  `- trade_store.py         # SQLite trade DB
+|  |- performance/
+|  |  `- metrics_tracker.py     # Performance analytics
+|  |- notifications/
+|  |  `- telegram_bot.py        # Telegram integration
+|  |- backtesting/
+|  |  |- engine.py              # Backtest engine
+|  |  |- walkforward.py         # Walk-forward analysis
+|  |  `- backtest_runner.py     # CLI runner
+|  |- bot_logging/
+|  |  `- logger.py              # Logging setup
+|  `- ui/                       # Web dashboard
+|- tests/                       # Test suite
+|- docs/                        # Documentation (you are here)
+|- .github/workflows/           # CI/CD pipelines
+|- Dockerfile                   # Multi-stage Docker build
+`- docker-compose.yml           # Container orchestration
 ```
-
-

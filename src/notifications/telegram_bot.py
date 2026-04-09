@@ -267,6 +267,7 @@ class TelegramNotifier:
         *,
         configured_deployment_profile: str | None = None,
         trading_mode: str | None = None,
+        halt_state: str | None = None,
     ) -> list[str]:
         if projection is None:
             return []
@@ -274,6 +275,7 @@ class TelegramNotifier:
             projection,
             configured_deployment_profile=configured_deployment_profile,
             trading_mode=trading_mode,
+            halt_state=halt_state,
         )
 
         lines = []
@@ -798,6 +800,7 @@ class TelegramNotifier:
         *,
         visibility: Dict[str, Any] | None = None,
         trading_mode: str | None = None,
+        alert_state: Dict[str, Any] | None = None,
     ) -> list[str]:
         visibility = visibility or {}
         return cls._rollout_summary_lines(
@@ -806,6 +809,7 @@ class TelegramNotifier:
                 "configured_deployment_profile"
             ),
             trading_mode=trading_mode,
+            halt_state=(alert_state or {}).get("halt_state"),
         )
 
     @staticmethod
@@ -884,12 +888,14 @@ class TelegramNotifier:
 
                 if projection is not None:
                     visibility = self._get_runtime_visibility_info()
+                    alert_state = await self._get_operational_alert_state()
                     lines.extend(self._runtime_summary_lines(projection))
                     lines.extend(
                         self._rollout_summary_for_visibility(
                             projection,
                             visibility=visibility,
                             trading_mode=self._resolve_trading_mode(status_info),
+                            alert_state=alert_state,
                         )
                     )
                     lines.append(
@@ -952,6 +958,7 @@ class TelegramNotifier:
                 projection = self._get_runtime_projection()
                 visibility = self._get_runtime_visibility_info()
                 trading_mode = self._resolve_trading_mode()
+                alert_state = await self._get_operational_alert_state()
                 if self._uses_runtime_projection(projection):
                     trade_lines = self._format_projected_trade_lines(projection)
                     if not trade_lines:
@@ -964,6 +971,7 @@ class TelegramNotifier:
                             projection,
                             visibility=visibility,
                             trading_mode=trading_mode,
+                            alert_state=alert_state,
                         )
                     )
                     lines.append(
@@ -996,6 +1004,7 @@ class TelegramNotifier:
                                 projection,
                                 visibility=visibility,
                                 trading_mode=trading_mode,
+                                alert_state=alert_state,
                             )
                         )
 

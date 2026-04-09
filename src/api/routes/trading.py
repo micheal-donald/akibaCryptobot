@@ -99,6 +99,14 @@ async def get_live_rollout_approval_status(bot=Depends(get_bot)):
             "latest_event": None,
         }
     snapshot = await getter()
+    if snapshot is None:
+        return {
+            "target_profile": None,
+            "approval_required": False,
+            "current_approval": None,
+            "latest_approval": None,
+            "latest_event": None,
+        }
     return snapshot.to_dict()
 
 
@@ -122,10 +130,21 @@ async def approve_live_rollout(
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    snapshot = await bot.get_live_rollout_approval_status()
+    getter = getattr(bot, "get_live_rollout_approval_status", None)
+    snapshot = await getter() if callable(getter) else None
     return {
         "approval": approval.to_dict(),
-        "status": snapshot.to_dict(),
+        "status": (
+            snapshot.to_dict()
+            if snapshot is not None
+            else {
+                "target_profile": None,
+                "approval_required": False,
+                "current_approval": None,
+                "latest_approval": None,
+                "latest_event": None,
+            }
+        ),
     }
 
 
@@ -148,8 +167,19 @@ async def record_live_rollout_rollback(
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    snapshot = await bot.get_live_rollout_approval_status()
+    getter = getattr(bot, "get_live_rollout_approval_status", None)
+    snapshot = await getter() if callable(getter) else None
     return {
         "revoked_approvals": [approval.to_dict() for approval in approvals],
-        "status": snapshot.to_dict(),
+        "status": (
+            snapshot.to_dict()
+            if snapshot is not None
+            else {
+                "target_profile": None,
+                "approval_required": False,
+                "current_approval": None,
+                "latest_approval": None,
+                "latest_event": None,
+            }
+        ),
     }

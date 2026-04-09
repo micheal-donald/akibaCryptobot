@@ -11,6 +11,7 @@ def build_rollout_summary(
     *,
     configured_deployment_profile: str | None = None,
     trading_mode: str | None = None,
+    halt_state: str | None = None,
 ) -> dict[str, object]:
     """Summarize rollout health for API, websocket, and Telegram surfaces."""
 
@@ -21,6 +22,7 @@ def build_rollout_summary(
     runtime_owns_exits = getattr(projection, "runtime_owns_exits", False)
     state_source = getattr(projection, "source", ProjectionSource.LEGACY).value
     runtime_mode = getattr(projection, "runtime_mode", RuntimeMode.LEGACY.value)
+    halt_state = str(halt_state or "none")
     deployment_profile = _resolve_deployment_profile(configured_deployment_profile)
     rollout_environment = _resolve_rollout_environment(
         deployment_profile=deployment_profile,
@@ -113,6 +115,24 @@ def build_rollout_summary(
                     ),
                 }
             )
+        return summary
+
+    if rollout_environment == "live" and halt_state != "none":
+        summary.update(
+            {
+                "rollout_health": "promotion_blocked",
+                "rollout_recommended_action": (
+                    "clear_halt_before_continuing_live_primary"
+                    if runtime_owns_exits
+                    else "clear_halt_before_promotion"
+                ),
+                "rollout_summary": (
+                    "Live rollout promotion is blocked while an operational "
+                    f"halt is active ({halt_state}). Clear the halt before "
+                    "continuing."
+                ),
+            }
+        )
         return summary
 
     if runtime_owns_exits:

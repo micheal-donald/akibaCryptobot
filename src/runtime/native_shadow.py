@@ -1,4 +1,4 @@
-﻿"""Native shadow helpers for comparison-only hot-path validation."""
+"""Native shadow helpers for comparison-only hot-path validation."""
 
 from __future__ import annotations
 

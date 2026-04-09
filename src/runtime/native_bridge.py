@@ -1,4 +1,4 @@
-﻿"""Native shadow canary bridge and operator-facing report helpers."""
+"""Native shadow canary bridge and operator-facing report helpers."""
 
 from __future__ import annotations
 

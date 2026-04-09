@@ -10,7 +10,8 @@ router = APIRouter()
 
 
 def _build_low_latency_fallback(bot):
-    projection = bot.get_runtime_projection()
+    projection_getter = getattr(bot, "get_runtime_projection", None)
+    projection = projection_getter() if callable(projection_getter) else None
     telemetry_getter = getattr(bot, "get_runtime_telemetry_info", None)
     telemetry = telemetry_getter() if callable(telemetry_getter) else None
     event_latency = None
@@ -22,10 +23,10 @@ def _build_low_latency_fallback(bot):
     return {
         "available": False,
         "source": "api.performance.low_latency",
-        "runtime_mode": projection.runtime_mode,
-        "state_source": projection.source.value,
-        "runtime_is_running": projection.runtime_is_running,
-        "runtime_is_healthy": projection.runtime_is_healthy,
+        "runtime_mode": getattr(projection, "runtime_mode", "legacy"),
+        "state_source": getattr(getattr(projection, "source", None), "value", "legacy"),
+        "runtime_is_running": getattr(projection, "runtime_is_running", False),
+        "runtime_is_healthy": getattr(projection, "runtime_is_healthy", True),
         "decision_latency_ms": event_latency,
         "submit_latency_ms": None,
         "fill_quality_bps": None,

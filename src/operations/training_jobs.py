@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable
 from uuid import uuid4
 
@@ -33,6 +33,14 @@ def _normalize_optional_timestamp(value: datetime | int | float | None) -> int |
     if isinstance(value, datetime):
         return int(value.timestamp())
     return int(value)
+
+
+def _normalize_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _normalize_values(values: Iterable[Any]) -> tuple[str, ...]:
@@ -97,6 +105,9 @@ class TrainingJobRecord:
         self.timeframe = str(self.timeframe)
         self.progress = float(self.progress)
         self.promoted_model_paths = _normalize_values(self.promoted_model_paths)
+        self.requested_at = _normalize_datetime(self.requested_at)
+        self.started_at = _normalize_datetime(self.started_at)
+        self.finished_at = _normalize_datetime(self.finished_at)
 
     def to_dict(self) -> dict[str, Any]:
         return {

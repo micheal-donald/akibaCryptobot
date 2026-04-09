@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from operations.live_rollout_approval import (
@@ -84,3 +86,43 @@ async def test_phase19_live_rollback_revokes_active_approval_and_records_audit(t
     assert active is None
     assert latest_event is not None
     assert latest_event.event_type == LIVE_ROLLOUT_AUDIT_ROLLBACK_RECORDED
+
+
+@pytest.mark.asyncio
+async def test_phase19_expired_live_approval_is_not_returned_as_active(tmp_path):
+    store = TradeStore(str(tmp_path / "trades.db"))
+    await store.initialize()
+    approval = await store.create_live_rollout_approval(
+        target_profile="live_shadow",
+        actor="ops",
+        reason="canary window opened",
+        expires_in_hours=1,
+    )
+
+    expired_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    await store._db.execute(
+        "UPDATE live_rollout_approvals SET expires_at = ? WHERE approval_id = ?",
+        (int(expired_at.timestamp()), approval.approval_id),
+    )
+    await store._db.commit()
+
+    active = await store.get_active_live_rollout_approval("live_shadow")
+    latest = await store.get_latest_live_rollout_approval("live_shadow")
+
+    assert active is None
+    assert latest is not None
+    assert latest.status(now=datetime.now(timezone.utc)) == "expired"
+
+
+@pytest.mark.asyncio
+async def test_phase19_live_approval_rejects_non_positive_expiry(tmp_path):
+    store = TradeStore(str(tmp_path / "trades.db"))
+    await store.initialize()
+
+    with pytest.raises(ValueError, match="expires_in_hours_must_be_positive"):
+        await store.create_live_rollout_approval(
+            target_profile="live_shadow",
+            actor="ops",
+            reason="invalid expiry",
+            expires_in_hours=0,
+        )
