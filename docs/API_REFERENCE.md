@@ -1,4 +1,4 @@
-# REST & WebSocket API Reference
+﻿# REST & WebSocket API Reference
 
 AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST endpoints are prefixed with `/api`. Interactive docs are available at `/docs` (Swagger UI) when the server is running.
 
@@ -10,7 +10,7 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/health` | Liveness probe — returns `{"status": "ok"}` |
+| `GET` | `/api/health` | Liveness probe â€” returns `{"status": "ok"}` |
 | `GET` | `/api/status` | Bot status: uptime, active trades, runtime mode, rollout health, native-shadow comparison, runtime recovery summary, operational alerts, halt state, circuit breaker state, training job state, strategy, trading mode |
 | `GET` | `/api/reconcile` | Manually triggers a reconciliation check between the authoritative trade source and the exchange |
 
@@ -173,6 +173,30 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 
 `/api/reconcile` now reports the authoritative `source` explicitly. In runtime-owned modes that source is `runtime_projection`. In sandbox/runtime mode, seeded exchange inventory is grouped under `inventory_only` instead of being mixed with actionable runtime drift.
 
+
+### Native Shadow Canary States
+
+When 
+ative_hot_path_ports are enabled, /api/status and /ws/status may return a richer 
+ative_shadow_report:
+
+- 
+ative_shadow_status: waiting_native_snapshot, stale_native_snapshot, match, divergent
+- 
+ative_shadow_is_match: boolean
+- 
+ative_shadow_mismatch_count and 
+ative_shadow_mismatches
+- 
+ative_shadow_last_seen_at
+- 
+ative_shadow_age_seconds
+- 
+ative_shadow_recommended_action
+- 
+ative_shadow_stale_after_seconds
+
+waiting_native_snapshot means the native bridge is enabled but has not emitted a usable snapshot yet. stale_native_snapshot means the last snapshot is older than the canary freshness budget. divergent means the native snapshot and Python runtime disagree and promotion should be blocked.
 ---
 
 ## Account
@@ -219,12 +243,41 @@ AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST e
 | `GET` | `/api/equity-curve` | Time-series equity data for charting |
 | `GET` | `/api/trades/history?limit=20` | Completed trade log (max 100) |
 | `GET` | `/api/strategy/performance` | Per-strategy performance breakdown |
+| `GET` | `/api/performance/low-latency` | Low-latency replay/shadow performance summary with decision latency, submit latency, fill quality, and capture health |
+
+**Example response** (`GET /api/performance/low-latency`):
+```json
+{
+  "available": true,
+  "source": "depth_capture_replay",
+  "generated_at": "2024-01-15T10:30:00+00:00",
+  "capture_health": {
+    "total_records": 2,
+    "depth_records": 1,
+    "trade_records": 1,
+    "snapshot_records": 1,
+    "stale_snapshots": 0,
+    "gap_snapshots": 0,
+    "sequence_issues": 0
+  },
+  "feature_rows": 1,
+  "decision_count": 1,
+  "fill_count": 1,
+  "buy_count": 1,
+  "sell_count": 0,
+  "average_decision_latency_ms": 12.5,
+  "average_submit_latency_ms": 4.0,
+  "average_fill_quality_bps": 24.9,
+  "average_slippage_bps": 0.0,
+  "average_spread_capture_bps": 24.9
+}
+```
 
 **Query parameters** (`/api/trades/history`):
 
 | Param | Type | Default | Range | Description |
 |---|---|---|---|---|
-| `limit` | int | 20 | 1–100 | Number of recent trades to return |
+| `limit` | int | 20 | 1â€“100 | Number of recent trades to return |
 
 ---
 
@@ -469,6 +522,34 @@ The same fields are mirrored through `/ws/status` and the Telegram `/status` and
 
 ---
 
+## Phase 20 Live Rollout Gates
+
+The live runtime ladder is now documented as an operator workflow rather than just a set of reviewed profiles.
+
+### Stage Expectations
+
+| Stage | Expected status fields | Expected action |
+|---|---|---|
+| `live_shadow` | `rollout_environment=live`, `rollout_stage=canary`, `rollout_health=shadow_ready` during steady state, `runtime_is_healthy=true`, `halt_state=none` | `promote_live_runtime_entries` |
+| `live_runtime_entries` | `rollout_environment=live`, `rollout_stage=canary`, `rollout_health=promotion_ready`, `runtime_owns_entries=true`, `runtime_owns_exits=false`, `halt_state=none` | `promote_live_runtime_primary` |
+| `live_runtime_primary` | `rollout_environment=live`, `rollout_stage=primary`, `rollout_health=promotion_ready`, `runtime_owns_entries=true`, `runtime_owns_exits=true`, `halt_state=none` | `stay_live_runtime_primary` |
+| `live_legacy` rollback | `rollout_environment=live`, `rollout_stage=legacy`, `rollout_health=legacy`, `runtime_is_healthy=true`, `halt_state=none` | `stay_live_legacy` |
+
+### Live Training Restriction
+
+Live canary profiles keep training locked down:
+
+- `POST /api/model/train` must reject `live_shadow`, `live_runtime_entries`, and `live_runtime_primary` with `training_not_allowed_in_live`.
+- `GET /api/model/train/status` should show no queued/running job before a live promotion is attempted.
+- `training_job.can_start_training` should remain `false` in live rollout status surfaces.
+- Telegram `/train_model` should mirror the API refusal and explain that training is paper-only.
+
+### Live Alert Gating
+
+If `/api/status` reports `halt_state` other than `none`, treat live promotion as blocked until the alert clears. A live stage that reports `rollback_recommended` should be rolled back to `live_legacy` after the warm-up window, not promoted further.
+
+---
+
 ## WebSocket Streams
 
 | Endpoint | Push Interval | Description |
@@ -577,3 +658,10 @@ python start_bot.py --no-api
 ```
 
 API docs: `http://localhost:8000/docs`
+
+
+
+
+
+
+

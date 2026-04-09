@@ -1,9 +1,10 @@
-"""Native shadow helpers for comparison-only hot-path validation."""
+﻿"""Native shadow helpers for comparison-only hot-path validation."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 
 from ports.native_hot_path import NativeHotPathPorts
@@ -13,7 +14,7 @@ from runtime.ipc_protocol import (
     IPCProtocolError,
     decode_ipc_envelope,
 )
-from runtime.view_models import RuntimeProjection
+from runtime.projection import RuntimeProjection
 
 
 @dataclass(slots=True, frozen=True)
@@ -27,6 +28,25 @@ class NativeShadowSnapshot:
     active_position_count: int
     open_order_count: int
     state: dict[str, object]
+    captured_at: datetime | None = None
+
+    def age_seconds(self, now: datetime | None = None) -> float | None:
+        if self.captured_at is None:
+            return None
+        observed_at = now or datetime.now(timezone.utc)
+        captured_at = self.captured_at
+        if captured_at.tzinfo is None:
+            captured_at = captured_at.replace(tzinfo=timezone.utc)
+        age = (observed_at - captured_at).total_seconds()
+        return age if age >= 0 else 0.0
+
+    def is_stale(
+        self,
+        stale_after_seconds: float,
+        now: datetime | None = None,
+    ) -> bool:
+        age = self.age_seconds(now=now)
+        return age is not None and age > stale_after_seconds
 
 
 @dataclass(slots=True, frozen=True)
@@ -86,6 +106,9 @@ class NativeShadowBridge:
         runtime_owns_exits = bool(payload.get("runtime_owns_exits", False))
         active_position_count = int(payload.get("active_position_count", 0))
         open_order_count = int(payload.get("open_order_count", 0))
+        captured_at = _parse_datetime(payload.get("captured_at"))
+        if captured_at is None:
+            captured_at = _parse_datetime(envelope.created_at)
         return NativeShadowSnapshot(
             runtime_mode=runtime_mode,
             runtime_is_running=runtime_is_running,
@@ -94,6 +117,7 @@ class NativeShadowBridge:
             active_position_count=active_position_count,
             open_order_count=open_order_count,
             state=_normalize_mapping(payload),
+            captured_at=captured_at,
         )
 
     def compare(
@@ -169,3 +193,24 @@ def _normalize_value(value: object) -> object:
     if isinstance(value, list):
         return [_normalize_value(item) for item in value]
     return value
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(float(value), tz=timezone.utc)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        return (
+            parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+        )
+    return None

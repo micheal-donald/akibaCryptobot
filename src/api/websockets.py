@@ -1,4 +1,4 @@
-"""
+﻿"""
 WebSocket streams for real-time data push to browser clients.
 """
 
@@ -9,6 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from api.dependencies import bot_state
+from runtime.native_bridge import build_native_shadow_report
 from runtime.rollout import build_rollout_summary
 from runtime.view_models import ProjectionSource
 
@@ -25,6 +26,15 @@ def _get_runtime_projection(bot):
     except Exception as exc:
         logger.error("WebSocket runtime projection lookup failed: %s", exc)
         return None
+
+
+def _build_native_shadow_canary_report(bot):
+    runtime_app = getattr(bot, "runtime_app", None)
+    if runtime_app is None or getattr(runtime_app, "native_hot_path_ports", None) is None:
+        return None
+
+    projection = _get_runtime_projection(bot)
+    return build_native_shadow_report(bot, projection=projection)
 
 
 def _inject_runtime_visibility(status_info, bot):
@@ -47,6 +57,11 @@ def _inject_runtime_telemetry(status_info, bot):
 
 
 def _inject_native_shadow_report(status_info, bot):
+    canary_report = _build_native_shadow_canary_report(bot)
+    if canary_report is not None:
+        status_info["native_shadow_report"] = canary_report
+        return status_info
+
     if "native_shadow_report" in status_info:
         return status_info
 

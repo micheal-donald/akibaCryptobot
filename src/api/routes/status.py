@@ -1,4 +1,4 @@
-"""
+﻿"""
 Status & Health endpoints
 """
 
@@ -7,10 +7,21 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 
 from api.dependencies import get_bot
+from runtime.native_bridge import build_native_shadow_report
 from runtime.rollout import build_rollout_summary
 from runtime.view_models import ProjectionSource
 
 router = APIRouter()
+
+
+def _build_native_shadow_canary_report(bot):
+    runtime_app = getattr(bot, "runtime_app", None)
+    if runtime_app is None or getattr(runtime_app, "native_hot_path_ports", None) is None:
+        return None
+
+    projection_getter = getattr(bot, "get_runtime_projection", None)
+    projection = projection_getter() if callable(projection_getter) else None
+    return build_native_shadow_report(bot, projection=projection)
 
 
 def _inject_runtime_visibility(status_info, bot):
@@ -33,6 +44,11 @@ def _inject_runtime_telemetry(status_info, bot):
 
 
 def _inject_native_shadow_report(status_info, bot):
+    canary_report = _build_native_shadow_canary_report(bot)
+    if canary_report is not None:
+        status_info["native_shadow_report"] = canary_report
+        return status_info
+
     if "native_shadow_report" in status_info:
         return status_info
 
@@ -63,6 +79,20 @@ async def _inject_training_job(status_info, bot):
 
     snapshot = await training_getter()
     status_info["training_job"] = snapshot.to_dict()
+    return status_info
+
+
+async def _inject_live_rollout_approval(status_info, bot):
+    getter = getattr(bot, "get_live_rollout_approval_status", None)
+    if not callable(getter):
+        status_info["live_rollout_approval"] = None
+        status_info["latest_live_rollout_event"] = None
+        return status_info
+
+    snapshot = await getter()
+    payload = snapshot.to_dict()
+    status_info["live_rollout_approval"] = payload
+    status_info["latest_live_rollout_event"] = payload.get("latest_event")
     return status_info
 
 
@@ -103,6 +133,7 @@ async def get_status(bot=Depends(get_bot)):
     _inject_runtime_recovery(status_info, bot)
     _inject_operational_alert_state(status_info, bot)
     await _inject_training_job(status_info, bot)
+    await _inject_live_rollout_approval(status_info, bot)
     projection = bot.get_runtime_projection()
     status_info["circuit_breaker_active"] = bot.circuit_breaker_active
     status_info["circuit_breaker_reason"] = bot.circuit_breaker_reason

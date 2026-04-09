@@ -1,4 +1,4 @@
-# Deployment Guide
+﻿# Deployment Guide
 
 This guide covers local development, Docker deployment, and CI/CD pipeline configuration.
 
@@ -234,6 +234,28 @@ Live canary commands:
 
 If any live canary or live primary rollout reports `rollout_health=rollback_recommended`, the expected immediate action is `rollback_to_live_legacy`.
 
+### Phase 20 Live Runtime Execution Criteria
+
+Phase 20 turns the reviewed live profiles into an explicit canary ladder. Use the same pinned-SHA deploy flow as paper rollout, but treat live promotion as a higher-risk operator process.
+
+#### Stage Criteria
+
+| Stage | Preflight | Soak Criteria | Rollback Criteria |
+|---|---|---|---|
+| `live_shadow` | `runtime_is_healthy=true`, `halt_state=none`, `active_critical_alert_count=0`, `training_job.can_start_training=false`, `rollout_health=startup_pending` or `shadow_ready` | `rollout_stage=canary`, `rollout_recommended_action=promote_live_runtime_entries` | Any sustained `rollback_recommended`, startup failure after warm-up, or live alert escalation |
+| `live_runtime_entries` | `runtime_is_healthy=true`, `halt_state=none`, `active_critical_alert_count=0`, `training_job.can_start_training=false` | `rollout_stage=canary`, runtime owns entries, legacy exits remain stable, `rollout_recommended_action=promote_live_runtime_primary` | Any runtime-entry mismatch, alert escalation, or `rollback_recommended` |
+| `live_runtime_primary` | `runtime_is_healthy=true`, `halt_state=none`, `active_critical_alert_count=0`, `training_job.can_start_training=false` | `rollout_stage=primary`, runtime owns entries and exits, `rollout_recommended_action=stay_live_runtime_primary` | Any runtime-primary drift, halt state, or `rollback_recommended` |
+
+#### Live Rollout Rules
+
+1. Do not promote if `halt_state` is not `none`.
+2. Do not promote if `training_job` reports an active queue or running job.
+3. Do not promote if `/api/status` or `/ws/status` disagree on profile, stage, or rollout action.
+4. Do not treat `runtime_start_pending=true` as a rollback signal; wait for startup to settle first.
+5. Roll back to `live_legacy` immediately if the reviewed live stage reports `rollback_recommended` after warm-up.
+6. Keep `POST /api/model/train` and Telegram `/train_model` blocked in live mode; live rollout does not relax training restrictions.
+7. Treat `halt_state=runtime_kill_switch` or `halt_state=legacy_circuit_breaker` as a hard hold on new entries until the alert clears.
+
 ### Operational Alert Recovery Checklist
 
 If the runtime or model enters a blocked-entry state, inspect these surfaces before re-enabling entries:
@@ -245,6 +267,19 @@ If the runtime or model enters a blocked-entry state, inspect these surfaces bef
 5. The same pinned deploy flow used for promotion or rollback if the reviewed profile or effective mode needs to change.
 
 Do not re-enable entries until the alert list is empty, the halt state returns to `none`, and the reviewed profile/mode pair matches the intended rollout target.
+
+### Phase 22 Native Hot-Path Canary Runbook
+
+This runbook is shadow-only. Native ownership is not promoted from it.
+
+1. Enable native hot-path ports in the reviewed build.
+2. Feed a native market-data snapshot into `RuntimeApp.native_shadow_snapshot` through the reviewed bridge.
+3. Confirm `/api/status.native_shadow_report.native_shadow_status` transitions through:
+   - `awaiting_native_snapshot`
+   - `match`
+   - `stale_native_snapshot` if the snapshot ages out
+4. Treat `divergent` as a promotion blocker.
+5. Keep native execution read-only until the report stays match during the canary soak window.
 
 ### Phase 18 Runtime-Primary Soak Checklist
 
@@ -393,10 +428,10 @@ docker-compose up -d --build
 |---|---|---|
 | `TRADING_MODE` | `paper` or `live` | `paper` |
 | `LOG_LEVEL` | Logging level | `INFO` |
-| `BINANCE_API_KEY` | Binance API key | — |
-| `BINANCE_SECRET_KEY` | Binance API secret | — |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token | — |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID | — |
+| `BINANCE_API_KEY` | Binance API key | â€” |
+| `BINANCE_SECRET_KEY` | Binance API secret | â€” |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token | â€” |
+| `TELEGRAM_CHAT_ID` | Telegram chat ID | â€” |
 | `MAX_POSITION_SIZE` | Max portfolio fraction per trade | `0.05` |
 | `MAX_DAILY_LOSS` | Max daily loss fraction | `0.02` |
 
@@ -422,30 +457,30 @@ The `docker-compose.yml` sets:
 
 Three GitHub Actions workflows in `.github/workflows/`:
 
-### 1. `ci.yml` — Continuous Integration
+### 1. `ci.yml` â€” Continuous Integration
 
 **Triggers:** Push to `master`, `develop`, `feature/**`; PRs to `master`
 
 ```
-Test → Smoke Test
+Test â†’ Smoke Test
 ```
 
 | Job | Steps |
 |---|---|
-| **test** | Install deps → pytest with coverage → Upload to Codecov |
-| **smoke** | Install deps → Verify app starts → Check routes registered |
+| **test** | Install deps â†’ pytest with coverage â†’ Upload to Codecov |
+| **smoke** | Install deps â†’ Verify app starts â†’ Check routes registered |
 
-### 2. `deploy.yml` — Continuous Deployment
+### 2. `deploy.yml` â€” Continuous Deployment
 
 **Triggers:** `workflow_run` after `CI` succeeds on `master`
 
 ```
-Checkout exact CI-passed SHA → Rsync app files → Render runtime `.env`
-→ Install deps only when `requirements.txt` changes → Install/version the systemd unit
-→ Restart service → Wait for `/api/health` → Notify Telegram
+Checkout exact CI-passed SHA â†’ Rsync app files â†’ Render runtime `.env`
+â†’ Install deps only when `requirements.txt` changes â†’ Install/version the systemd unit
+â†’ Restart service â†’ Wait for `/api/health` â†’ Notify Telegram
 ```
 
-### 3. `train.yml` — Model Training
+### 3. `train.yml` â€” Model Training
 
 Handles FreqAI model re-training on schedule or manual trigger.
 
@@ -580,3 +615,7 @@ ssh root@<SERVER_IP> "systemctl restart akibabot"
 | View trade logs | `tail -f logs/trades.log` |
 | View error logs | `tail -f logs/errors.log` |
 | Check DB | `sqlite3 data/trades.db "SELECT * FROM trades WHERE status='open'"` |
+
+
+
+
