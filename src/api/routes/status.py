@@ -45,6 +45,16 @@ def _inject_native_shadow_report(status_info, bot):
     return status_info
 
 
+def _inject_runtime_recovery(status_info, bot):
+    getter = getattr(bot, "get_runtime_recovery_info", None)
+    if not callable(getter):
+        status_info["runtime_recovery"] = None
+        return status_info
+
+    status_info["runtime_recovery"] = getter()
+    return status_info
+
+
 async def _inject_training_job(status_info, bot):
     training_getter = getattr(bot, "get_training_job_status", None)
     if not callable(training_getter):
@@ -90,6 +100,7 @@ async def get_status(bot=Depends(get_bot)):
     _inject_runtime_visibility(status_info, bot)
     _inject_runtime_telemetry(status_info, bot)
     _inject_native_shadow_report(status_info, bot)
+    _inject_runtime_recovery(status_info, bot)
     _inject_operational_alert_state(status_info, bot)
     await _inject_training_job(status_info, bot)
     projection = bot.get_runtime_projection()

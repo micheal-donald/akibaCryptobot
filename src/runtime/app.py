@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import inspect
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -286,6 +286,17 @@ class RuntimeApp:
                 else "Native shadow diverges from Python runtime."
             ),
         }
+
+    def get_recovery_report_snapshot(self) -> dict[str, object] | None:
+        """Return the latest bounded runtime recovery report for operators."""
+
+        report = self.recovery_report
+        if report is None:
+            return None
+
+        snapshot = asdict(report)
+        snapshot["issue_count"] = len(report.issues)
+        return snapshot
 
     @classmethod
     def build_phase4(

@@ -1,6 +1,8 @@
 import logging
 from typing import Dict
 
+from runtime.view_models import ProjectionSource
+
 logger = logging.getLogger(__name__)
 
 
@@ -22,9 +24,12 @@ class ReconciliationManager:
         """
         logger.info("Starting balance reconciliation check...")
         discrepancies = {
+            "source": "legacy",
             "orphans": [],  # Assets on exchange but NOT in DB
             "lost_trades": [],  # Trades in DB but assets NOT on exchange
             "mismatches": [],  # Amount in DB != Amount on exchange
+            "runtime_drift": [],
+            "runtime_recovery": self._get_runtime_recovery(),
         }
 
         try:
@@ -42,40 +47,21 @@ class ReconciliationManager:
                     if total > 0:
                         live_balances[asset] = total
 
-            # 2. Get active trades from bot's memory (seeded from DB)
-            active_trades = self.bot.active_trades
-
-            # 3. Check for Lost Trades and Mismatches
-            for symbol, trade in active_trades.items():
-                base_asset = symbol.split("/")[0]
-                expected_amount = trade["amount"]
-                actual_amount = live_balances.get(base_asset, 0)
-
-                if actual_amount == 0:
-                    discrepancies["lost_trades"].append(
-                        {
-                            "symbol": symbol,
-                            "expected": expected_amount,
-                            "actual": 0,
-                            "reason": "Trade exists in DB but asset is missing from Exchange",
-                        }
-                    )
-                elif abs(actual_amount - expected_amount) > (
-                    expected_amount * 0.01
-                ):  # 1% tolerance
-                    # If discrepancy is significant
-                    discrepancies["mismatches"].append(
-                        {
-                            "symbol": symbol,
-                            "expected": expected_amount,
-                            "actual": actual_amount,
-                            "diff": actual_amount - expected_amount,
-                        }
-                    )
-
-                # Remove from tracking to find orphans later
-                if base_asset in live_balances:
-                    del live_balances[base_asset]
+            projection = self.bot.get_runtime_projection()
+            if projection.source is ProjectionSource.RUNTIME_PROJECTION:
+                discrepancies["source"] = projection.source.value
+                self._reconcile_runtime_projection(
+                    projection=projection,
+                    live_balances=live_balances,
+                    discrepancies=discrepancies,
+                )
+            else:
+                active_trades = self.bot.active_trades
+                self._reconcile_legacy_positions(
+                    active_trades=active_trades,
+                    live_balances=live_balances,
+                    discrepancies=discrepancies,
+                )
 
             # 4. Check for Orphans (Remaining items in live_balances)
             for asset, amount in live_balances.items():
@@ -88,7 +74,10 @@ class ReconciliationManager:
                         {
                             "asset": asset,
                             "amount": amount,
-                            "reason": "Asset found on Exchange with no active trade record in DB",
+                            "reason": (
+                                "Asset found on Exchange with no active "
+                                "trade record in the authoritative state source"
+                            ),
                         }
                     )
 
@@ -120,6 +109,14 @@ class ReconciliationManager:
             logger.warning(msg)
             found_issues = True
 
+        for item in discrepancies["runtime_drift"]:
+            msg = (
+                f"🧭 RUNTIME DRIFT: {item['symbol']} "
+                f"({item['kind']}) {item['reason']}"
+            )
+            logger.warning(msg)
+            found_issues = True
+
         if not found_issues:
             logger.info("✅ Reconciliation complete: Local DB matches Exchange state.")
 
@@ -131,3 +128,106 @@ class ReconciliationManager:
             task = asyncio.create_task(self.bot.telegram.send_message(message))
             self.bot._background_tasks.add(task)
             task.add_done_callback(self.bot._background_tasks.discard)
+
+    def _reconcile_legacy_positions(
+        self,
+        *,
+        active_trades: Dict[str, Dict],
+        live_balances: dict[str, float],
+        discrepancies: dict,
+    ) -> None:
+        for symbol, trade in active_trades.items():
+            base_asset = symbol.split("/")[0]
+            expected_amount = trade["amount"]
+            actual_amount = live_balances.get(base_asset, 0)
+
+            if actual_amount == 0:
+                discrepancies["lost_trades"].append(
+                    {
+                        "symbol": symbol,
+                        "expected": expected_amount,
+                        "actual": 0,
+                        "reason": "Trade exists in DB but asset is missing from Exchange",
+                    }
+                )
+            elif abs(actual_amount - expected_amount) > (
+                expected_amount * 0.01
+            ):
+                discrepancies["mismatches"].append(
+                    {
+                        "symbol": symbol,
+                        "expected": expected_amount,
+                        "actual": actual_amount,
+                        "diff": actual_amount - expected_amount,
+                    }
+                )
+
+            if base_asset in live_balances:
+                del live_balances[base_asset]
+
+    def _reconcile_runtime_projection(
+        self,
+        *,
+        projection,
+        live_balances: dict[str, float],
+        discrepancies: dict,
+    ) -> None:
+        for position in projection.positions:
+            if position.open_qty <= 0:
+                continue
+
+            base_asset = position.symbol.split("/")[0]
+            expected_amount = position.open_qty
+            actual_amount = live_balances.get(base_asset, 0)
+
+            if position.status == "reconcile_error":
+                discrepancies["runtime_drift"].append(
+                    {
+                        "symbol": position.symbol,
+                        "kind": "reconcile_error",
+                        "reason": "position already flagged for manual reconciliation",
+                    }
+                )
+
+            if actual_amount == 0:
+                discrepancies["lost_trades"].append(
+                    {
+                        "symbol": position.symbol,
+                        "expected": expected_amount,
+                        "actual": 0,
+                        "reason": (
+                            "Runtime position exists but asset is missing from Exchange"
+                        ),
+                    }
+                )
+            elif abs(actual_amount - expected_amount) > (expected_amount * 0.01):
+                discrepancies["mismatches"].append(
+                    {
+                        "symbol": position.symbol,
+                        "expected": expected_amount,
+                        "actual": actual_amount,
+                        "diff": actual_amount - expected_amount,
+                    }
+                )
+
+            if base_asset in live_balances:
+                del live_balances[base_asset]
+
+        recovery_report = discrepancies.get("runtime_recovery") or {}
+        for issue in recovery_report.get("issues", []):
+            kind = issue.get("kind")
+            if kind == "restored":
+                continue
+            discrepancies["runtime_drift"].append(
+                {
+                    "symbol": issue.get("symbol"),
+                    "kind": kind,
+                    "reason": issue.get("reason"),
+                }
+            )
+
+    def _get_runtime_recovery(self):
+        getter = getattr(self.bot, "get_runtime_recovery_info", None)
+        if not callable(getter):
+            return None
+        return getter()

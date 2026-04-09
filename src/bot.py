@@ -1001,6 +1001,15 @@ class AkibaCryptoBot:
             return None
         return telemetry_getter()
 
+    def get_runtime_recovery_info(self):
+        runtime_app = self.runtime_app
+        if runtime_app is None:
+            return None
+        recovery_getter = getattr(runtime_app, "get_recovery_report_snapshot", None)
+        if not callable(recovery_getter):
+            return None
+        return recovery_getter()
+
     @property
     def operational_alerts(self):
         return tuple(self._operational_alert_state.operational_alerts)

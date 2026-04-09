@@ -123,12 +123,14 @@ class FakeStatusBot:
         configured_deployment_profile: str | None = None,
         trading_mode: str = "paper",
         native_shadow_report: dict[str, object] | None = None,
+        runtime_recovery: dict[str, object] | None = None,
         training_snapshot: TrainingJobSnapshot | None = None,
         alert_state: dict[str, object] | None = None,
     ):
         self._projection = projection
         self._configured_deployment_profile = configured_deployment_profile
         self._native_shadow_report = native_shadow_report
+        self._runtime_recovery = runtime_recovery
         self._training_snapshot = training_snapshot or TrainingJobSnapshot(
             current_job=None,
             last_job=None,
@@ -165,6 +167,9 @@ class FakeStatusBot:
 
     def get_native_shadow_report(self):
         return self._native_shadow_report
+
+    def get_runtime_recovery_info(self):
+        return self._runtime_recovery
 
     def get_runtime_visibility_info(self):
         return {
@@ -242,6 +247,17 @@ async def test_status_route_includes_runtime_cutover_fields():
             rejected_order_count=1,
         ),
         configured_deployment_profile="paper_runtime_primary",
+        runtime_recovery={
+            "processed_trades": 1,
+            "restored_symbols": ["BTC/USDT"],
+            "protected_symbols": ["BTC/USDT"],
+            "orphaned_symbols": [],
+            "unprotected_symbols": [],
+            "reconcile_error_symbols": [],
+            "skipped_symbols": [],
+            "issues": [],
+            "issue_count": 0,
+        },
         training_snapshot=TrainingJobSnapshot(
             current_job=job,
             last_job=job,
@@ -271,6 +287,8 @@ async def test_status_route_includes_runtime_cutover_fields():
     assert payload["rollout_recommended_action"] == "stay_runtime_primary"
     assert "Runtime primary ownership is healthy" in payload["rollout_summary"]
     assert payload["projected_active_positions"] == 1
+    assert payload["runtime_recovery"]["processed_trades"] == 1
+    assert payload["runtime_recovery"]["restored_symbols"] == ["BTC/USDT"]
     assert payload["training_job"]["current_job"]["job_id"] == "job-status"
     assert payload["training_job"]["current_job"]["status"] == "running"
     assert payload["operational_alerts"] == []
