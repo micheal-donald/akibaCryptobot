@@ -119,6 +119,67 @@ async def test_update_trade_exit(trade_store):
         assert row["exit_timestamp"] is not None
 
 
+async def _seed_closed_trades(store, symbols):
+    """Helper: insert then close one trade per symbol so each becomes a
+    closed row with a non-null exit_timestamp. Symbols are processed in
+    order, producing closed trades in chronological order (earlier symbols
+    = earlier exit_timestamp)."""
+    for symbol in symbols:
+        await store.insert_trade(
+            {
+                "symbol": symbol,
+                "side": "buy",
+                "amount": 1.0,
+                "entry_price": 100.0,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
+        await store.update_trade_exit(
+            symbol,
+            exit_price=110.0,
+            exit_reason="take_profit",
+            pnl=10.0,
+            fees=0.0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_load_closed_trades_pagination_limit_offset(trade_store):
+    """Pagination (limit/offset + order=desc) returns the expected slice."""
+    symbols = [f"TEST{i}/USDT" for i in range(5)]
+    await _seed_closed_trades(trade_store, symbols)
+
+    total = await trade_store.count_closed_trades()
+    assert total == 5
+
+    # Page 1: newest two.
+    page1 = await trade_store.load_closed_trades(limit=2, offset=0, order="desc")
+    assert [t["symbol"] for t in page1] == ["TEST4/USDT", "TEST3/USDT"]
+
+    # Page 2.
+    page2 = await trade_store.load_closed_trades(limit=2, offset=2, order="desc")
+    assert [t["symbol"] for t in page2] == ["TEST2/USDT", "TEST1/USDT"]
+
+    # Page 3: partial, last row only.
+    page3 = await trade_store.load_closed_trades(limit=2, offset=4, order="desc")
+    assert [t["symbol"] for t in page3] == ["TEST0/USDT"]
+
+    # Past the end: empty.
+    past_end = await trade_store.load_closed_trades(limit=2, offset=10, order="desc")
+    assert past_end == []
+
+
+@pytest.mark.asyncio
+async def test_load_closed_trades_default_preserves_hydrate_contract(trade_store):
+    """No-arg call must still return ALL closed trades in ASC order; the
+    bot startup hydrate path depends on this."""
+    symbols = ["A/USDT", "B/USDT", "C/USDT"]
+    await _seed_closed_trades(trade_store, symbols)
+
+    rows = await trade_store.load_closed_trades()
+    assert [t["symbol"] for t in rows] == ["A/USDT", "B/USDT", "C/USDT"]
+
+
 @pytest.mark.asyncio
 async def test_update_trailing_stop(trade_store):
     """Test updating trailing stop price"""

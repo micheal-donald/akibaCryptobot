@@ -63,6 +63,10 @@ const dom = {
 
     // Activity Feed
     activityFeed: document.getElementById('activity-feed'),
+    activityPagination: document.getElementById('activity-pagination'),
+    activityPrev: document.getElementById('activity-prev'),
+    activityNext: document.getElementById('activity-next'),
+    activityPageLabel: document.getElementById('activity-page-label'),
 
     // Positions Table
     positionsTbody: document.getElementById('positions-tbody'),
@@ -102,6 +106,7 @@ async function init() {
     setupPauseButton();
     setupStrategySelector();
     setupWebSockets();
+    wireActivityPagination();
 
     // Initial REST data fetch (parallel)
     await Promise.allSettled([
@@ -124,7 +129,11 @@ async function init() {
     setInterval(fetchBalance, 15000);
     setInterval(fetchTrades, 10000);
     setInterval(fetchMetrics, 30000);
-    setInterval(fetchTradeHistory, 20000);
+    // Only auto-refresh when the user is viewing the newest page,
+    // so polling doesn't yank them back while they're browsing history.
+    setInterval(() => {
+        if (activityState.offset === 0) fetchTradeHistory();
+    }, 20000);
     setInterval(fetchEquityCurve, 60000);
     setInterval(fetchStrategyPerformance, 30000);
     setInterval(fetchRisk, 30000);
@@ -326,14 +335,39 @@ async function fetchEquityCurve() {
     }
 }
 
+const ACTIVITY_PAGE_SIZE = 15;
+const activityState = {
+    offset: 0,
+    total: 0,
+};
+
+function renderActivityPagination() {
+    if (!dom.activityPagination) return;
+    const total = activityState.total || 0;
+    if (total <= ACTIVITY_PAGE_SIZE) {
+        dom.activityPagination.classList.add('hidden');
+        return;
+    }
+    dom.activityPagination.classList.remove('hidden');
+    const page = Math.floor(activityState.offset / ACTIVITY_PAGE_SIZE) + 1;
+    const pages = Math.max(1, Math.ceil(total / ACTIVITY_PAGE_SIZE));
+    dom.activityPageLabel.textContent = `Page ${page} of ${pages} (${total} trades)`;
+    dom.activityPrev.disabled = activityState.offset <= 0;
+    dom.activityNext.disabled = activityState.offset + ACTIVITY_PAGE_SIZE >= total;
+}
+
 async function fetchTradeHistory() {
     try {
-        const res = await fetch(`${API_BASE}/trades/history?limit=15`);
+        const res = await fetch(
+            `${API_BASE}/trades/history?limit=${ACTIVITY_PAGE_SIZE}&offset=${activityState.offset}`
+        );
         const data = await res.json();
         const trades = data.trades || [];
+        activityState.total = Number.isFinite(data.total) ? data.total : trades.length;
 
         if (trades.length === 0) {
             dom.activityFeed.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">No completed trades yet</div>`;
+            renderActivityPagination();
             return;
         }
 
@@ -370,9 +404,28 @@ async function fetchTradeHistory() {
                     </div>
                 </div>`;
         }).join('');
+        renderActivityPagination();
     } catch (e) {
         dom.activityFeed.innerHTML = `<div class="text-matrix-dim text-xs text-center py-4">Failed to load history</div>`;
+        renderActivityPagination();
     }
+}
+
+function wireActivityPagination() {
+    if (!dom.activityPrev || !dom.activityNext) return;
+    dom.activityPrev.addEventListener('click', () => {
+        const next = Math.max(0, activityState.offset - ACTIVITY_PAGE_SIZE);
+        if (next === activityState.offset) return;
+        activityState.offset = next;
+        fetchTradeHistory();
+    });
+    dom.activityNext.addEventListener('click', () => {
+        const max = Math.max(0, activityState.total - ACTIVITY_PAGE_SIZE);
+        const next = Math.min(max, activityState.offset + ACTIVITY_PAGE_SIZE);
+        if (next === activityState.offset) return;
+        activityState.offset = next;
+        fetchTradeHistory();
+    });
 }
 
 async function fetchStrategy() {

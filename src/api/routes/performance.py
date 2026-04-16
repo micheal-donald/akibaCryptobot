@@ -75,16 +75,81 @@ async def get_equity_curve(bot=Depends(get_bot)):
     }
 
 
+def _pnl_percent(side: str, entry_price: float, exit_price: float) -> float:
+    if not entry_price:
+        return 0.0
+    if side == "buy":
+        return ((exit_price - entry_price) / entry_price) * 100
+    return ((entry_price - exit_price) / entry_price) * 100
+
+
 @router.get("/trades/history")
 async def get_trade_history(
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     bot=Depends(get_bot),
 ):
-    """Get completed trade log."""
-    if hasattr(bot, "performance_tracker") and bot.performance_tracker:
-        trades = bot.performance_tracker.get_recent_trades(limit=limit)
+    """Get completed trade log, newest first, with pagination.
+
+    Prefers the persistent trade store when available (deep history),
+    falling back to the in-memory performance tracker cache (capped at
+    the last 100 trades).
+    """
+    trade_store = getattr(bot, "trade_store", None)
+    if trade_store is not None:
+        total = await trade_store.count_closed_trades()
+        rows = await trade_store.load_closed_trades(
+            limit=limit, offset=offset, order="desc"
+        )
+        trades_payload = []
+        for t in rows:
+            entry_time = t.get("timestamp")
+            exit_time = t.get("exit_timestamp") or entry_time
+            pnl = float(t.get("pnl") or 0.0)
+            pnl_pct = _pnl_percent(
+                t.get("side", ""),
+                float(t.get("entry_price") or 0.0),
+                float(t.get("exit_price") or 0.0),
+            )
+            duration = str(exit_time - entry_time) if entry_time and exit_time else ""
+            trades_payload.append(
+                {
+                    "symbol": t.get("symbol"),
+                    "side": t.get("side"),
+                    "entry_price": t.get("entry_price"),
+                    "exit_price": t.get("exit_price"),
+                    "amount": t.get("amount"),
+                    "pnl": pnl,
+                    "pnl_percent": pnl_pct,
+                    "exit_reason": t.get("exit_reason"),
+                    "strategy": "ensemble",
+                    "entry_time": entry_time.isoformat() if entry_time else None,
+                    "exit_time": exit_time.isoformat() if exit_time else None,
+                    "duration": duration,
+                }
+            )
         return {
-            "count": len(trades),
+            "count": len(trades_payload),
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": offset + len(trades_payload) < total,
+            "trades": trades_payload,
+        }
+
+    if hasattr(bot, "performance_tracker") and bot.performance_tracker:
+        # In-memory fallback: the tracker keeps the last N trades in
+        # chronological order, so slice from the end to get newest first.
+        all_trades = list(bot.performance_tracker.trades)
+        total = len(all_trades)
+        newest_first = list(reversed(all_trades))
+        window = newest_first[offset : offset + limit]
+        return {
+            "count": len(window),
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "has_more": offset + len(window) < total,
             "trades": [
                 {
                     "symbol": t.symbol,
@@ -100,10 +165,17 @@ async def get_trade_history(
                     "exit_time": t.exit_time.isoformat(),
                     "duration": str(t.duration),
                 }
-                for t in trades
+                for t in window
             ],
         }
-    return {"count": 0, "trades": []}
+    return {
+        "count": 0,
+        "total": 0,
+        "offset": offset,
+        "limit": limit,
+        "has_more": False,
+        "trades": [],
+    }
 
 
 @router.get("/strategy/performance")

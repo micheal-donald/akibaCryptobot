@@ -301,7 +301,7 @@ When `native_hot_path_ports` are enabled, `/api/status` and `/ws/status` may ret
 |---|---|---|
 | `GET` | `/api/metrics` | Comprehensive metrics: Sharpe, Sortino, profit factor, win rate, drawdown |
 | `GET` | `/api/equity-curve` | Time-series equity data for charting |
-| `GET` | `/api/trades/history?limit=20` | Completed trade log (max 100) |
+| `GET` | `/api/trades/history?limit=20&offset=0` | Completed trade log, newest first, paginated |
 | `GET` | `/api/strategy/performance` | Per-strategy performance breakdown |
 | `GET` | `/api/performance/low-latency` | Low-latency replay/shadow performance summary with decision latency, submit latency, fill quality, and capture health |
 
@@ -337,7 +337,23 @@ When `native_hot_path_ports` are enabled, `/api/status` and `/ws/status` may ret
 
 | Param | Type | Default | Range | Description |
 |---|---|---|---|---|
-| `limit` | int | 20 | 1–100 | Number of recent trades to return |
+| `limit` | int | 20 | 1–100 | Page size |
+| `offset` | int | 0 | ≥ 0 | Number of trades to skip (newest first). Use with `total` / `has_more` in the response to page through history. |
+
+Response envelope:
+
+```json
+{
+  "count": 15,
+  "total": 175,
+  "offset": 0,
+  "limit": 15,
+  "has_more": true,
+  "trades": [ ... ]
+}
+```
+
+When `bot.trade_store` is available the route paginates against the SQLite-backed trade log (deep history). Otherwise it falls back to the in-memory performance tracker cache (last 100 trades).
 
 ---
 
@@ -727,8 +743,3 @@ python start_bot.py --no-api
 ```
 
 API docs: `http://localhost:8000/docs`
-
-
-
-
-

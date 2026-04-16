@@ -853,11 +853,36 @@ class TradeStore:
         logger.info(f"Loaded {len(trades)} open trade(s) from database")
         return trades
 
-    async def load_closed_trades(self) -> List[Dict]:
-        """Return all closed trades ordered by exit time."""
-        cursor = await self._db.execute(
-            "SELECT * FROM trades WHERE status = 'closed' ORDER BY exit_timestamp ASC"
+    async def load_closed_trades(
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        order: str = "asc",
+    ) -> List[Dict]:
+        """Return closed trades ordered by exit time.
+
+        Args:
+            limit: Maximum number of rows to return. ``None`` (default) loads
+                every closed trade — used by the bot hydrate path on startup.
+            offset: Number of rows to skip (pagination).
+            order: ``"asc"`` (default, chronological — required by hydrate) or
+                ``"desc"`` (newest first — used by the Recent Activity UI).
+        """
+        direction = "DESC" if str(order).lower() == "desc" else "ASC"
+        sql = (
+            "SELECT * FROM trades WHERE status = 'closed' "
+            f"ORDER BY exit_timestamp {direction}"
         )
+        params: list = []
+        if limit is not None:
+            sql += " LIMIT ? OFFSET ?"
+            params.extend([int(limit), int(offset)])
+        elif offset:
+            # SQLite requires LIMIT for OFFSET to apply; use -1 (unbounded).
+            sql += " LIMIT -1 OFFSET ?"
+            params.append(int(offset))
+
+        cursor = await self._db.execute(sql, params)
         rows = await cursor.fetchall()
         trades = []
         for row in rows:
@@ -881,6 +906,14 @@ class TradeStore:
             )
         logger.info(f"Loaded {len(trades)} closed trade(s) from database")
         return trades
+
+    async def count_closed_trades(self) -> int:
+        """Return the total number of closed trades (for pagination)."""
+        cursor = await self._db.execute(
+            "SELECT COUNT(*) FROM trades WHERE status = 'closed'"
+        )
+        row = await cursor.fetchone()
+        return int(row[0]) if row else 0
 
     async def load_portfolio_history(self, limit: int = 1000) -> List[Dict]:
         """Return the latest portfolio snapshots."""

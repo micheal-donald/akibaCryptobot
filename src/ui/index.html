@@ -196,6 +196,16 @@
                     id="activity-feed">
                     <div class="text-matrix-dim text-xs text-center py-4">Connecting to trade history...</div>
                 </div>
+                <div id="activity-pagination"
+                    class="hidden mt-3 pt-3 border-t border-matrix-border flex items-center justify-between font-mono text-xs">
+                    <button id="activity-prev" type="button"
+                        class="px-3 py-1 rounded border border-matrix-border text-matrix-dim hover:text-white hover:border-matrix-neon/50 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-matrix-dim disabled:hover:border-matrix-border transition-colors"
+                        disabled>&larr; Prev</button>
+                    <span id="activity-page-label" class="text-matrix-dim">Page 1 of 1</span>
+                    <button id="activity-next" type="button"
+                        class="px-3 py-1 rounded border border-matrix-border text-matrix-dim hover:text-white hover:border-matrix-neon/50 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:text-matrix-dim disabled:hover:border-matrix-border transition-colors"
+                        disabled>Next &rarr;</button>
+                </div>
             </div>
         </div>
 
