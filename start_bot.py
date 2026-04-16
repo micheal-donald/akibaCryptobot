@@ -10,6 +10,7 @@ import sys
 import os
 import argparse
 import logging
+import logging.handlers
 import uvicorn
 
 # Add src directory to path
@@ -19,12 +20,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 def setup_logging(debug=False):
     """Setup basic logging configuration"""
     level = logging.DEBUG if debug else logging.INFO
+    os.makedirs("logs", exist_ok=True)
     logging.basicConfig(
         level=level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler("logs/akiba_crypto_bot_startup.log"),
+            logging.handlers.RotatingFileHandler(
+                "logs/akiba_crypto_bot_startup.log",
+                maxBytes=10 * 1024 * 1024,  # 10 MB
+                backupCount=3,
+            ),
         ],
     )
     return logging.getLogger(__name__)
