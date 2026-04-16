@@ -135,3 +135,38 @@ async def test_runtime_event_router_records_queue_lag_and_persistence_depth() ->
     assert snapshot["queue_depths"]["persistence"] == 1
     assert snapshot["latency"]["queue_lag_ms"]["runtime.event_bus"]["count"] == 1
     assert persistence.enqueued == 1
+
+
+class _RaisingTelemetryService(TelemetryService):
+    """Telemetry stub whose queue-lag sampling always explodes."""
+
+    def record_queue_lag(self, *args, **kwargs):  # type: ignore[override]
+        raise RuntimeError("boom: offset-naive/offset-aware-style failure")
+
+
+@pytest.mark.asyncio
+async def test_router_still_persists_when_queue_lag_metric_raises() -> None:
+    """Regression: a crashing observability sample must not drop routing.
+
+    Before the failure-domain split, a single raise inside record_queue_lag
+    aborted the try block and silently skipped _route_event — persistence
+    writes were lost for every affected event."""
+
+    event_bus: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    telemetry = _RaisingTelemetryService(name="telemetry")
+    persistence = DummyPersistenceService()
+    router = RuntimeEventRouter(
+        name="runtime-router",
+        event_bus=event_bus,
+        persistence_service=persistence,
+        telemetry_service=telemetry,
+    )
+    event = make_event(event_id="evt-isolated")
+
+    await router.start()
+    await event_bus.put(event)
+    await asyncio.wait_for(event_bus.join(), timeout=1.0)
+    await router.stop()
+
+    # Routing must land even though the queue-lag sample raised.
+    assert persistence.enqueued == 1

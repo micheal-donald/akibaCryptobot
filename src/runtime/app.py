@@ -87,16 +87,27 @@ class RuntimeEventRouter:
         while True:
             event = await self.event_bus.get()
             drained_at = datetime.now(timezone.utc)
-            try:
-                if self.event_capture is not None:
+            # Observability failures must not skip routing: a single broken
+            # metric used to swallow the entire try block, silently dropping
+            # persistence and position updates for that event. Each side
+            # effect now gets its own try so a crashing capture or telemetry
+            # sample only costs us that sample.
+            if self.event_capture is not None:
+                try:
                     self.event_capture.capture(event, captured_at=drained_at)
-                if self.telemetry_service is not None:
+                except Exception as exc:
+                    self.logger.warning("event capture failed: %s", exc)
+            if self.telemetry_service is not None:
+                try:
                     self.telemetry_service.record_queue_lag(
                         "runtime.event_bus",
                         event,
                         observed_at=drained_at,
                         depth=self.event_bus.qsize(),
                     )
+                except Exception as exc:
+                    self.logger.warning("queue-lag metric failed: %s", exc)
+            try:
                 await self._route_event(event)
             except Exception as exc:  # pragma: no cover - defensive logging
                 self.logger.warning("runtime event routing failed: %s", exc)
@@ -177,9 +188,7 @@ class RuntimeApp:
     recovery_service: RestartRecoveryService | None = field(
         default=None, init=False, repr=False
     )
-    recovery_report: RecoveryReport | None = field(
-        default=None, init=False, repr=False
-    )
+    recovery_report: RecoveryReport | None = field(default=None, init=False, repr=False)
     event_capture: RuntimeEventCaptureBuffer | None = field(default=None, repr=False)
     native_hot_path_ports: NativeHotPathPorts | None = field(default=None, repr=False)
     native_shadow_snapshot: NativeShadowSnapshot | None = field(
