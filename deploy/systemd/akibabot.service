@@ -15,8 +15,9 @@ RestartSec=10
 TimeoutStartSec=180
 TimeoutStopSec=180
 KillSignal=SIGTERM
-StandardOutput=append:/opt/akibabot/logs/akiba_crypto_bot.log
-StandardError=append:/opt/akibabot/logs/akiba_crypto_bot_error.log
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=akibabot
 
 [Install]
 WantedBy=multi-user.target
