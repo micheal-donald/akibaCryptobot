@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="${REPO_ROOT:-/home/lekim/Projects/akibaCryptobot}"
-SSH_KEY="${SSH_KEY:-/home/lekim/.ssh/akibabot_vultr}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+SSH_KEY="${SSH_KEY:-$HOME/.ssh/akibabot_vultr}"
 REMOTE_HOST="${REMOTE_HOST:-66.42.32.233}"
 REMOTE_USER="${REMOTE_USER:-root}"
 REMOTE_APP_DIR="${REMOTE_APP_DIR:-/opt/akibabot}"

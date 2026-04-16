@@ -167,7 +167,11 @@ async def test_ws_status_surfaces_native_shadow_stale_snapshot(
     runtime_projection: RuntimeProjection,
 ) -> None:
     bridge = NativeShadowCanaryBridge()
-    runtime_app = SimpleNamespace(native_hot_path_ports=NativeHotPathPorts(market_data=object(), execution=object()))
+    runtime_app = SimpleNamespace(
+        native_hot_path_ports=NativeHotPathPorts(
+            market_data=object(), execution=object()
+        )
+    )
     runtime_app.native_shadow_snapshot = bridge.ingest_snapshot(
         IPCEnvelope.create(
             IPCPayloadKind.MARKET_DATA,
@@ -183,7 +187,9 @@ async def test_ws_status_surfaces_native_shadow_stale_snapshot(
         ),
         runtime_app=None,
     )
-    bot = FakeCanaryBot(runtime_projection, native_shadow_snapshot=runtime_app.native_shadow_snapshot)
+    bot = FakeCanaryBot(
+        runtime_projection, native_shadow_snapshot=runtime_app.native_shadow_snapshot
+    )
     monkeypatch.setitem(bot_state, "bot", bot)
     websocket = FakeWebSocket()
 
@@ -203,7 +209,14 @@ async def test_ws_status_surfaces_native_shadow_stale_snapshot(
 async def test_status_route_surfaces_native_shadow_divergence(
     runtime_projection: RuntimeProjection,
 ) -> None:
-    runtime_app = SimpleNamespace(native_hot_path_ports=NativeHotPathPorts(market_data=object(), execution=object()))
+    runtime_app = SimpleNamespace(
+        native_hot_path_ports=NativeHotPathPorts(
+            market_data=object(), execution=object()
+        )
+    )
+    # Use a fresh captured_at so the snapshot is never stale when the status
+    # route compares it against wall-clock time — this test exercises the
+    # divergence branch, not the staleness branch.
     runtime_app.native_shadow_snapshot = ingest_native_shadow_snapshot(
         IPCEnvelope.create(
             IPCPayloadKind.MARKET_DATA,
@@ -214,12 +227,14 @@ async def test_status_route_surfaces_native_shadow_divergence(
                 "runtime_owns_exits": False,
                 "active_position_count": 1,
                 "open_order_count": 1,
-                "captured_at": NOW.isoformat(),
+                "captured_at": datetime.now(timezone.utc).isoformat(),
             },
         ),
         runtime_app=None,
     )
-    bot = FakeCanaryBot(runtime_projection, native_shadow_snapshot=runtime_app.native_shadow_snapshot)
+    bot = FakeCanaryBot(
+        runtime_projection, native_shadow_snapshot=runtime_app.native_shadow_snapshot
+    )
 
     payload = await get_status(bot=bot)
 
