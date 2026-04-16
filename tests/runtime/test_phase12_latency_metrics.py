@@ -37,13 +37,23 @@ class DummyPersistenceService:
         return None, None
 
 
-def make_event(*, event_id: str = "evt-1") -> RuntimeEvent:
+def make_event(
+    *, event_id: str = "evt-1", event_type: str = "market.kline_closed"
+) -> RuntimeEvent:
+    """Build a representative runtime event.
+
+    Defaults to ``market.kline_closed`` because the router skips ephemeral
+    types (``market.tick`` / streaming ``market.kline``) for warm-path
+    persistence — using a persistable event type by default keeps the
+    persistence-related assertions in these tests meaningful.
+    """
+
     ts_exchange = datetime(2026, 4, 5, 10, 0, tzinfo=timezone.utc)
     ts_received = ts_exchange + timedelta(seconds=2)
     return RuntimeEvent(
         meta=EventMeta(
             event_id=event_id,
-            event_type="market.kline",
+            event_type=event_type,
             source="binance.ws.kline.1m",
             symbol="BTCUSDT",
             ts_exchange=ts_exchange,
@@ -137,7 +147,7 @@ def test_telemetry_service_tolerates_naive_timestamps() -> None:
 
 def test_telemetry_service_ignores_negative_exchange_age_samples() -> None:
     telemetry = TelemetryService(name="telemetry")
-    event = make_event(event_id="evt-negative")
+    event = make_event(event_id="evt-negative", event_type="market.kline")
     invalid_received = event.meta.ts_exchange - timedelta(seconds=1)
     invalid_event = RuntimeEvent(
         meta=EventMeta(
@@ -217,3 +227,45 @@ async def test_router_still_persists_when_queue_lag_metric_raises() -> None:
 
     # Routing must land even though the queue-lag sample raised.
     assert persistence.enqueued == 1
+
+
+@pytest.mark.asyncio
+async def test_router_skips_persistence_for_ephemeral_event_types() -> None:
+    """Ticks and streaming partial klines must not reach the warm-path queue.
+
+    Persisting every ``market.tick`` (over 99% of routed events on a typical
+    run) overwhelmed the SQLite writer and tripped the cumulative drop alert,
+    latching the runtime kill switch and silently blocking all entries. The
+    router now filters those types — they remain visible to telemetry but are
+    never enqueued for persistence.
+    """
+
+    event_bus: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    telemetry = TelemetryService(name="telemetry")
+    persistence = DummyPersistenceService()
+    router = RuntimeEventRouter(
+        name="runtime-router",
+        event_bus=event_bus,
+        persistence_service=persistence,
+        telemetry_service=telemetry,
+    )
+    tick = make_event(event_id="evt-tick", event_type="market.tick")
+    streaming_kline = make_event(event_id="evt-streaming", event_type="market.kline")
+    closed_kline = make_event(event_id="evt-closed", event_type="market.kline_closed")
+
+    await router.start()
+    for event in (tick, streaming_kline, closed_kline):
+        await event_bus.put(event)
+    await asyncio.wait_for(event_bus.join(), timeout=1.0)
+    await router.stop()
+
+    # Only the closed kline reached persistence.
+    assert persistence.enqueued == 1
+
+    snapshot = telemetry.get_snapshot()
+    # Telemetry still saw all three — operators keep visibility on tick and
+    # streaming-kline volume even though they bypass persistence.
+    assert snapshot["total_events"] == 3
+    assert snapshot["event_counts"]["market.tick"] == 1
+    assert snapshot["event_counts"]["market.kline"] == 1
+    assert snapshot["event_counts"]["market.kline_closed"] == 1

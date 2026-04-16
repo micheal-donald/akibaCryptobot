@@ -40,6 +40,17 @@ from .projection import build_runtime_projection
 from .service_registry import AsyncService, ServiceRegistry
 
 
+# Event types whose volume makes per-event SQLite persistence untenable and
+# whose payload has no durable consumer. ``market.tick`` is the dominant
+# offender (>99% of routed events on a typical run); the streaming partial
+# ``market.kline`` updates collapse into the durable ``market.kline_closed``
+# row when the candle finalizes, so persisting the in-progress versions adds
+# write amplification without forensic value. These events still flow through
+# telemetry, the in-memory capture buffer (replay), and position routing —
+# only the warm-path audit-log enqueue is skipped.
+EPHEMERAL_EVENT_TYPES: frozenset[str] = frozenset({"market.tick", "market.kline"})
+
+
 @dataclass(slots=True)
 class RuntimeEventRouter:
     """Drain runtime events into warm-path services without blocking execution."""
@@ -120,6 +131,14 @@ class RuntimeEventRouter:
 
         if self.position_service is not None:
             await self._route_position_event(event)
+
+        if event.meta.event_type in EPHEMERAL_EVENT_TYPES:
+            # Ticks and streaming partial klines are deliberately not enqueued
+            # for warm-path persistence. See ``EPHEMERAL_EVENT_TYPES``: their
+            # tick-volume DoSed the SQLite writer (one INSERT+COMMIT per row)
+            # and latched the runtime kill switch via the cumulative drop
+            # alert. Telemetry and capture above still see them.
+            return
 
         enqueued = self.persistence_service.enqueue_event(event)
         if not enqueued and self.telemetry_service is not None:
