@@ -164,6 +164,13 @@ class OperationalAlertEvaluator:
         self._active_alerts: dict[str, OperationalAlertRecord] = {}
         self._training_signature: tuple[str, float | None, str | None] | None = None
         self._training_stuck_count: int = 0
+        # Cumulative drop counter as observed on the previous evaluation. The
+        # drop alert is interval-delta-based: comparing the cumulative count
+        # against a fixed threshold latched the alert forever once the count
+        # passed the line, since cumulative metrics never decrease. Tracking
+        # the previous value lets us evaluate the rate of new drops per
+        # evaluation interval and naturally clear when drops stop.
+        self._last_dropped_event_count: float = 0.0
 
     def evaluate(
         self,
@@ -430,18 +437,25 @@ class OperationalAlertEvaluator:
         )
         if dropped_event_count is None:
             dropped_event_count = _metric_count(runtime_telemetry, "dropped_event")
-        if (
-            dropped_event_count is not None
-            and dropped_event_count >= self.operations.dropped_event_count_threshold
-        ):
-            candidates[ALERT_RUNTIME_EVENT_DROP_DETECTED] = _AlertCandidate(
-                code=ALERT_RUNTIME_EVENT_DROP_DETECTED,
-                severity=ALERT_SEVERITY_CRITICAL,
-                source="telemetry",
-                message="Dropped event count exceeds configured threshold.",
-                recommended_action="inspect_event_pipeline",
-                persist_samples=self.operations.critical_persistence_samples,
-            )
+        if dropped_event_count is not None:
+            # Compare drops since the previous evaluation against the
+            # threshold. A monotonic counter would otherwise latch the alert
+            # forever — once cumulative drops cross the threshold there is no
+            # path back below it. A negative delta (e.g. evaluator restart
+            # against a fresh telemetry counter) re-baselines silently.
+            delta = dropped_event_count - self._last_dropped_event_count
+            if delta < 0:
+                delta = 0.0
+            self._last_dropped_event_count = dropped_event_count
+            if delta >= self.operations.dropped_event_count_threshold:
+                candidates[ALERT_RUNTIME_EVENT_DROP_DETECTED] = _AlertCandidate(
+                    code=ALERT_RUNTIME_EVENT_DROP_DETECTED,
+                    severity=ALERT_SEVERITY_CRITICAL,
+                    source="telemetry",
+                    message="Dropped event count exceeds configured threshold.",
+                    recommended_action="inspect_event_pipeline",
+                    persist_samples=self.operations.critical_persistence_samples,
+                )
 
     def _collect_model_candidates(
         self,

@@ -183,6 +183,84 @@ def test_alert_evaluator_detects_training_stuck_after_repeated_running_samples()
     assert cleared.halt_state == HALT_STATE_NONE
 
 
+def test_event_drop_alert_clears_when_drop_rate_subsides() -> None:
+    """Drop alert must clear when no new drops arrive between evaluations.
+
+    The previous implementation compared the cumulative drop counter against
+    a fixed threshold. A monotonic counter never decreases, so once the alert
+    tripped it stayed tripped forever — which is exactly how the live runtime
+    ended up with ``halt_state=runtime_kill_switch`` permanently set after a
+    transient burst of dropped market.tick persistence jobs. The evaluator
+    now compares the delta since the previous evaluation, so a stable counter
+    naturally clears the alert.
+    """
+
+    evaluator = OperationalAlertEvaluator(
+        OperationsConfig(
+            critical_persistence_samples=1,
+            dropped_event_count_threshold=10,
+        )
+    )
+
+    burst = evaluator.evaluate(
+        runtime_projection=_base_projection(),
+        runtime_telemetry={"dropped_event_count": 25},
+        native_shadow_report={},
+        model_status={},
+        training_job_status={},
+        now=datetime(2026, 4, 16, 11, 19, 0, tzinfo=timezone.utc),
+    )
+    quiet = evaluator.evaluate(
+        runtime_projection=_base_projection(),
+        runtime_telemetry={"dropped_event_count": 25},
+        native_shadow_report={},
+        model_status={},
+        training_job_status={},
+        now=datetime(2026, 4, 16, 11, 19, 15, tzinfo=timezone.utc),
+    )
+
+    assert _codes(burst) == {ALERT_RUNTIME_EVENT_DROP_DETECTED}
+    assert burst.halt_state == HALT_STATE_ENTRIES_BLOCKED
+    # No new drops in the second sample — the alert must clear without a
+    # process restart.
+    assert _codes(quiet) == set()
+    assert quiet.halt_state == HALT_STATE_NONE
+    assert quiet.entries_blocked_reason is None
+
+
+def test_event_drop_alert_refires_on_sustained_drop_rate() -> None:
+    """Sustained drop rate above threshold per interval keeps the alert active."""
+
+    evaluator = OperationalAlertEvaluator(
+        OperationsConfig(
+            critical_persistence_samples=1,
+            dropped_event_count_threshold=10,
+        )
+    )
+
+    first = evaluator.evaluate(
+        runtime_projection=_base_projection(),
+        runtime_telemetry={"dropped_event_count": 25},
+        native_shadow_report={},
+        model_status={},
+        training_job_status={},
+        now=datetime(2026, 4, 16, 11, 19, 0, tzinfo=timezone.utc),
+    )
+    # Another 25 drops between samples → sustained rate above threshold.
+    second = evaluator.evaluate(
+        runtime_projection=_base_projection(),
+        runtime_telemetry={"dropped_event_count": 50},
+        native_shadow_report={},
+        model_status={},
+        training_job_status={},
+        now=datetime(2026, 4, 16, 11, 19, 15, tzinfo=timezone.utc),
+    )
+
+    assert _codes(first) == {ALERT_RUNTIME_EVENT_DROP_DETECTED}
+    assert _codes(second) == {ALERT_RUNTIME_EVENT_DROP_DETECTED}
+    assert second.halt_state == HALT_STATE_ENTRIES_BLOCKED
+
+
 def test_alert_evaluator_understands_real_runtime_snapshot_shapes() -> None:
     evaluator = OperationalAlertEvaluator(
         OperationsConfig(
