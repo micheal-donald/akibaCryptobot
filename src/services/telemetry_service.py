@@ -234,6 +234,8 @@ class TelemetryService(BaseService):
     def _calculate_age_ms(
         start: datetime | None, *, observed_at: datetime | None
     ) -> float | None:
+        start = _as_aware_utc(start)
+        observed_at = _as_aware_utc(observed_at)
         if start is None or observed_at is None:
             return None
         age_ms = (observed_at - start).total_seconds() * 1000.0
@@ -244,3 +246,20 @@ class TelemetryService(BaseService):
     @staticmethod
     def _now() -> datetime:
         return datetime.now(timezone.utc)
+
+
+def _as_aware_utc(value: datetime | None) -> datetime | None:
+    """Coerce a datetime to tz-aware UTC; pass through None unchanged.
+
+    Upstream event sources occasionally leak naive datetimes (notably from
+    ws_gateway._coerce_datetime, which returns naive inputs unchanged).
+    Mixing naive and aware in subtraction raises TypeError, which the
+    router's try/except used to swallow along with the rest of routing.
+    Coerce here so the math never raises — the source-side fix should
+    land separately."""
+
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)

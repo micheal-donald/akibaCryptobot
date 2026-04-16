@@ -88,6 +88,53 @@ def test_telemetry_service_records_age_and_queue_snapshots() -> None:
     ] == pytest.approx(250.0)
 
 
+def test_telemetry_service_tolerates_naive_timestamps() -> None:
+    """Regression: a naive ts_exchange paired with an aware observed_at
+    used to raise TypeError inside _calculate_age_ms and cascade up into
+    the runtime-router warning log. The math layer now coerces to UTC."""
+
+    telemetry = TelemetryService(name="telemetry")
+    naive_exchange = datetime(2026, 4, 5, 10, 0)  # naive on purpose
+    aware_received = datetime(2026, 4, 5, 10, 0, 2, tzinfo=timezone.utc)
+    event = RuntimeEvent(
+        meta=EventMeta(
+            event_id="evt-naive",
+            event_type="market.kline",
+            source="binance.ws.kline.1m",
+            symbol="BTCUSDT",
+            ts_exchange=naive_exchange,
+            ts_received=aware_received,
+        ),
+        payload=KlinePayload(
+            interval="1m",
+            open_time=aware_received,
+            close_time=aware_received,
+            open=100.0,
+            high=101.0,
+            low=99.5,
+            close=100.5,
+            volume=25.0,
+            is_closed=True,
+        ),
+    )
+
+    observed_at = aware_received + timedelta(milliseconds=250)
+    telemetry.record_event(event, observed_at=observed_at)
+    telemetry.record_queue_lag(
+        "runtime.event_bus",
+        event,
+        observed_at=observed_at,
+        depth=1,
+    )
+
+    snapshot = telemetry.get_snapshot()
+    # Both subtractions should have produced finite samples instead of
+    # raising — naive ts_exchange is interpreted as UTC.
+    assert snapshot["latency"]["exchange_age_ms"]["count"] == 1
+    assert snapshot["latency"]["exchange_age_ms"]["last_ms"] == pytest.approx(2000.0)
+    assert snapshot["latency"]["queue_lag_ms"]["runtime.event_bus"]["count"] == 1
+
+
 def test_telemetry_service_ignores_negative_exchange_age_samples() -> None:
     telemetry = TelemetryService(name="telemetry")
     event = make_event(event_id="evt-negative")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter, deque
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, cast
 from uuid import uuid4
 
@@ -22,6 +22,17 @@ from strategies.indicator_cache import IndicatorWindowCache
 
 from .base import BaseService
 from .telemetry_service import TelemetryService
+
+
+def _as_aware_utc(value: datetime) -> datetime:
+    """Coerce a datetime to tz-aware UTC for safe subtraction.
+
+    See telemetry_service._as_aware_utc for background — kept in-module to
+    avoid widening telemetry_service's public surface."""
+
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 @dataclass(slots=True, frozen=True)
@@ -414,6 +425,11 @@ class SignalService(BaseService):
     def _compute_decision_lag_ms(
         candle_close_time: datetime, evaluated_at: datetime
     ) -> float:
+        # Either side can leak in as naive (e.g. ws_gateway forwards a naive
+        # timestamp unchanged). Mixing naive/aware raises TypeError, which
+        # historically cascaded up into the runtime-router warning log.
+        candle_close_time = _as_aware_utc(candle_close_time)
+        evaluated_at = _as_aware_utc(evaluated_at)
         delta = evaluated_at - candle_close_time
         return max(delta.total_seconds() * 1000.0, 0.0)
 
