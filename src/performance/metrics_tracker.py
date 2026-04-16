@@ -6,13 +6,32 @@ max drawdown, profit factor, and other risk-adjusted metrics.
 
 import logging
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass, field
 import pandas as pd
 import numpy as np
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
+
+
+def _as_aware_utc(value):
+    """Coerce a datetime (naive or aware) to tz-aware UTC.
+
+    Legacy equity-curve and hydrate paths may carry naive datetimes from
+    historical in-memory state. Anything new is aware, but be tolerant so
+    arithmetic across old + new data doesn't raise TypeError.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    # Epoch (int/float) fallback
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    return value
 
 
 @dataclass
@@ -67,7 +86,7 @@ class PerformanceMetricsTracker:
 
         # Equity curve tracking
         self.equity_curve: List[Tuple[datetime, float]] = [
-            (datetime.now(), initial_balance)
+            (datetime.now(timezone.utc), initial_balance)
         ]
         self.daily_returns: List[float] = []
         self.daily_balance: Dict[datetime.date, float] = {}
@@ -115,7 +134,7 @@ class PerformanceMetricsTracker:
             "side": side,
             "amount": amount,
             "entry_price": entry_price,
-            "entry_time": datetime.now(),
+            "entry_time": datetime.now(timezone.utc),
             "strategy": strategy,
             "metadata": metadata or {},
         }
@@ -160,7 +179,7 @@ class PerformanceMetricsTracker:
             exit_price=exit_price,
             amount=amount,
             entry_time=entry_trade["entry_time"],
-            exit_time=datetime.now(),
+            exit_time=datetime.now(timezone.utc),
             pnl=pnl,
             pnl_percent=pnl_percent,
             exit_reason=exit_reason,
@@ -207,12 +226,13 @@ class PerformanceMetricsTracker:
 
     def update_equity_curve(self, val: Optional[float] = None):
         """Update equity curve with current balance or provided equity value"""
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         balance_to_record = val if val is not None else self.current_balance
 
         # Ensure we don't add redundant points if nothing changed (optional optimization)
         if self.equity_curve and self.equity_curve[-1][1] == balance_to_record:
-            if (now - self.equity_curve[-1][0]).total_seconds() < 300:  # 5 min
+            last_ts = _as_aware_utc(self.equity_curve[-1][0])
+            if (now - last_ts).total_seconds() < 300:  # 5 min
                 return
 
         self.equity_curve.append((now, balance_to_record))
@@ -235,7 +255,9 @@ class PerformanceMetricsTracker:
             self.peak_balance = self.current_balance
             # End of drawdown period
             if self.current_drawdown_start:
-                drawdown_duration = datetime.now() - self.current_drawdown_start
+                drawdown_duration = datetime.now(timezone.utc) - _as_aware_utc(
+                    self.current_drawdown_start
+                )
                 self.max_drawdown_duration = max(
                     self.max_drawdown_duration, drawdown_duration
                 )
@@ -243,7 +265,7 @@ class PerformanceMetricsTracker:
         else:
             # In drawdown
             if self.current_drawdown_start is None:
-                self.current_drawdown_start = datetime.now()
+                self.current_drawdown_start = datetime.now(timezone.utc)
 
             # Calculate current drawdown
             drawdown = (self.peak_balance - self.current_balance) / self.peak_balance
@@ -402,7 +424,7 @@ class PerformanceMetricsTracker:
         """
         Get metrics summary, optionally hitting TradeStore (SQLite) for historical stats.
         """
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         if use_cache and self._metrics_cache:
             if (
                 self._cache_timestamp
@@ -677,12 +699,12 @@ Generated: {metrics["calculated_at"]}
 
         if not closed_trades:
             # Anchor the start if no trades exist
-            self.equity_curve.append((datetime.now(), self.initial_balance))
+            self.equity_curve.append((datetime.now(timezone.utc), self.initial_balance))
             return
 
         # Add initial anchor point based on first trade's entry
         try:
-            first_entry = closed_trades[0]["timestamp"]
+            first_entry = _as_aware_utc(closed_trades[0]["timestamp"])
             self.equity_curve.append(
                 (first_entry - timedelta(minutes=1), self.initial_balance)
             )
@@ -697,10 +719,10 @@ Generated: {metrics["calculated_at"]}
             pnl = t.get("pnl", 0.0) or 0.0
             fees = t.get("fees", 0.0) or 0.0
 
-            # Parse timestamps
+            # Parse timestamps (normalize to tz-aware UTC)
             try:
-                entry_time = t["timestamp"]
-                exit_time = t.get("exit_timestamp") or entry_time
+                entry_time = _as_aware_utc(t["timestamp"])
+                exit_time = _as_aware_utc(t.get("exit_timestamp") or t["timestamp"])
             except (ValueError, KeyError, TypeError):
                 continue
 
@@ -765,13 +787,14 @@ Generated: {metrics["calculated_at"]}
 
         for point in history:
             try:
-                ts = point["timestamp"]
+                ts = _as_aware_utc(point["timestamp"])
                 val = point["total_value"]
 
                 # Check if this timestamp already exists in the curve (approx)
                 # to avoid doubling up points from both trades and snapshots
                 exists = any(
-                    abs((ts - cts).total_seconds()) < 10 for cts, _ in self.equity_curve
+                    abs((ts - _as_aware_utc(cts)).total_seconds()) < 10
+                    for cts, _ in self.equity_curve
                 )
                 if not exists:
                     self.equity_curve.append((ts, val))
@@ -797,7 +820,7 @@ Generated: {metrics["calculated_at"]}
         """Reset all metrics and trade history"""
         self.trades.clear()
         self.open_trades.clear()
-        self.equity_curve = [(datetime.now(), self.initial_balance)]
+        self.equity_curve = [(datetime.now(timezone.utc), self.initial_balance)]
         self.daily_returns.clear()
         self.daily_balance.clear()
         self.current_balance = self.initial_balance

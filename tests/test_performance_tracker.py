@@ -2,6 +2,8 @@
 Tests for performance metrics tracker
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from performance.metrics_tracker import PerformanceMetricsTracker
 
@@ -318,6 +320,78 @@ class TestPerformanceMetricsTracker:
         assert len(tracker.open_trades) == 0
         assert tracker.current_balance == tracker.initial_balance
         assert tracker.max_drawdown == 0.0
+
+
+class TestHydrateEquityCurveDatetimeSafety:
+    """Regression tests for naive/aware datetime unification.
+
+    The hydrate paths (from TradeStore SQLite) receive tz-aware datetimes,
+    but the tracker previously seeded equity_curve with a naive
+    ``datetime.now()`` which then crashed ``update_equity_curve`` with:
+        can't subtract offset-naive and offset-aware datetimes
+    This broke portfolio_history persistence in bot.update_portfolio_value.
+    """
+
+    def test_initial_equity_curve_timestamp_is_tz_aware(self):
+        tracker = PerformanceMetricsTracker(initial_balance=10000.0)
+        ts, _ = tracker.equity_curve[0]
+        assert ts.tzinfo is not None, "initial equity curve ts must be tz-aware"
+
+    def test_update_equity_curve_after_aware_hydrate_does_not_raise(self):
+        """Hydrate with aware DB timestamps, then call update_equity_curve.
+
+        Before the fix this raised TypeError because equity_curve[0] was naive
+        (from ``datetime.now()`` at init) and equity_curve[-1] was aware (from
+        hydrate), so the ``now - last_ts`` comparison crashed.
+        """
+        tracker = PerformanceMetricsTracker(initial_balance=10000.0)
+
+        aware_ts = datetime.now(timezone.utc) - timedelta(minutes=1)
+        tracker.hydrate_equity_curve([{"timestamp": aware_ts, "total_value": 10100.0}])
+
+        # Must not raise "can't subtract offset-naive and offset-aware"
+        tracker.update_equity_curve(10200.0)
+
+        assert all(ts.tzinfo is not None for ts, _ in tracker.equity_curve)
+
+    def test_hydrate_equity_curve_tolerates_naive_legacy_rows(self):
+        """Legacy rows may still carry naive datetimes; hydrate must not crash."""
+        tracker = PerformanceMetricsTracker(initial_balance=10000.0)
+
+        naive_ts = datetime(2026, 3, 1, 12, 0, 0)  # naive, legacy
+        tracker.hydrate_equity_curve([{"timestamp": naive_ts, "total_value": 10050.0}])
+
+        tracker.update_equity_curve(10075.0)
+        assert all(ts.tzinfo is not None for ts, _ in tracker.equity_curve)
+
+    def test_hydrate_from_db_normalizes_timestamps(self):
+        """hydrate_from_db must produce aware entry/exit times on Trade objects."""
+        tracker = PerformanceMetricsTracker(initial_balance=10000.0)
+
+        aware_entry = datetime(2026, 3, 10, 9, 0, 0, tzinfo=timezone.utc)
+        aware_exit = datetime(2026, 3, 10, 10, 0, 0, tzinfo=timezone.utc)
+
+        tracker.hydrate_from_db(
+            [
+                {
+                    "symbol": "BTC/USDT",
+                    "side": "buy",
+                    "entry_price": 50000.0,
+                    "exit_price": 51000.0,
+                    "amount": 0.1,
+                    "timestamp": aware_entry,
+                    "exit_timestamp": aware_exit,
+                    "pnl": 100.0,
+                    "fees": 0.0,
+                    "exit_reason": "take_profit",
+                }
+            ]
+        )
+
+        # After hydrate, update_equity_curve must not mix naive/aware.
+        tracker.update_equity_curve(10100.0)
+        assert tracker.trades[0].entry_time.tzinfo is not None
+        assert tracker.trades[0].exit_time.tzinfo is not None
 
 
 if __name__ == "__main__":
