@@ -150,8 +150,15 @@ class BinanceWebSocketGateway(MarketDataGateway):
 
     @staticmethod
     def _coerce_datetime(value: Any) -> datetime | None:
+        # Mirror user_data_gateway._coerce_datetime so both Binance WS
+        # surfaces produce tz-aware UTC datetimes. Previously this path
+        # forwarded naive datetimes unchanged, which leaked into
+        # EventMeta.ts_exchange / KlinePayload.close_time and eventually
+        # crashed latency subtractions in the telemetry service.
         if isinstance(value, datetime):
-            return value
+            if value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value.astimezone(timezone.utc)
         if isinstance(value, (int, float)):
             epoch_value = float(value)
             # Binance sends kline timestamps in milliseconds; treat large

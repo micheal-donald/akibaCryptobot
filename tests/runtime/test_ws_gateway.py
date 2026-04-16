@@ -241,3 +241,26 @@ def test_gateway_rejects_unsupported_event_registration() -> None:
 
     with pytest.raises(ValueError, match="unsupported market-data event type"):
         gateway.register_callback("runtime.shutdown", lambda event: None)  # type: ignore[arg-type]
+
+
+def test_coerce_datetime_forces_naive_to_utc() -> None:
+    """Regression: ws_gateway used to forward naive datetimes unchanged,
+    which leaked into EventMeta.ts_exchange and broke tz-aware subtraction
+    in telemetry. It now mirrors user_data_gateway — naive inputs are
+    interpreted as UTC, aware inputs are normalized to UTC."""
+
+    naive = datetime(2026, 4, 5, 10, 0)
+    coerced = BinanceWebSocketGateway._coerce_datetime(naive)
+    assert coerced is not None
+    assert coerced.tzinfo == timezone.utc
+    assert coerced == naive.replace(tzinfo=timezone.utc)
+
+    aware = datetime(2026, 4, 5, 10, 0, tzinfo=timezone.utc)
+    assert BinanceWebSocketGateway._coerce_datetime(aware) == aware
+
+    # Integers still flow through the epoch branch — sanity check that the
+    # new isinstance(datetime) branch didn't swallow numeric inputs.
+    ms_epoch = 1_770_000_000_000
+    assert BinanceWebSocketGateway._coerce_datetime(ms_epoch) == datetime.fromtimestamp(
+        ms_epoch / 1000.0, tz=timezone.utc
+    )
