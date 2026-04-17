@@ -372,37 +372,65 @@ class EnsembleStrategy(BaseStrategy):
         """
         Load pre-trained models from disk for all ML-based strategies.
 
-        Scans the models/ directory for .joblib files matching the pattern
-        <SYMBOL>_freqai.joblib and loads them into the corresponding strategy.
+        For each component strategy that exposes
+        ``load_model_for_symbol(symbol, filepath)``, this routes every
+        discovered ``.joblib`` file through the per-symbol registry using
+        the strategy's own :meth:`symbol_from_model_filename` classmethod
+        (so each strategy owns its filename convention — the ensemble does
+        not hardcode one).
+
+        Strategies without ``load_model_for_symbol`` fall back to the
+        legacy ``load_model(filepath)`` single-slot path, which overwrites
+        on each call. That fallback is kept only for backwards
+        compatibility; any ML strategy that holds more than one model
+        should implement ``load_model_for_symbol``.
 
         Returns:
-            Number of models successfully loaded
+            Number of models successfully loaded.
         """
+
         loaded = 0
 
         if not os.path.exists(models_dir):
             logger.warning(f"Models directory not found: {models_dir}")
             return loaded
 
+        model_files = [f for f in os.listdir(models_dir) if f.endswith(".joblib")]
+        if not model_files:
+            logger.warning(f"No pre-trained model files found in {models_dir}")
+            return loaded
+
         for strategy, _, name in self.strategies:
-            if not hasattr(strategy, "load_model"):
+            supports_registry = hasattr(strategy, "load_model_for_symbol")
+            supports_legacy = hasattr(strategy, "load_model")
+            if not (supports_registry or supports_legacy):
                 continue
 
-            # Find model files for this strategy
-            model_files = [
-                f for f in os.listdir(models_dir) if f.endswith("_freqai.joblib")
-            ]
-
-            if not model_files:
-                logger.warning(f"No pre-trained model files found in {models_dir}")
-                continue
+            parser = getattr(strategy, "symbol_from_model_filename", None)
 
             for model_file in model_files:
                 filepath = os.path.join(models_dir, model_file)
+                symbol = parser(model_file) if callable(parser) else None
+
                 try:
-                    strategy.load_model(filepath)
+                    if supports_registry and symbol is not None:
+                        strategy.load_model_for_symbol(symbol, filepath)
+                        logger.info(
+                            f"✅ Loaded pre-trained model: {model_file} → "
+                            f"{name} ({symbol})"
+                        )
+                    elif supports_legacy:
+                        # Legacy single-slot fallback — either the strategy
+                        # doesn't support the registry yet, or the filename
+                        # doesn't match the strategy's convention.
+                        strategy.load_model(filepath)
+                        logger.info(
+                            f"✅ Loaded pre-trained model (single-slot): "
+                            f"{model_file} → {name}"
+                        )
+                    else:
+                        continue
                     loaded += 1
-                    logger.info(f"✅ Loaded pre-trained model: {model_file} → {name}")
                 except Exception as e:
                     logger.error(f"Failed to load {model_file}: {e}")
 

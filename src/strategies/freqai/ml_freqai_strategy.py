@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from datetime import datetime
 import logging
 import lightgbm as lgb
@@ -20,6 +20,7 @@ if parent_dir not in sys.path:
 from strategies.freqai.base_freqai_strategy import (
     BaseFreqAIStrategy,
 )
+from strategies.freqai.symbol_model_registry import SymbolModelRegistry
 from strategies.base_strategy import TradingSignal, SignalType
 from indicators.technical_indicators import TechnicalIndicators
 
@@ -46,15 +47,53 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
         self.training_n_jobs = int(self.ml_config.get("n_jobs", -1))
         self.feature_columns = []
 
-        # Initialize ML model
+        # Legacy single-slot model — kept so ``train_model`` / ``save_model``
+        # and tests that poke ``self.ml_model`` directly continue to work
+        # unchanged. Runtime inference in the ensemble routes through the
+        # registry below; the single slot is only consulted as a fallback
+        # when the registry is empty (e.g. during training workflows that
+        # haven't persisted yet).
         self.ml_model = None
         self.model_trained = False
         self.model_trained_at = None
         self.model_expired = False
 
+        # Per-symbol model registry. Primary source of truth for models
+        # loaded from disk. EnsembleStrategy.load_models parses the symbol
+        # from each filename and registers each model under its own key,
+        # instead of the prior behavior where load_model(filepath) was
+        # called in a loop and each call overwrote the single slot — which
+        # left only the last-loaded classifier effective at inference time.
+        self.registry = SymbolModelRegistry()
+
         logger.info(
             f"MLFreqAIStrategy initialized with lookahead={self.lookahead_period}"
         )
+
+    # --- Filename ↔ symbol convention -----------------------------------
+
+    _MODEL_FILENAME_SUFFIX = "_freqai.joblib"
+
+    @classmethod
+    def symbol_from_model_filename(cls, filename: str) -> Optional[str]:
+        """Parse ``BTC_USDT_freqai.joblib`` → ``BTCUSDT``.
+
+        Lives on the strategy (not on the ensemble) so each ML strategy
+        owns its own filename convention. ``EnsembleStrategy.load_models``
+        asks the strategy how to parse its own files — that keeps the
+        ensemble open/closed with respect to new strategies.
+
+        Returns ``None`` when the filename doesn't match this strategy's
+        convention; callers should treat that as "fall back to the
+        single-slot load path".
+        """
+
+        if not filename.endswith(cls._MODEL_FILENAME_SUFFIX):
+            return None
+        stem = filename[: -len(cls._MODEL_FILENAME_SUFFIX)]
+        if not stem:
+            return None
+        return SymbolModelRegistry.normalize(stem)
 
     def feature_engineering_standard(
         self, dataframe: pd.DataFrame, **kwargs
@@ -253,20 +292,117 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
         except Exception as e:
             logger.error(f"Error training ML model for {symbol}: {e}")
 
-    def _get_model_prediction(self, features_df: pd.DataFrame) -> Dict:
+    async def generate_signal(
+        self, symbol: str, ohlcv_data: pd.DataFrame, current_price: float
+    ) -> Optional[TradingSignal]:
+        """Symbol-aware override that routes prediction through the registry.
+
+        The parent's ``generate_signal`` assumes a single ``self.ml_model``.
+        After the per-symbol registry change, that assumption is wrong when
+        EnsembleStrategy.load_models has populated multiple models. This
+        override threads the symbol through to ``_get_prediction_for_symbol``
+        so each symbol uses its own classifier.
         """
-        Get prediction from the trained ML model
+        try:
+            if not self.freqai_enabled:
+                logger.warning("FreqAI is not enabled for this strategy")
+                return None
+
+            if not self._has_model_for(symbol):
+                logger.debug(f"No ML model available for {symbol}")
+                return None
+
+            if len(ohlcv_data) < self.lookback_period:
+                logger.warning(
+                    f"Insufficient data for {symbol}: {len(ohlcv_data)} bars"
+                )
+                return None
+
+            features_df = self._generate_features(ohlcv_data)
+            prediction = self._get_prediction_for_symbol(symbol, features_df)
+            logger.debug(f"FreqAI prediction for {symbol}: {prediction}")
+
+            signal = self._prediction_to_signal(prediction, current_price)
+            if signal and self.validate_signal(signal):
+                self.log_signal(signal, symbol)
+                return signal
+            return None
+        except Exception as e:
+            logger.error(f"Error generating FreqAI signal for {symbol}: {e}")
+            return None
+
+    def _has_model_for(self, symbol: str) -> bool:
+        """True if the registry or the single slot can serve a prediction."""
+
+        if self.registry.has(symbol):
+            return True
+        return self.ml_model is not None and self.model_trained
+
+    def _resolve_model(self, symbol: str) -> Tuple[Any, List[str], bool]:
+        """Select ``(model, feature_cols, is_expired)`` for ``symbol``.
+
+        Preference order:
+          1. Registry entry (populated by ``load_model_for_symbol``).
+          2. Single-slot model (``train_model`` / direct attribute assignment
+             / legacy ``load_model``).
+        """
+
+        entry = self.registry.resolve(symbol)
+        if entry is not None:
+            return (
+                entry.model,
+                entry.feature_columns or self.feature_columns,
+                entry.is_expired,
+            )
+        return self.ml_model, self.feature_columns, self.model_expired
+
+    def _get_prediction_for_symbol(
+        self, symbol: str, features_df: pd.DataFrame
+    ) -> Dict:
+        """Registry-aware prediction. Falls back to the single slot if needed."""
+
+        model, feature_cols, is_expired = self._resolve_model(symbol)
+
+        if model is None or not feature_cols:
+            return {"prediction": 0, "confidence": 0.0}
+
+        # Option A: skip expired models entirely — the ensemble will fall
+        # back to momentum-only rather than trade on stale ML output.
+        if is_expired:
+            logger.warning(f"Skipping ML prediction for {symbol} - model is expired")
+            return {"prediction": 0, "confidence": 0.0}
+
+        # iloc[-2:-1] uses the last *completed* candle, not the live partial one.
+        latest_features = features_df[feature_cols].iloc[-2:-1].dropna()
+        if len(latest_features) == 0 or len(latest_features.columns) != len(
+            feature_cols
+        ):
+            return {"prediction": 0, "confidence": 0.0}
+
+        try:
+            prediction_proba = model.predict_proba(latest_features)[0]
+            prediction = model.predict(latest_features)[0]
+            confidence = max(prediction_proba)
+            return {"prediction": int(prediction), "confidence": float(confidence)}
+        except Exception as e:
+            logger.error(f"Error getting ML prediction for {symbol}: {e}")
+            return {"prediction": 0, "confidence": 0.0}
+
+    def _get_model_prediction(self, features_df: pd.DataFrame) -> Dict:
+        """Legacy single-slot prediction path.
+
+        Kept so ``BaseFreqAIStrategy.generate_signal`` (and tests that call
+        ``_get_model_prediction`` directly) keep working when an external
+        caller has not gone through the symbol-aware override. Prefer
+        ``_get_prediction_for_symbol`` in new code.
         """
         if not self.model_trained or self.ml_model is None:
             return {"prediction": 0, "confidence": 0.0}
 
-        # Option A: skip expired models entirely, fall back to HOLD so ensemble
-        # uses momentum-only signal instead of potentially stale ML output.
         if getattr(self, "model_expired", False):
             logger.warning("Skipping ML prediction - model is expired")
             return {"prediction": 0, "confidence": 0.0}
-        # Select only the feature columns that were used for training
-        # We use iloc[-2:-1] to predict using the last *completed* candle, not the live partial candle
+
         latest_features = features_df[self.feature_columns].iloc[-2:-1].dropna()
 
         if len(latest_features) == 0 or len(latest_features.columns) != len(
@@ -274,14 +410,10 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
         ):
             return {"prediction": 0, "confidence": 0.0}
 
-        # Get prediction probabilities
         try:
             prediction_proba = self.ml_model.predict_proba(latest_features)[0]
             prediction = self.ml_model.predict(latest_features)[0]
-
-            # Confidence is the probability of the predicted class
             confidence = max(prediction_proba)
-
             return {"prediction": int(prediction), "confidence": float(confidence)}
         except Exception as e:
             logger.error(f"Error getting ML prediction: {e}")
@@ -341,41 +473,121 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
             )
             logger.info(f"Model saved to {filepath}")
 
-    def load_model(self, filepath: str):
+    def load_model(self, filepath: str) -> None:
+        """Load a trained model into the legacy single slot.
+
+        This is the backwards-compatible path for callers that don't know
+        about the per-symbol registry — direct attribute-set tests,
+        ``train_model`` workflows, and any tool that expects
+        ``self.ml_model`` / ``self.feature_columns`` to be populated after
+        the call.
+
+        New code that wants per-symbol routing (ensembles with multiple
+        pairs) should call :meth:`load_model_for_symbol` instead.
         """
-        Load a trained model from disk and check whether it has expired.
+
+        payload = self._read_model_payload(filepath)
+        if payload is None:
+            return
+        model, feature_columns, model_trained, trained_at, is_expired = payload
+
+        self.ml_model = model
+        self.feature_columns = feature_columns
+        self.model_trained = model_trained
+        self.model_trained_at = trained_at
+        self.model_expired = is_expired
+        self.is_model_trained = True
+
+        logger.info(f"Model loaded from {filepath}")
+
+    def load_model_for_symbol(self, symbol: str, filepath: str) -> None:
+        """Load a trained model into the per-symbol registry.
+
+        ``EnsembleStrategy.load_models`` prefers this method when available
+        so each ``<SYMBOL>_freqai.joblib`` lands in its own slot instead
+        of stomping a single shared one.
+
+        For backwards compatibility, the first registered entry is mirrored
+        into the single-slot fields so external inspectors reading
+        ``self.ml_model`` / ``self.model_trained`` still see a populated
+        strategy. Subsequent registrations do not overwrite the mirror —
+        the registry is the authoritative per-symbol source.
         """
+
+        payload = self._read_model_payload(filepath)
+        if payload is None:
+            return
+        model, feature_columns, model_trained, trained_at, is_expired = payload
+
+        normalized = self.registry.register(
+            symbol,
+            model=model,
+            feature_columns=feature_columns,
+            trained_at=trained_at,
+            is_expired=is_expired,
+        )
+
+        # Keep a non-empty feature_columns fallback for legacy readers.
+        if not self.feature_columns:
+            self.feature_columns = list(feature_columns)
+
+        # Mirror the first-registered model into the single slot so legacy
+        # paths (``_get_model_prediction``, ``save_model``, ``model_trained``
+        # introspection) keep working. Don't clobber an already-populated
+        # slot — that would reintroduce the very stomping we're fixing.
+        if self.ml_model is None:
+            self.ml_model = model
+            self.model_trained = model_trained
+            self.model_trained_at = trained_at
+            self.model_expired = is_expired
+
+        self.is_model_trained = True
+        logger.info(f"Model loaded from {filepath} → {normalized}")
+
+    def _read_model_payload(
+        self, filepath: str
+    ) -> Optional[Tuple[Any, List[str], bool, Optional[datetime], bool]]:
+        """Load + validate a joblib model file. Returns ``None`` on error."""
+
         try:
             model_data = joblib.load(filepath)
-            self.ml_model = model_data["model"]
-            self.feature_columns = model_data["feature_columns"]
-            self.model_trained = model_data["model_trained"]
-            self.is_model_trained = True
-
-            # Check model age against configured expiry window
-            trained_at_str = model_data.get("trained_at")
-            if trained_at_str:
-                self.model_trained_at = datetime.fromisoformat(trained_at_str)
-                max_age_hours = self.freqai_config.get("model_expiry_hours", 48)
-                age_hours = (
-                    datetime.now() - self.model_trained_at
-                ).total_seconds() / 3600
-                if age_hours > max_age_hours:
-                    logger.warning(
-                        f"Model from {filepath} is {age_hours:.1f}h old "
-                        f"(max: {max_age_hours}h) - predictions may be stale"
-                    )
-                    self.model_expired = True
-                else:
-                    self.model_expired = False
-                    logger.info(
-                        f"Model age: {age_hours:.1f}h (within {max_age_hours}h limit)"
-                    )
-            else:
-                # Backwards compat: old models without a timestamp are allowed
-                logger.warning(f"Model {filepath} has no trained_at timestamp")
-                self.model_expired = False
-
-            logger.info(f"Model loaded from {filepath}")
         except Exception as e:
             logger.error(f"Error loading model from {filepath}: {e}")
+            return None
+
+        try:
+            model = model_data["model"]
+            feature_columns = list(model_data["feature_columns"])
+            model_trained = bool(model_data["model_trained"])
+        except (KeyError, TypeError) as e:
+            logger.error(f"Malformed model payload at {filepath}: {e}")
+            return None
+
+        trained_at, is_expired = self._resolve_model_age(
+            filepath, model_data.get("trained_at")
+        )
+        return model, feature_columns, model_trained, trained_at, is_expired
+
+    def _resolve_model_age(
+        self, filepath: str, trained_at_str: Optional[str]
+    ) -> Tuple[Optional[datetime], bool]:
+        """Parse ``trained_at`` and decide whether the model is stale.
+
+        Factored out of the load path so single-slot and per-symbol load
+        use identical expiry logic.
+        """
+
+        if not trained_at_str:
+            logger.warning(f"Model {filepath} has no trained_at timestamp")
+            return None, False
+        trained_at = datetime.fromisoformat(trained_at_str)
+        max_age_hours = self.freqai_config.get("model_expiry_hours", 48)
+        age_hours = (datetime.now() - trained_at).total_seconds() / 3600
+        if age_hours > max_age_hours:
+            logger.warning(
+                f"Model from {filepath} is {age_hours:.1f}h old "
+                f"(max: {max_age_hours}h) - predictions may be stale"
+            )
+            return trained_at, True
+        logger.info(f"Model age: {age_hours:.1f}h (within {max_age_hours}h limit)")
+        return trained_at, False
