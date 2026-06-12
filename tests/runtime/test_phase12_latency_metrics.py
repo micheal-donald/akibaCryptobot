@@ -251,10 +251,15 @@ async def test_router_skips_persistence_for_ephemeral_event_types() -> None:
     )
     tick = make_event(event_id="evt-tick", event_type="market.tick")
     streaming_kline = make_event(event_id="evt-streaming", event_type="market.kline")
+    spread = make_event(event_id="evt-spread", event_type="market.spread")
+    balance_update = make_event(
+        event_id="evt-balance",
+        event_type="execution.balance_update",
+    )
     closed_kline = make_event(event_id="evt-closed", event_type="market.kline_closed")
 
     await router.start()
-    for event in (tick, streaming_kline, closed_kline):
+    for event in (tick, streaming_kline, spread, balance_update, closed_kline):
         await event_bus.put(event)
     await asyncio.wait_for(event_bus.join(), timeout=1.0)
     await router.stop()
@@ -263,9 +268,11 @@ async def test_router_skips_persistence_for_ephemeral_event_types() -> None:
     assert persistence.enqueued == 1
 
     snapshot = telemetry.get_snapshot()
-    # Telemetry still saw all three — operators keep visibility on tick and
-    # streaming-kline volume even though they bypass persistence.
-    assert snapshot["total_events"] == 3
+    # Telemetry still saw all five — operators keep visibility on capture-only
+    # traffic even though those events bypass persistence.
+    assert snapshot["total_events"] == 5
     assert snapshot["event_counts"]["market.tick"] == 1
     assert snapshot["event_counts"]["market.kline"] == 1
+    assert snapshot["event_counts"]["market.spread"] == 1
+    assert snapshot["event_counts"]["execution.balance_update"] == 1
     assert snapshot["event_counts"]["market.kline_closed"] == 1

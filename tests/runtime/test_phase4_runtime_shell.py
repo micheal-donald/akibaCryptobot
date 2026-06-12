@@ -161,6 +161,29 @@ def make_config() -> RuntimeConfig:
     )
 
 
+def test_phase4_runtime_shell_applies_persistence_batch_tuning_from_config() -> None:
+    execution_gateway = FakeExecutionGateway()
+    user_stream_gateway = FakeUserStreamGateway()
+    store = SlowRuntimeStore(events=[], reports=[], delay_seconds=0.01)
+    app = RuntimeApp.build_phase4(
+        RuntimeConfig(
+            symbols=("BTC/USDT",),
+            kline_intervals=("1m",),
+            queue_maxsize=4,
+            max_batch_size=32,
+            flush_interval_seconds=0.4,
+            shadow_mode=False,
+        ),
+        execution_gateway=execution_gateway,
+        runtime_store=store,
+        user_stream_gateway=user_stream_gateway,
+    )
+
+    assert app.persistence_service is not None
+    assert app.persistence_service.max_batch_size == 32
+    assert app.persistence_service.flush_interval_seconds == 0.4
+
+
 def make_order_intent() -> OrderIntentPayload:
     return OrderIntentPayload(
         intent_id="intent-1",

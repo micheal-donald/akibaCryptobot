@@ -37,6 +37,7 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 | [Phase 20 Live Runtime Execution Spec](specs/PHASE_20_LIVE_RUNTIME_EXECUTION_SPEC.md) | Live canary ladder execution, live-stage soak criteria, training restrictions, and rollback drills |
 | [Phase 21 Low-Latency Trading Product Spec](specs/PHASE_21_LOW_LATENCY_TRADING_PRODUCT_SPEC.md) | Order-book capture/replay productization, first microstructure-aware paper strategies, and latency/fill-quality reporting |
 | [Phase 22 Native Hot Path Activation Spec](specs/PHASE_22_NATIVE_HOT_PATH_ACTIVATION_SPEC.md) | First real native-side canary, native market-data/execution shadow validation, and operator-facing mismatch handling |
+| [Operator Dashboard Enhancements Spec](specs/OPERATOR_DASHBOARD_ENHANCEMENTS_SPEC.md) | FreqUI-inspired operator UI track: auth wiring, force-exit per position, circuit-breaker reset, in-app backtests, favicon trade counter |
 | [LLM Agent Iteration Workflow](LLM_AGENT_ITERATION_WORKFLOW.md) | Reusable protocol for phased, spec-driven, worker-assisted development and deployment |
 
 ---

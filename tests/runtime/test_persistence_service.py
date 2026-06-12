@@ -15,6 +15,10 @@ class FakeRuntimeStore:
     reports: list[RecoveryReport]
     fail_events: bool = False
     fail_reports: bool = False
+    fail_begin_batch: bool = False
+    begin_batch_calls: int = 0
+    commit_batch_calls: int = 0
+    rollback_batch_calls: int = 0
 
     async def record_event(self, event: RuntimeEvent) -> None:
         if self.fail_events:
@@ -25,6 +29,17 @@ class FakeRuntimeStore:
         if self.fail_reports:
             raise RuntimeError("report write failed")
         self.reports.append(report)
+
+    async def begin_batch(self) -> None:
+        if self.fail_begin_batch:
+            raise RuntimeError("begin batch failed")
+        self.begin_batch_calls += 1
+
+    async def commit_batch(self) -> None:
+        self.commit_batch_calls += 1
+
+    async def rollback_batch(self) -> None:
+        self.rollback_batch_calls += 1
 
 
 def build_event(event_type: str = "execution.fill") -> RuntimeEvent:
@@ -87,6 +102,61 @@ def test_persistence_service_enqueues_and_persists_events() -> None:
         "dropped_jobs": 0,
     }
     assert service.get_queue_depth() == 0
+
+
+def test_persistence_service_batches_jobs_when_store_supports_transactions() -> None:
+    store = FakeRuntimeStore(events=[], reports=[])
+    service = PersistenceService(
+        name="persistence",
+        runtime_store=store,
+        max_queue_size=8,
+        max_batch_size=8,
+        flush_interval_seconds=0.2,
+    )
+
+    assert service.enqueue_event(build_event("execution.fill"))
+    assert service.enqueue_event(build_event("execution.order_update"))
+    assert service.enqueue_recovery_report(build_recovery_report())
+
+    async def run() -> None:
+        await service.start()
+        assert await service.wait_until_drained(timeout_seconds=1.0)
+        await service.stop()
+
+    asyncio.run(run())
+
+    assert len(store.events) == 2
+    assert len(store.reports) == 1
+    assert store.begin_batch_calls == 1
+    assert store.commit_batch_calls == 1
+    assert store.rollback_batch_calls == 0
+
+
+def test_persistence_service_falls_back_when_batch_begin_fails() -> None:
+    store = FakeRuntimeStore(events=[], reports=[], fail_begin_batch=True)
+    service = PersistenceService(
+        name="persistence",
+        runtime_store=store,
+        max_queue_size=8,
+        max_batch_size=8,
+        flush_interval_seconds=0.2,
+    )
+
+    assert service.enqueue_event(build_event("execution.fill"))
+    assert service.enqueue_recovery_report(build_recovery_report())
+
+    async def run() -> None:
+        await service.start()
+        assert await service.wait_until_drained(timeout_seconds=1.0)
+        await service.stop()
+
+    asyncio.run(run())
+
+    # begin_batch failed, but jobs are still persisted via individual fallback.
+    assert len(store.events) == 1
+    assert len(store.reports) == 1
+    assert store.begin_batch_calls == 0
+    assert store.commit_batch_calls == 0
 
 
 def test_persistence_service_drops_jobs_when_queue_is_full() -> None:
