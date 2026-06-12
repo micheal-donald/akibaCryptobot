@@ -156,6 +156,10 @@ For future HFT operations, the kill-switch must be faster than the strategy can 
 | `metric_counts.reconnect*` increasing repeatedly | The runtime is repeatedly reconnecting a feed or transport | Investigate before promotion |
 | `metric_counts.stale_symbol*` increasing | One or more symbols are going stale | Treat as a market-data problem before promotion |
 | `runtime_start_pending=true` | The runtime is still warming up | Do not roll back yet unless it later turns into `rollback_recommended` |
+| `microstructure.decision_latency.avg_ms` rising | In-process book evaluation is getting slower | Investigate CPU load; unlikely under normal trading; helps separate in-process cost from network latency |
+| `microstructure.pipeline_latency.avg_ms` rising | Websocket-to-decision time is degrading | Usually indicates network jitter or kernel backlog; affects fill timing on tighter strategies |
+| `microstructure.subscribe_failures` non-empty | Depth/trade stream subscribe failed for a symbol | Degrades research surface but non-critical; stream may retry on next start |
+| `microstructure.evaluations` not increasing | The microstructure service has gone silent | Indicates websocket issue or service hang; usually a transient feed problem, investigate logs |
 
 Healthy paper rollout targets are:
 
@@ -379,6 +383,21 @@ Practical operator expectations:
 3. HFT should only be considered when these budgets are consistently met alongside venue-near infrastructure and a native hot path.
 
 Do not read these budgets as a claim that the current production deployment already satisfies HFT SLOs. They are the bar the platform should move toward as the native path becomes real.
+
+#### Phase 21 Microstructure Telemetry in Deployment
+
+When you promote a profile with `runtime.microstructure.enabled=true`, monitor these surfaces during the soak window:
+
+- **Health**: Check that `microstructure.evaluations` is non-zero and growing (depth updates are flowing) and `subscribe_failures` is empty (all streams subscribed).
+- **Latency**: Expect `microstructure.decision_latency.avg_ms` around 0.5–1.0 ms (Python in-process). `pipeline_latency.avg_ms` around 1–2 ms (websocket receive to decision). If either doubles, investigate network jitter or CPU load.
+- **Signal output**: `microstructure.decision_counts` shows the raw decision distribution (buy/sell ratio). This is **not** trade volume — it's paper decisions only. Use it to tune the strategy thresholds (`min_abs_imbalance`, `min_confidence`) based on a day of live data: if 99% are buys, your thresholds are too loose.
+- **Last decision**: The most recent `last_decision` shows symbol, confidence, execution style (passive/aggressive), decision price, and reason (e.g., `bullish_imbalance`). Use it to validate that the strategy is reacting to the market you expect.
+
+Microstructure telemetry failure modes:
+- No evaluations after 60s startup: Websocket not connected or gateway not running; check logs for depth/trade subscription errors.
+- Decision latency > 5 ms consistently: CPU contention or Python GC pause; watch `event_age_ms` to separate in-process cost from network lag.
+- `subscribe_failures` for one symbol: Non-fatal; the stream may retry later or you can redeploy.
+- Decision counts all one action (99% buy/sell): Thresholds too loose; revisit `runtime.microstructure.strategy` config after 24 hours of data.
 
 ---
 

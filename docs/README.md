@@ -42,6 +42,28 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 
 ---
 
+## Phase 21: Live Microstructure Shadow (Latest)
+
+The microstructure paper-shadow path is now live and integrated into the runtime:
+
+- **Live order-book evaluation**: The runtime subscribes to Binance websocket partial-book depth and trade streams and evaluates the `PaperShadowMicrostructureStrategy` on every depth update, **without placing orders** (paper/measurement-only).
+- **Real latency metrics**: Every decision logs `decision_latency_ms` (in-process compute, target < 1 ms) and `pipeline_latency_ms` (websocket receive to decision, target < 2 ms). These are persisted as `microstructure.decision` events for offline fill-quality analysis.
+- **Enabled by default**: Set `runtime.microstructure.enabled = true` in `config/config.json`. Stream subscription failures degrade the research surface but never abort trading startup.
+- **Monitor live**: Check `/api/status` and `/ws/status` under `runtime_telemetry.microstructure` for:
+  - `evaluations` — total depth updates processed
+  - `decision_counts` — { "buy": N, "sell": M, ... }
+  - `decision_latency` / `pipeline_latency` — rolling averages, max, last
+  - `last_decision` — the most recent trade decision (symbol, confidence, price, imbalance, trade pressure, reason)
+
+**What this means operationally:**
+- You now have sub-millisecond order-book-aware signal generation running in parallel with candle-driven strategies.
+- Use the persisted decisions and latency metrics to understand fill quality and whether order-book timing is a viable edge on your infrastructure.
+- Next steps: tighten the strategy thresholds based on a day of live data, then evaluate paper-execution of decisions alongside candle trades.
+
+See [Phase 21 Low-Latency Trading Product Spec](specs/PHASE_21_LOW_LATENCY_TRADING_PRODUCT_SPEC.md) and [Configuration → runtime.microstructure](CONFIGURATION.md#runtimemicrostructure) for details.
+
+---
+
 ## Quick Start
 
 ```bash
