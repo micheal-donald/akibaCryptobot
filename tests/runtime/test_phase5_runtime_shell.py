@@ -152,6 +152,14 @@ class FakeRuntimeStrategy:
         )
 
 
+class FakeDepthMarketDataGateway(FakeMarketDataGateway):
+    async def subscribe_depth(self, symbol: str, depth: int = 10) -> None:
+        self.calls.append(("depth", symbol, depth))
+
+    async def subscribe_trade(self, symbol: str) -> None:
+        self.calls.append(("trade", symbol))
+
+
 def make_config() -> RuntimeConfig:
     return RuntimeConfig(
         symbols=("BTC/USDT",),
@@ -257,3 +265,103 @@ def test_phase5_runtime_shell_routes_blocked_signal_to_risk_without_execution() 
         "market.kline_closed",
         "risk.blocked",
     ]
+
+
+def test_phase5_skips_microstructure_when_gateway_lacks_depth_streams() -> None:
+    app = RuntimeApp.build_phase5(
+        RuntimeConfig(
+            symbols=("BTC/USDT",),
+            kline_intervals=("1m",),
+            shadow_mode=False,
+            microstructure_enabled=True,
+        ),
+        market_data_gateway=FakeMarketDataGateway(),
+        execution_gateway=FakeExecutionGateway(),
+        runtime_store=MemoryRuntimeStore(events=[], reports=[]),
+        strategy=FakeRuntimeStrategy(),
+        user_stream_gateway=FakeUserStreamGateway(),
+    )
+
+    assert app.microstructure_service is None
+    assert "microstructure-shadow" not in app.services.names()
+
+
+def test_phase5_wires_microstructure_shadow_and_persists_decisions() -> None:
+    from domain.events import DepthSnapshotPayload, TradePayload
+
+    market_data_gateway = FakeDepthMarketDataGateway()
+    store = MemoryRuntimeStore(events=[], reports=[])
+    app = RuntimeApp.build_phase5(
+        RuntimeConfig(
+            symbols=("BTC/USDT",),
+            kline_intervals=("1m",),
+            shadow_mode=False,
+            microstructure_enabled=True,
+            microstructure_strategy_params={"min_confidence": 0.1},
+        ),
+        market_data_gateway=market_data_gateway,
+        execution_gateway=FakeExecutionGateway(),
+        runtime_store=store,
+        strategy=FakeRuntimeStrategy(),
+        user_stream_gateway=FakeUserStreamGateway(),
+    )
+
+    assert app.microstructure_service is not None
+    assert "microstructure-shadow" in app.services.names()
+
+    def depth_event(sequence: int) -> RuntimeEvent:
+        return RuntimeEvent(
+            meta=EventMeta(
+                event_id=f"evt-depth-{sequence}",
+                event_type="market.depth",
+                source="binance.ws.depth",
+                symbol="BTCUSDT",
+                ts_exchange=None,
+                ts_received=datetime.now(timezone.utc),
+            ),
+            payload=DepthSnapshotPayload(
+                bids=((100.0, 50.0), (99.9, 40.0)),
+                asks=((100.01, 1.0), (100.05, 1.0)),
+                sequence=sequence,
+            ),
+        )
+
+    def trade_event(index: int) -> RuntimeEvent:
+        return RuntimeEvent(
+            meta=EventMeta(
+                event_id=f"evt-trade-{index}",
+                event_type="market.trade",
+                source="binance.ws.trade",
+                symbol="BTCUSDT",
+                ts_exchange=None,
+                ts_received=datetime.now(timezone.utc),
+            ),
+            payload=TradePayload(price=100.0, quantity=1.0, side="buy"),
+        )
+
+    async def run() -> None:
+        await app.start()
+        assert ("depth", "BTCUSDT", 10) in market_data_gateway.calls
+        assert ("trade", "BTCUSDT") in market_data_gateway.calls
+        for index in range(3):
+            await market_data_gateway.emit("market.trade", trade_event(index))
+        await market_data_gateway.emit("market.depth", depth_event(7))
+        await wait_for(
+            lambda: any(
+                event.meta.event_type == "microstructure.decision"
+                for event in store.events
+            )
+        )
+        await app.stop()
+
+    asyncio.run(run())
+
+    status = app.microstructure_service.get_status()
+    assert status["decision_counts"].get("buy", 0) >= 1
+    decision_events = [
+        event
+        for event in store.events
+        if event.meta.event_type == "microstructure.decision"
+    ]
+    assert decision_events
+    assert decision_events[0].meta.symbol == "BTC/USDT"

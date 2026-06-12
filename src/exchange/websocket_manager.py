@@ -307,6 +307,7 @@ class WebSocketManager:
                             "asks": [
                                 (float(p), float(q)) for p, q in msg.get("asks", [])
                             ],
+                            "sequence": msg.get("lastUpdateId"),
                             "timestamp": datetime.now(),
                         }
 

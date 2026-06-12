@@ -26,7 +26,22 @@
   "runtime": {
     "deployment_profile": "paper_runtime_primary",
     "runtime_mode": "runtime_primary",
-    "shadow_mode": false
+    "shadow_mode": false,
+    "max_batch_size": 64,
+    "flush_interval_seconds": 0.1,
+    "microstructure": {
+      "enabled": true,
+      "depth_levels": 10,
+      "trade_window": 30,
+      "decision_log_size": 256,
+      "strategy": {
+        "min_abs_imbalance": 0.2,
+        "max_spread_bps": 30.0,
+        "min_trade_pressure": 0.05,
+        "min_confidence": 0.55,
+        "latency_budget_ms": 25.0
+      }
+    }
   },
   "operations": {
     "runtime_startup_timeout_seconds": 120,

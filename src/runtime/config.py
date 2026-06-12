@@ -22,6 +22,8 @@ class RuntimeConfig:
     candle_history_limit: int = 2048
     queue_maxsize: int = 0
     event_bus_maxsize: int = 0
+    max_batch_size: int = 64
+    flush_interval_seconds: float = 0.1
     stale_after_seconds: float = 30.0
     housekeeping_interval_seconds: float = 60.0
     market_data_source: str = "binance"
@@ -34,6 +36,11 @@ class RuntimeConfig:
     operations: OperationsConfig | Mapping[str, Any] | None = field(
         default_factory=OperationsConfig
     )
+    microstructure_enabled: bool = False
+    microstructure_depth_levels: int = 10
+    microstructure_trade_window: int = 30
+    microstructure_decision_log_size: int = 256
+    microstructure_strategy_params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.candle_history_limit <= 0:
@@ -42,10 +49,23 @@ class RuntimeConfig:
             raise ValueError("queue_maxsize cannot be negative")
         if self.event_bus_maxsize < 0:
             raise ValueError("event_bus_maxsize cannot be negative")
+        if self.max_batch_size <= 0:
+            raise ValueError("max_batch_size must be positive")
+        if self.flush_interval_seconds < 0:
+            raise ValueError("flush_interval_seconds cannot be negative")
         if self.stale_after_seconds <= 0:
             raise ValueError("stale_after_seconds must be positive")
         if self.housekeeping_interval_seconds <= 0:
             raise ValueError("housekeeping_interval_seconds must be positive")
+        if self.microstructure_depth_levels not in (5, 10, 20):
+            raise ValueError(
+                "microstructure_depth_levels must be 5, 10, or 20 "
+                "(Binance partial-book stream levels)"
+            )
+        if self.microstructure_trade_window <= 0:
+            raise ValueError("microstructure_trade_window must be positive")
+        if self.microstructure_decision_log_size <= 0:
+            raise ValueError("microstructure_decision_log_size must be positive")
 
         if self.queue_maxsize == 0 and self.event_bus_maxsize > 0:
             object.__setattr__(self, "queue_maxsize", self.event_bus_maxsize)
@@ -146,6 +166,16 @@ class RuntimeConfig:
             runtime_section.get("queue_maxsize"),
             default=queue_maxsize,
         )
+        max_batch_size = cls._coerce_int(
+            runtime_section.get("max_batch_size"),
+            runtime_section.get("persistence_max_batch_size"),
+            default=64,
+        )
+        flush_interval_seconds = cls._coerce_float(
+            runtime_section.get("flush_interval_seconds"),
+            runtime_section.get("persistence_flush_interval_seconds"),
+            default=0.1,
+        )
         market_data_source = cls._resolve_market_data_source(
             runtime_section,
             exchange_section,
@@ -160,6 +190,8 @@ class RuntimeConfig:
             ),
             queue_maxsize=queue_maxsize,
             event_bus_maxsize=event_bus_maxsize,
+            max_batch_size=max_batch_size,
+            flush_interval_seconds=flush_interval_seconds,
             stale_after_seconds=cls._coerce_float(
                 runtime_section.get("stale_after_seconds"),
                 default=30.0,
@@ -195,6 +227,35 @@ class RuntimeConfig:
                 default=False,
             ),
             operations=OperationsConfig.from_mapping(operations_section),
+            microstructure_enabled=cls._coerce_bool(
+                cls._as_mapping(runtime_section.get("microstructure")).get("enabled"),
+                default=False,
+            ),
+            microstructure_depth_levels=cls._coerce_int(
+                cls._as_mapping(runtime_section.get("microstructure")).get(
+                    "depth_levels"
+                ),
+                default=10,
+            ),
+            microstructure_trade_window=cls._coerce_int(
+                cls._as_mapping(runtime_section.get("microstructure")).get(
+                    "trade_window"
+                ),
+                default=30,
+            ),
+            microstructure_decision_log_size=cls._coerce_int(
+                cls._as_mapping(runtime_section.get("microstructure")).get(
+                    "decision_log_size"
+                ),
+                default=256,
+            ),
+            microstructure_strategy_params=dict(
+                cls._as_mapping(
+                    cls._as_mapping(runtime_section.get("microstructure")).get(
+                        "strategy"
+                    )
+                )
+            ),
         )
 
     @classmethod

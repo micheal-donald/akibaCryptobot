@@ -10,9 +10,11 @@ from uuid import uuid4
 
 from domain.events import (
     BookTickerPayload,
+    DepthSnapshotPayload,
     EventMeta,
     KlinePayload,
     RuntimeEvent,
+    TradePayload,
 )
 from exchange.websocket_manager import WebSocketManager
 from ports.exchange import (
@@ -26,6 +28,8 @@ _SUPPORTED_EVENT_TYPES = {
     "market.kline",
     "market.kline_closed",
     "market.spread",
+    "market.depth",
+    "market.trade",
 }
 
 
@@ -40,6 +44,10 @@ class _WebSocketManagerLike(Protocol):
     async def subscribe_book_ticker(self, symbol: str) -> None: ...
 
     async def subscribe_kline(self, symbol: str, interval: str = "1m") -> None: ...
+
+    async def subscribe_depth(self, symbol: str, depth: int = 10) -> None: ...
+
+    async def subscribe_trade(self, symbol: str) -> None: ...
 
 
 class BinanceWebSocketGateway(MarketDataGateway):
@@ -83,11 +91,19 @@ class BinanceWebSocketGateway(MarketDataGateway):
     async def subscribe_kline(self, symbol: str, interval: str = "1m") -> None:
         await self._manager.subscribe_kline(symbol, interval=interval)
 
+    async def subscribe_depth(self, symbol: str, depth: int = 10) -> None:
+        await self._manager.subscribe_depth(symbol, depth=depth)
+
+    async def subscribe_trade(self, symbol: str) -> None:
+        await self._manager.subscribe_trade(symbol)
+
     def _ensure_bridges(self) -> None:
         if self._bridges_registered:
             return
         self._manager.register_callback("book_ticker", self._handle_book_ticker)
         self._manager.register_callback("kline", self._handle_kline)
+        self._manager.register_callback("depth", self._handle_depth)
+        self._manager.register_callback("trade", self._handle_trade)
         self._bridges_registered = True
 
     async def _handle_book_ticker(self, data: dict[str, Any]) -> None:
@@ -141,6 +157,54 @@ class BinanceWebSocketGateway(MarketDataGateway):
             ),
         )
         await self._dispatch(event_type, event)
+
+    async def _handle_depth(self, data: dict[str, Any]) -> None:
+        symbol = data.get("symbol") or data.get("s")
+        sequence = data.get("sequence", data.get("lastUpdateId"))
+        event = RuntimeEvent(
+            meta=EventMeta(
+                event_id=uuid4().hex,
+                event_type="market.depth",
+                source="binance.ws.depth",
+                symbol=symbol,
+                ts_exchange=self._coerce_datetime(data.get("timestamp")),
+                ts_received=datetime.now(timezone.utc),
+            ),
+            payload=DepthSnapshotPayload(
+                bids=tuple(
+                    (float(price), float(qty)) for price, qty in data.get("bids", ())
+                ),
+                asks=tuple(
+                    (float(price), float(qty)) for price, qty in data.get("asks", ())
+                ),
+                sequence=int(sequence) if sequence is not None else None,
+            ),
+        )
+        await self._dispatch("market.depth", event)
+
+    async def _handle_trade(self, data: dict[str, Any]) -> None:
+        symbol = data.get("symbol") or data.get("s")
+        # Binance flags the maker side: when the buyer is the maker, the
+        # aggressing (taker) side of the trade was a sell, and vice versa.
+        is_buyer_maker = bool(data.get("is_buyer_maker", data.get("m", False)))
+        event = RuntimeEvent(
+            meta=EventMeta(
+                event_id=uuid4().hex,
+                event_type="market.trade",
+                source="binance.ws.trade",
+                symbol=symbol,
+                ts_exchange=self._coerce_datetime(
+                    data.get("trade_time") or data.get("timestamp")
+                ),
+                ts_received=datetime.now(timezone.utc),
+            ),
+            payload=TradePayload(
+                price=float(data.get("price", data.get("p", 0.0))),
+                quantity=float(data.get("quantity", data.get("q", 0.0))),
+                side="sell" if is_buyer_maker else "buy",
+            ),
+        )
+        await self._dispatch("market.trade", event)
 
     async def _dispatch(self, event_type: EventType, event: RuntimeEvent) -> None:
         for callback in self._callbacks[event_type]:

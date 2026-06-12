@@ -11,6 +11,9 @@ EventType = Literal[
     "market.kline",
     "market.kline_closed",
     "market.spread",
+    "market.depth",
+    "market.trade",
+    "microstructure.decision",
     "signal.order_intent",
     "signal.suppressed",
     "execution.order_submitted",
@@ -55,6 +58,42 @@ class BookTickerPayload:
     bid_qty: float
     ask_price: float
     ask_qty: float
+
+
+@dataclass(slots=True, frozen=True)
+class DepthSnapshotPayload:
+    """Partial-book depth snapshot (top-N levels) from the exchange."""
+
+    bids: tuple[tuple[float, float], ...]
+    asks: tuple[tuple[float, float], ...]
+    sequence: int | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class TradePayload:
+    """Normalized public trade from the exchange trade stream."""
+
+    price: float
+    quantity: float
+    side: Literal["buy", "sell"]
+
+
+@dataclass(slots=True, frozen=True)
+class MicrostructureDecisionPayload:
+    """Paper-shadow decision emitted by the live microstructure service."""
+
+    symbol: str
+    action: str
+    confidence: float
+    execution_style: str
+    decision_price: float | None
+    spread_bps: float | None
+    depth_imbalance: float | None
+    trade_pressure: float | None
+    reason: str
+    decision_latency_ms: float
+    pipeline_latency_ms: float | None = None
+    book_sequence: int | None = None
 
 
 @dataclass(slots=True, frozen=True)

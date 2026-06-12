@@ -19,6 +19,8 @@ MarketDataEventType = Literal[
     "market.kline",
     "market.kline_closed",
     "market.spread",
+    "market.depth",
+    "market.trade",
 ]
 
 MarketDataEventHandler = Callable[[RuntimeEvent], Awaitable[None] | None]
@@ -66,6 +68,23 @@ class MarketDataGateway(Protocol):
     async def subscribe_book_ticker(self, symbol: str) -> None: ...
 
     async def subscribe_kline(self, symbol: str, interval: str = "1m") -> None: ...
+
+
+@runtime_checkable
+class DepthStreamGateway(Protocol):
+    """Optional depth/trade stream surface for microstructure consumers.
+
+    Kept separate from MarketDataGateway so existing gateway fakes remain
+    structurally valid; adapters that support live depth implement both.
+    """
+
+    def register_callback(
+        self, event_type: MarketDataEventType, callback: MarketDataEventHandler
+    ) -> None: ...
+
+    async def subscribe_depth(self, symbol: str, depth: int = 10) -> None: ...
+
+    async def subscribe_trade(self, symbol: str) -> None: ...
 
 
 @runtime_checkable

@@ -5,7 +5,13 @@ from datetime import datetime, timezone
 import pytest
 
 from adapters.binance.ws_gateway import BinanceWebSocketGateway
-from domain.events import BookTickerPayload, KlinePayload, RuntimeEvent
+from domain.events import (
+    BookTickerPayload,
+    DepthSnapshotPayload,
+    KlinePayload,
+    RuntimeEvent,
+    TradePayload,
+)
 
 
 class FakeWebSocketManager:
@@ -30,6 +36,12 @@ class FakeWebSocketManager:
 
     async def subscribe_kline(self, symbol: str, interval: str = "1m") -> None:
         self.calls.append(("kline", symbol, interval))
+
+    async def subscribe_depth(self, symbol: str, depth: int = 10) -> None:
+        self.calls.append(("depth", symbol, depth))
+
+    async def subscribe_trade(self, symbol: str) -> None:
+        self.calls.append(("trade", symbol))
 
 
 def test_gateway_connects_registers_bridges_and_proxies_calls() -> None:
@@ -234,6 +246,85 @@ def test_gateway_normalizes_raw_binance_nested_kline_payloads() -> None:
     assert closed_events[0].payload.open_time == expected_open_time
     assert closed_events[0].payload.close_time == expected_close_time
     assert closed_events[0].payload.is_closed is True
+
+
+def test_gateway_normalizes_depth_events() -> None:
+    manager = FakeWebSocketManager()
+    gateway = BinanceWebSocketGateway(websocket_manager=manager)
+    events: list[RuntimeEvent] = []
+    gateway.register_callback("market.depth", events.append)
+
+    async def run() -> None:
+        await gateway.connect()
+        await gateway.subscribe_depth("BTCUSDT", depth=10)
+        await manager.callbacks["depth"](
+            {
+                "symbol": "BTCUSDT",
+                "bids": [(100.0, 5.0), (99.5, 4.0)],
+                "asks": [(100.1, 1.0), (100.6, 2.0)],
+                "sequence": 12345,
+                "timestamp": datetime(2026, 4, 5, 10, 0, tzinfo=timezone.utc),
+            }
+        )
+
+    import asyncio
+
+    asyncio.run(run())
+
+    assert ("depth", "BTCUSDT", 10) in manager.calls
+    assert len(events) == 1
+    event = events[0]
+    assert event.meta.event_type == "market.depth"
+    assert event.meta.source == "binance.ws.depth"
+    assert event.meta.symbol == "BTCUSDT"
+    assert isinstance(event.payload, DepthSnapshotPayload)
+    assert event.payload.bids == ((100.0, 5.0), (99.5, 4.0))
+    assert event.payload.asks == ((100.1, 1.0), (100.6, 2.0))
+    assert event.payload.sequence == 12345
+
+
+def test_gateway_normalizes_trade_events_with_taker_side() -> None:
+    manager = FakeWebSocketManager()
+    gateway = BinanceWebSocketGateway(websocket_manager=manager)
+    events: list[RuntimeEvent] = []
+    gateway.register_callback("market.trade", events.append)
+
+    async def run() -> None:
+        await gateway.connect()
+        await gateway.subscribe_trade("BTCUSDT")
+        # Buyer is maker → the aggressing side was a sell.
+        await manager.callbacks["trade"](
+            {
+                "symbol": "BTCUSDT",
+                "price": 100.5,
+                "quantity": 0.25,
+                "trade_time": 1_743_480_120_500,
+                "is_buyer_maker": True,
+            }
+        )
+        await manager.callbacks["trade"](
+            {
+                "symbol": "BTCUSDT",
+                "price": 100.6,
+                "quantity": 0.5,
+                "trade_time": 1_743_480_120_900,
+                "is_buyer_maker": False,
+            }
+        )
+
+    import asyncio
+
+    asyncio.run(run())
+
+    assert ("trade", "BTCUSDT") in manager.calls
+    assert len(events) == 2
+    first, second = events
+    assert first.meta.event_type == "market.trade"
+    assert isinstance(first.payload, TradePayload)
+    assert first.payload.side == "sell"
+    assert first.payload.price == 100.5
+    assert second.payload.side == "buy"
+    assert second.payload.quantity == 0.5
 
 
 def test_gateway_rejects_unsupported_event_registration() -> None:

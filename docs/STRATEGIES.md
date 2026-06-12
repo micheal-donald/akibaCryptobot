@@ -61,8 +61,21 @@ The current contract is intentionally small:
 Operating assumptions:
 
 - this strategy is not a candle/indicator strategy
-- it is designed for captured/replayed order-book data
+- it runs against captured/replayed order-book data and, when
+  `runtime.microstructure.enabled` is set, against live websocket depth/trade
+  streams through `src/services/microstructure_shadow_service.py`
 - it should run in paper shadow before any ownership cutover
+
+Live paper-shadow wiring:
+
+- the runtime subscribes partial-book depth and trade streams per configured symbol
+- every depth update refreshes a local `OrderBookService` book and produces a
+  `MicrostructureFeatureVector` (spread, depth imbalance, trade pressure)
+- strategy decisions are logged, counted, and persisted as
+  `microstructure.decision` events with decision latency (in-process compute)
+  and pipeline latency (websocket receive to decision) so fill-quality and
+  latency reports can be built offline
+- no orders are placed from this path; it is measurement-only
 
 Signal interpretation:
 

@@ -6,6 +6,7 @@ import asyncio
 import logging
 import inspect
 from dataclasses import asdict, dataclass, field
+from dataclasses import fields as dataclass_fields
 from datetime import datetime, timezone
 from typing import Iterable
 
@@ -16,6 +17,7 @@ from domain.events import (
     RuntimeEvent,
 )
 from ports.exchange import (
+    DepthStreamGateway,
     ExecutionGateway,
     MarketDataBootstrapGateway,
     MarketDataGateway,
@@ -25,6 +27,7 @@ from ports.native_hot_path import NativeHotPathPorts
 from ports.persistence import RuntimeStore
 from services.execution_service import ExecutionService
 from services.market_data_service import MarketDataService
+from services.microstructure_shadow_service import MicrostructureShadowService
 from services.persistence_service import PersistenceService
 from services.position_service import PositionService
 from services.recovery_service import RecoveryReport, RestartRecoveryService
@@ -40,15 +43,33 @@ from .projection import build_runtime_projection
 from .service_registry import AsyncService, ServiceRegistry
 
 
-# Event types whose volume makes per-event SQLite persistence untenable and
-# whose payload has no durable consumer. ``market.tick`` is the dominant
-# offender (>99% of routed events on a typical run); the streaming partial
-# ``market.kline`` updates collapse into the durable ``market.kline_closed``
-# row when the candle finalizes, so persisting the in-progress versions adds
-# write amplification without forensic value. These events still flow through
-# telemetry, the in-memory capture buffer (replay), and position routing —
-# only the warm-path audit-log enqueue is skipped.
-EPHEMERAL_EVENT_TYPES: frozenset[str] = frozenset({"market.tick", "market.kline"})
+# High-volume hot-path events kept out of warm-path SQLite persistence.
+# They still flow through telemetry and the in-memory event-capture ring.
+CAPTURE_ONLY_EVENT_TYPES: frozenset[str] = frozenset(
+    {"market.tick", "market.kline", "market.spread", "execution.balance_update"}
+)
+
+# Event types with durable value that should be enqueued for warm-path
+# persistence. Materialized events are written into typed tables by the
+# runtime store; generic control/debug events stay in the fallback log table.
+PERSISTED_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "market.kline_closed",
+        "microstructure.decision",
+        "signal.order_intent",
+        "signal.suppressed",
+        "execution.order_submitted",
+        "execution.order_update",
+        "execution.fill",
+        "execution.order_rejected",
+        "position.opened",
+        "position.protective_submitted",
+        "position.closed",
+        "risk.blocked",
+        "timer.housekeeping",
+        "runtime.shutdown",
+    }
+)
 
 
 @dataclass(slots=True)
@@ -132,12 +153,14 @@ class RuntimeEventRouter:
         if self.position_service is not None:
             await self._route_position_event(event)
 
-        if event.meta.event_type in EPHEMERAL_EVENT_TYPES:
-            # Ticks and streaming partial klines are deliberately not enqueued
-            # for warm-path persistence. See ``EPHEMERAL_EVENT_TYPES``: their
-            # tick-volume DoSed the SQLite writer (one INSERT+COMMIT per row)
-            # and latched the runtime kill switch via the cumulative drop
-            # alert. Telemetry and capture above still see them.
+        event_type = event.meta.event_type
+        if event_type in CAPTURE_ONLY_EVENT_TYPES:
+            # Telemetry and event-capture still observe these hot-path events,
+            # but warm-path persistence intentionally skips them.
+            return
+
+        if event_type not in PERSISTED_EVENT_TYPES:
+            # Unknown event types are non-fatal and non-persisted by default.
             return
 
         enqueued = self.persistence_service.enqueue_event(event)
@@ -188,6 +211,9 @@ class RuntimeApp:
         default=None, init=False, repr=False
     )
     signal_service: SignalService | None = field(default=None, init=False, repr=False)
+    microstructure_service: MicrostructureShadowService | None = field(
+        default=None, init=False, repr=False
+    )
     signal_event_source: asyncio.Queue[RuntimeEvent] | None = field(
         default=None, init=False, repr=False
     )
@@ -270,6 +296,8 @@ class RuntimeApp:
                 "last_failure_reason": last_failure_reason,
             }
         snapshot["event_bus_depth"] = self.event_bus.qsize()
+        if self.microstructure_service is not None:
+            snapshot["microstructure"] = self.microstructure_service.get_status()
         snapshot["captured_at"] = datetime.now(timezone.utc).isoformat()
         return snapshot
 
@@ -370,6 +398,8 @@ class RuntimeApp:
             name="persistence",
             runtime_store=runtime_store,
             max_queue_size=config.queue_maxsize or 256,
+            max_batch_size=config.max_batch_size,
+            flush_interval_seconds=config.flush_interval_seconds,
         )
         app.telemetry_service = TelemetryService(name="telemetry")
         app.event_router = RuntimeEventRouter(
@@ -446,6 +476,16 @@ class RuntimeApp:
 
         app.register_service("market-data", app.market_data_service)
         app.register_service("signal", app.signal_service)
+        app.microstructure_service = cls._build_microstructure_service(
+            config,
+            market_data_gateway,
+            event_bus=app.event_bus,
+            telemetry_service=app.telemetry_service,
+        )
+        if app.microstructure_service is not None:
+            # Registered after market-data so the gateway is connected before
+            # depth/trade streams are subscribed.
+            app.register_service("microstructure-shadow", app.microstructure_service)
         if trade_store is not None and config.runtime_mode.runtime_enabled:
             app.recovery_service = RestartRecoveryService(
                 name="recovery",
@@ -457,6 +497,53 @@ class RuntimeApp:
             )
             app.register_service("recovery", app.recovery_service)
         return app
+
+    @staticmethod
+    def _build_microstructure_service(
+        config: RuntimeConfig,
+        market_data_gateway: MarketDataGateway,
+        *,
+        event_bus: asyncio.Queue[RuntimeEvent],
+        telemetry_service: TelemetryService | None,
+    ) -> MicrostructureShadowService | None:
+        if not config.microstructure_enabled:
+            return None
+        if not isinstance(market_data_gateway, DepthStreamGateway):
+            logging.getLogger(__name__).warning(
+                "microstructure shadow enabled but gateway %s does not "
+                "support depth/trade streams; skipping",
+                type(market_data_gateway).__name__,
+            )
+            return None
+
+        from strategies.microstructure.paper_shadow_strategy import (
+            PaperShadowMicrostructureStrategy,
+        )
+
+        valid_params = {
+            field.name for field in dataclass_fields(PaperShadowMicrostructureStrategy)
+        }
+        params = dict(config.microstructure_strategy_params)
+        unknown = set(params) - valid_params
+        if unknown:
+            logging.getLogger(__name__).warning(
+                "ignoring unknown microstructure strategy params: %s",
+                sorted(unknown),
+            )
+        strategy = PaperShadowMicrostructureStrategy(
+            **{key: value for key, value in params.items() if key in valid_params}
+        )
+        return MicrostructureShadowService(
+            name="microstructure-shadow",
+            gateway=market_data_gateway,
+            runtime_config=config,
+            strategy=strategy,
+            event_bus=event_bus,
+            telemetry_service=telemetry_service,
+            depth_levels=config.microstructure_depth_levels,
+            trade_window=config.microstructure_trade_window,
+            decision_log_size=config.microstructure_decision_log_size,
+        )
 
     async def start(self) -> None:
         if self.is_running:

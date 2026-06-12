@@ -14,6 +14,8 @@ def test_runtime_config_from_mapping_supports_phase_two_fields() -> None:
                 "kline_intervals": ["1m", "15m"],
                 "candle_history_limit": 512,
                 "queue_maxsize": 64,
+                "max_batch_size": 48,
+                "flush_interval_seconds": 0.25,
                 "stale_after_seconds": 45,
                 "market_data_source": "binance",
                 "sandbox_execution": True,
@@ -28,6 +30,8 @@ def test_runtime_config_from_mapping_supports_phase_two_fields() -> None:
     assert config.candle_history_limit == 512
     assert config.queue_maxsize == 64
     assert config.event_bus_maxsize == 64
+    assert config.max_batch_size == 48
+    assert config.flush_interval_seconds == 0.25
     assert config.stale_after_seconds == 45.0
     assert config.market_data_source == "binance"
     assert config.sandbox_execution is True
@@ -222,7 +226,77 @@ def test_runtime_config_rejects_mismatched_queue_sizes() -> None:
         )
 
 
+def test_runtime_config_rejects_non_positive_batch_size() -> None:
+    with pytest.raises(ValueError, match="max_batch_size"):
+        RuntimeConfig(
+            symbols=("BTC/USDT",),
+            kline_intervals=("1m",),
+            max_batch_size=0,
+        )
+
+
+def test_runtime_config_rejects_negative_flush_interval() -> None:
+    with pytest.raises(ValueError, match="flush_interval_seconds"):
+        RuntimeConfig(
+            symbols=("BTC/USDT",),
+            kline_intervals=("1m",),
+            flush_interval_seconds=-0.1,
+        )
+
+
 def test_runtime_config_defaults_to_one_minute_interval_when_unspecified() -> None:
     config = RuntimeConfig.from_mapping({})
 
     assert config.kline_intervals == ("1m",)
+
+
+def test_runtime_config_microstructure_defaults_to_disabled() -> None:
+    config = RuntimeConfig.from_mapping({})
+
+    assert config.microstructure_enabled is False
+    assert config.microstructure_depth_levels == 10
+    assert config.microstructure_trade_window == 30
+    assert config.microstructure_decision_log_size == 256
+    assert config.microstructure_strategy_params == {}
+
+
+def test_runtime_config_parses_microstructure_section() -> None:
+    config = RuntimeConfig.from_mapping(
+        {
+            "runtime": {
+                "symbols": ["BTC/USDT"],
+                "kline_intervals": ["1m"],
+                "microstructure": {
+                    "enabled": True,
+                    "depth_levels": 20,
+                    "trade_window": 50,
+                    "decision_log_size": 128,
+                    "strategy": {
+                        "min_abs_imbalance": 0.3,
+                        "min_confidence": 0.6,
+                    },
+                },
+            }
+        }
+    )
+
+    assert config.microstructure_enabled is True
+    assert config.microstructure_depth_levels == 20
+    assert config.microstructure_trade_window == 50
+    assert config.microstructure_decision_log_size == 128
+    assert config.microstructure_strategy_params == {
+        "min_abs_imbalance": 0.3,
+        "min_confidence": 0.6,
+    }
+
+
+def test_runtime_config_rejects_unsupported_depth_levels() -> None:
+    with pytest.raises(ValueError, match="microstructure_depth_levels"):
+        RuntimeConfig.from_mapping(
+            {
+                "runtime": {
+                    "symbols": ["BTC/USDT"],
+                    "microstructure": {"enabled": True, "depth_levels": 7},
+                }
+            }
+        )

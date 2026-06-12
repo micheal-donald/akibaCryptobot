@@ -96,9 +96,29 @@ It is additive: if the section is omitted, the bot stays on the legacy loop.
 | `sandbox_market_data` | bool | `false` | Runtime market-data testnet toggle |
 | `queue_maxsize` | int | `0` | Shared queue bound; `0` keeps the queue unbounded |
 | `event_bus_maxsize` | int | `0` | Alias for `queue_maxsize` |
+| `max_batch_size` | int | `64` | Maximum number of warm-path persistence jobs to flush in one transactional batch |
+| `flush_interval_seconds` | float | `0.1` | Maximum time to wait for additional persistence jobs before flushing a partial batch |
 | `candle_history_limit` | int | `2048` | Rolling candle buffer length |
 | `stale_after_seconds` | float | `30.0` | Staleness cutoff for market data |
 | `housekeeping_interval_seconds` | float | `60.0` | Background housekeeping cadence |
+| `microstructure` | object | omitted | Live paper-shadow microstructure loop; see `runtime.microstructure` below |
+
+#### `runtime.microstructure`
+
+Enables the live paper-shadow microstructure service. The service never places
+orders: it subscribes to websocket depth and trade streams, maintains local
+order books, evaluates the microstructure strategy on every depth update, and
+persists `microstructure.decision` events with decision and pipeline latency
+for offline analysis. Stream subscription failures degrade this surface but do
+not abort runtime startup.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | bool | `false` | Turn the live microstructure shadow service on |
+| `depth_levels` | int | `10` | Partial-book stream levels; must be `5`, `10`, or `20` (Binance partial-book streams) |
+| `trade_window` | int | `30` | Number of recent trades used for trade-pressure features |
+| `decision_log_size` | int | `256` | Bounded in-memory decision log exposed through runtime telemetry |
+| `strategy` | object | `{}` | Overrides for `PaperShadowMicrostructureStrategy` fields: `min_abs_imbalance`, `max_spread_bps`, `min_trade_pressure`, `min_confidence`, `latency_budget_ms`, `prefer_passive_execution`. Unknown keys are ignored with a warning |
 
 Rollout guidance:
 

@@ -101,7 +101,8 @@ flowchart TB
 | **Performance Tracker** | `src/performance/metrics_tracker.py` | Sharpe, Sortino, drawdown, profit factor, equity curve |
 | **Runtime Telemetry** | `src/services/telemetry_service.py` | In-memory event counts, queue depth, ingress age, exchange age, queue lag snapshots |
 | **Order Book Service** | `src/services/order_book_service.py` | Normalized local depth state with queryable best bid/ask and depth windows |
-| **Microstructure Features** | `src/indicators/microstructure_features.py` | Spread, depth imbalance, and replay-driven trade-pressure features for research and future low-latency strategies |
+| **Microstructure Features** | `src/indicators/microstructure_features.py` | Spread, depth imbalance, and trade-pressure features for live and replayed order-book data |
+| **Microstructure Shadow Service** | `src/services/microstructure_shadow_service.py` | Live paper-shadow loop: subscribes websocket depth/trade streams, maintains local books, evaluates the microstructure strategy per depth update, and emits `microstructure.decision` events with decision/pipeline latency |
 | **Native Hot-Path Ports** | `src/ports/native_market_data.py`, `src/ports/native_execution.py`, `src/ports/native_hot_path.py` | Abstract boundary contracts for a future native market-data/execution data plane |
 | **Native IPC Protocol** | `src/runtime/ipc_protocol.py` | Versioned JSON envelope format for the Python/native hot-path boundary |
 | **Native Shadow Bridge** | `src/runtime/native_shadow.py` | Read-only Python/native comparison bridge used for dual-run mismatch reporting |
@@ -161,6 +162,13 @@ Interpretation is intentionally conservative:
 - `startup_pending` is not a rollback signal by itself; it only means the runtime is still warming up.
 
 Runtime event capture uses `src/runtime/event_capture.py` to write a bounded JSONL record of hot-path events for offline debugging. Replay support is for test and investigation flows, not for live hot-path execution.
+
+Runtime persistence now follows three lanes:
+
+- capture-only events (`market.tick`, streaming `market.kline`, `market.spread`, `execution.balance_update`) stay out of warm-path SQLite writes and remain visible through telemetry plus capture/replay buffers
+- materialized events (`market.kline_closed`, signal/risk/execution/position lifecycle events) are written into typed runtime tables in `runtime.db`
+- low-volume control/debug events (`signal.suppressed`, `timer.housekeeping`, `runtime.shutdown`) stay in the generic `runtime_events` log
+- warm-path persistence drains in small transactional batches (size/time bounded) to avoid one-commit-per-event write amplification
 
 ### HFT Replay Boundary
 
