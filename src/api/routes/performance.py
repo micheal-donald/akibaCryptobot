@@ -1,10 +1,12 @@
 """Performance metrics and low-latency reporting endpoints."""
 
 import inspect
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import get_bot
+from performance.metrics_tracker import _lttb_downsample
 
 router = APIRouter()
 
@@ -51,27 +53,53 @@ async def get_metrics(bot=Depends(get_bot)):
     return bot.strategy_manager.get_all_performance()
 
 
+EQUITY_RANGES = {
+    "1d": timedelta(days=1),
+    "7d": timedelta(days=7),
+    "30d": timedelta(days=30),
+    "90d": timedelta(days=90),
+    "all": None,
+}
+
+EQUITY_MAX_POINTS = 500
+
+
 @router.get("/equity-curve")
-async def get_equity_curve(bot=Depends(get_bot)):
-    """Get time-series equity data for charting."""
-    if hasattr(bot, "performance_tracker") and bot.performance_tracker:
-        curve = bot.performance_tracker.equity_curve
+async def get_equity_curve(
+    range: str = Query(default="all", pattern="^(1d|7d|30d|90d|all)$"),
+    bot=Depends(get_bot),
+):
+    """Get time-series equity data for charting.
+
+    Returns Lightweight Charts-ready points: epoch-second ``time`` keys,
+    strictly increasing, windowed to ``range`` and downsampled (LTTB) to
+    at most EQUITY_MAX_POINTS points.
+    """
+    delta = EQUITY_RANGES[range]
+    since = datetime.now(timezone.utc) - delta if delta else None
+
+    tracker = getattr(bot, "performance_tracker", None)
+    if tracker:
+        points = tracker.get_equity_points(since=since, max_points=EQUITY_MAX_POINTS)
         return {
-            "data": [
-                {
-                    "timestamp": ts.isoformat(),
-                    "balance": balance,
-                }
-                for ts, balance in curve
-            ]
+            "range": range,
+            "initial_balance": tracker.initial_balance,
+            "data": [{"time": t, "value": v} for t, v in points],
         }
 
-    # Fallback: use portfolio value history
+    # Fallback: portfolio value history has no timestamps; approximate them
+    # from the 60s trading cycle, ending now, so the chart still renders.
+    history = list(bot.portfolio_value_history)
+    now = int(datetime.now(timezone.utc).timestamp())
+    points = [(now - (len(history) - 1 - i) * 60, val) for i, val in enumerate(history)]
+    if since is not None:
+        cutoff = int(since.timestamp())
+        points = [p for p in points if p[0] >= cutoff]
+    points = _lttb_downsample(points, EQUITY_MAX_POINTS)
     return {
-        "data": [
-            {"index": i, "balance": val}
-            for i, val in enumerate(bot.portfolio_value_history)
-        ]
+        "range": range,
+        "initial_balance": history[0] if history else None,
+        "data": [{"time": t, "value": v} for t, v in points],
     }
 
 

@@ -394,5 +394,106 @@ class TestHydrateEquityCurveDatetimeSafety:
         assert tracker.trades[0].exit_time.tzinfo is not None
 
 
+class TestEquityPoints:
+    """Test suite for chart-ready equity point extraction"""
+
+    def _tracker_with_curve(self, points):
+        tracker = PerformanceMetricsTracker(initial_balance=10000.0)
+        tracker.equity_curve = list(points)
+        return tracker
+
+    def test_points_sorted_and_epoch_seconds(self):
+        base = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+        tracker = self._tracker_with_curve(
+            [
+                (base + timedelta(minutes=10), 10200.0),
+                (base, 10000.0),
+                (base + timedelta(minutes=5), 10100.0),
+            ]
+        )
+
+        points = tracker.get_equity_points()
+
+        times = [t for t, _ in points]
+        assert times == sorted(times)
+        assert all(isinstance(t, int) for t in times)
+        assert points[0] == (int(base.timestamp()), 10000.0)
+        assert points[-1][1] == 10200.0
+
+    def test_duplicate_seconds_keep_last_value(self):
+        base = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+        tracker = self._tracker_with_curve(
+            [
+                (base, 10000.0),
+                (base + timedelta(microseconds=500), 10050.0),
+                (base + timedelta(minutes=1), 10100.0),
+            ]
+        )
+
+        points = tracker.get_equity_points()
+
+        assert len(points) == 2
+        assert points[0] == (int(base.timestamp()), 10050.0)
+
+    def test_since_window_keeps_anchor_point(self):
+        base = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+        tracker = self._tracker_with_curve(
+            [
+                (base, 10000.0),
+                (base + timedelta(hours=1), 10100.0),
+                (base + timedelta(hours=2), 10200.0),
+            ]
+        )
+
+        points = tracker.get_equity_points(since=base + timedelta(hours=1, minutes=30))
+
+        # One anchor before the window + the in-window point
+        assert len(points) == 2
+        assert points[0][1] == 10100.0
+        assert points[1][1] == 10200.0
+
+    def test_downsampling_caps_points_and_keeps_endpoints(self):
+        base = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        curve = [(base + timedelta(minutes=i), 10000.0 + (i % 50)) for i in range(5000)]
+        tracker = self._tracker_with_curve(curve)
+
+        points = tracker.get_equity_points(max_points=500)
+
+        assert len(points) == 500
+        assert points[0][0] == int(base.timestamp())
+        assert points[-1][0] == int((base + timedelta(minutes=4999)).timestamp())
+
+    def test_naive_datetimes_tolerated(self):
+        base = datetime(2026, 7, 1, 12, 0, 0)  # naive
+        tracker = self._tracker_with_curve(
+            [
+                (base, 10000.0),
+                (base.replace(tzinfo=timezone.utc) + timedelta(minutes=1), 10100.0),
+            ]
+        )
+
+        points = tracker.get_equity_points()
+
+        assert len(points) == 2
+
+    def test_hydrate_equity_curve_current_balance_is_chronological_last(self):
+        tracker = PerformanceMetricsTracker(initial_balance=10000.0)
+        tracker.equity_curve = []
+        base = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+        # History arrives out of order: newest snapshot first
+        tracker.hydrate_equity_curve(
+            [
+                {"timestamp": base + timedelta(hours=2), "total_value": 10500.0},
+                {"timestamp": base, "total_value": 10000.0},
+                {"timestamp": base + timedelta(hours=1), "total_value": 9800.0},
+            ]
+        )
+
+        assert tracker.current_balance == 10500.0
+        times = [t for t, _ in tracker.equity_curve]
+        assert times == sorted(times)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

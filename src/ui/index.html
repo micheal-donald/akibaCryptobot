@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Space+Grotesk:wght@400;600;700&display=swap"
         rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5/dist/lightweight-charts.standalone.production.js"></script>
     <link rel="stylesheet" href="/css/style.css">
     <script>
         tailwind.config = {
@@ -172,14 +172,29 @@
                         </svg>
                         Portfolio Performance
                     </h2>
-                    <div id="strategy-label" class="text-xs font-mono text-matrix-dim"></div>
+                    <div class="flex items-center space-x-3">
+                        <div id="chart-range-selector" class="flex items-center rounded border border-matrix-border overflow-hidden font-mono text-[11px]">
+                            <button type="button" data-range="1d" class="chart-range-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">1D</button>
+                            <button type="button" data-range="7d" class="chart-range-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">7D</button>
+                            <button type="button" data-range="30d" class="chart-range-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">30D</button>
+                            <button type="button" data-range="all" class="chart-range-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">ALL</button>
+                        </div>
+                        <div id="strategy-label" class="text-xs font-mono text-matrix-dim"></div>
+                    </div>
                 </div>
-                <div class="relative flex-grow w-full">
-                    <canvas id="pnlChart"></canvas>
+                <div class="relative flex-grow w-full min-h-[280px]">
+                    <div id="pnlChart" class="absolute inset-0"></div>
                 </div>
                 <div id="chart-empty"
                     class="hidden flex-grow flex items-center justify-center text-matrix-dim text-sm font-mono">
                     Awaiting equity data...
+                </div>
+                <!-- Attribution required by the Lightweight Charts license -->
+                <div class="mt-2 text-right">
+                    <a href="https://www.tradingview.com/" target="_blank" rel="noopener"
+                        class="text-[10px] font-mono text-matrix-dim/60 hover:text-matrix-dim transition-colors">
+                        Charts by TradingView
+                    </a>
                 </div>
             </div>
 

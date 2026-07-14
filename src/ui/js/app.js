@@ -7,7 +7,7 @@
  *   GET  /api/balance             -> balance card
  *   GET  /api/trades              -> active positions table + count card
  *   GET  /api/metrics             -> PnL, win rate, sharpe, drawdown cards
- *   GET  /api/equity-curve        -> Chart.js line chart
+ *   GET  /api/equity-curve        -> Lightweight Charts baseline chart
  *   GET  /api/trades/history      -> recent activity feed
  *   GET  /api/strategy            -> strategy label + selector options
  *   GET  /api/config              -> config bar
@@ -93,7 +93,10 @@ const dom = {
 
 let isBotRunning = false;
 let isTradingPaused = false;
-let chartInstance = null;
+let equityChart = null;
+let equitySeries = null;
+let equityRange = '7d';
+let equityNeedsFit = true;
 let latestPrices = {};
 let wsLastPing = Date.now();
 let latestStatusSnapshot = null;
@@ -107,6 +110,7 @@ async function init() {
     setupStrategySelector();
     setupWebSockets();
     wireActivityPagination();
+    wireChartRangeSelector();
 
     // Initial REST data fetch (parallel)
     await Promise.allSettled([
@@ -306,9 +310,11 @@ async function fetchMetrics() {
 
 async function fetchEquityCurve() {
     try {
-        const res = await fetch(`${API_BASE}/equity-curve`);
+        const res = await fetch(`${API_BASE}/equity-curve?range=${equityRange}`);
         const data = await res.json();
-        const points = data.data || [];
+        const points = (data.data || []).filter(
+            p => Number.isFinite(p.time) && Number.isFinite(p.value)
+        );
 
         if (points.length === 0) {
             dom.pnlChart.classList.add('hidden');
@@ -319,20 +325,33 @@ async function fetchEquityCurve() {
         dom.pnlChart.classList.remove('hidden');
         dom.chartEmpty.classList.add('hidden');
 
-        const labels = points.map(p => {
-            if (p.timestamp) {
-                const d = new Date(p.timestamp);
-                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-            }
-            return String(p.index ?? '');
-        });
-        const values = points.map(p => p.balance);
-
-        renderChart(labels, values);
+        renderEquityChart(points, data.initial_balance);
     } catch (e) {
         dom.pnlChart.classList.add('hidden');
         dom.chartEmpty.classList.remove('hidden');
     }
+}
+
+function wireChartRangeSelector() {
+    document.querySelectorAll('.chart-range-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.range === equityRange) return;
+            equityRange = btn.dataset.range;
+            equityNeedsFit = true;
+            updateRangeButtons();
+            fetchEquityCurve();
+        });
+    });
+    updateRangeButtons();
+}
+
+function updateRangeButtons() {
+    document.querySelectorAll('.chart-range-btn').forEach(btn => {
+        const active = btn.dataset.range === equityRange;
+        btn.classList.toggle('bg-matrix-neon/10', active);
+        btn.classList.toggle('text-matrix-neon', active);
+        btn.classList.toggle('text-matrix-dim', !active);
+    });
 }
 
 const ACTIVITY_PAGE_SIZE = 15;
@@ -738,67 +757,68 @@ async function fetchStrategyPerformance() {
     }
 }
 
-// ─── Chart.js ────────────────────────────────────────────────────
+// ─── Equity Chart (TradingView Lightweight Charts) ───────────────
 
-function renderChart(labels, values) {
-    const ctx = dom.pnlChart.getContext('2d');
+function ensureEquityChart() {
+    if (equityChart) return;
 
-    const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-    gradient.addColorStop(0, 'rgba(0, 255, 65, 0.15)');
-    gradient.addColorStop(1, 'rgba(0, 255, 65, 0)');
-
-    if (chartInstance) {
-        chartInstance.data.labels = labels;
-        chartInstance.data.datasets[0].data = values;
-        chartInstance.update();
-        return;
-    }
-
-    chartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                label: 'Portfolio Value',
-                data: values,
-                borderColor: '#00FF41',
-                backgroundColor: gradient,
-                borderWidth: 2,
-                pointBackgroundColor: '#000000',
-                pointBorderColor: '#00FF41',
-                pointBorderWidth: 2,
-                pointRadius: 3,
-                pointHoverRadius: 5,
-                fill: true,
-                tension: 0.4
-            }]
+    equityChart = LightweightCharts.createChart(dom.pnlChart, {
+        autoSize: true,
+        layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#008F11',
+            fontFamily: "'Space Grotesk', sans-serif",
+            // Attribution is rendered as a visible link below the chart
+            attributionLogo: false,
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    backgroundColor: '#06120E',
-                    titleColor: '#008F11',
-                    bodyColor: '#00FF41',
-                    borderColor: '#0A291A',
-                    borderWidth: 1,
-                    displayColors: false
-                }
-            },
-            scales: {
-                x: {
-                    grid: { color: '#0A291A', drawBorder: false },
-                    ticks: { color: '#008F11', font: { family: 'Space Grotesk', size: 11 }, maxTicksLimit: 8 }
-                },
-                y: {
-                    grid: { color: '#0A291A', drawBorder: false },
-                    ticks: { color: '#008F11', font: { family: 'VT323', size: 13 } }
-                }
-            }
-        }
+        grid: {
+            vertLines: { color: '#0A291A' },
+            horzLines: { color: '#0A291A' },
+        },
+        rightPriceScale: { borderColor: '#0A291A' },
+        timeScale: {
+            borderColor: '#0A291A',
+            timeVisible: true,
+            secondsVisible: false,
+        },
+        crosshair: {
+            vertLine: { color: '#008F11', labelBackgroundColor: '#06120E' },
+            horzLine: { color: '#008F11', labelBackgroundColor: '#06120E' },
+        },
+        localization: {
+            priceFormatter: p => '$' + p.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }),
+        },
     });
+
+    equitySeries = equityChart.addSeries(LightweightCharts.BaselineSeries, {
+        baseValue: { type: 'price', price: 0 },
+        topLineColor: '#00FF41',
+        topFillColor1: 'rgba(0, 255, 65, 0.20)',
+        topFillColor2: 'rgba(0, 255, 65, 0.02)',
+        bottomLineColor: '#EF4444',
+        bottomFillColor1: 'rgba(239, 68, 68, 0.02)',
+        bottomFillColor2: 'rgba(239, 68, 68, 0.20)',
+        lineWidth: 2,
+        priceLineVisible: false,
+    });
+}
+
+function renderEquityChart(points, initialBalance) {
+    ensureEquityChart();
+
+    // Green above the starting balance, red below it
+    const baseline = Number.isFinite(initialBalance) ? initialBalance : points[0].value;
+    equitySeries.applyOptions({ baseValue: { type: 'price', price: baseline } });
+    equitySeries.setData(points);
+
+    // Fit only on first load / range switch so polling doesn't reset zoom
+    if (equityNeedsFit) {
+        equityChart.timeScale().fitContent();
+        equityNeedsFit = false;
+    }
 }
 
 // ─── WebSockets ──────────────────────────────────────────────────

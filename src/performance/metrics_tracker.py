@@ -34,6 +34,50 @@ def _as_aware_utc(value):
     return value
 
 
+def _lttb_downsample(
+    points: List[Tuple[float, float]], threshold: int
+) -> List[Tuple[float, float]]:
+    """Largest-Triangle-Three-Buckets downsampling.
+
+    Reduces a sorted (time, value) series to ``threshold`` points while
+    preserving visual shape (peaks, troughs, drawdown spikes), unlike
+    naive bucketing which flattens extremes.
+    """
+    n = len(points)
+    if threshold >= n or threshold < 3:
+        return list(points)
+
+    sampled = [points[0]]
+    bucket_size = (n - 2) / (threshold - 2)
+    a = 0  # index of the last selected point
+
+    for i in range(threshold - 2):
+        start = int(i * bucket_size) + 1
+        end = min(int((i + 1) * bucket_size) + 1, n - 1)
+        next_start = end
+        next_end = min(int((i + 2) * bucket_size) + 1, n)
+        next_count = max(next_end - next_start, 1)
+        avg_x = sum(p[0] for p in points[next_start:next_end]) / next_count
+        avg_y = sum(p[1] for p in points[next_start:next_end]) / next_count
+
+        ax, ay = points[a]
+        best_area = -1.0
+        best_idx = start
+        for j in range(start, end):
+            area = abs(
+                (ax - avg_x) * (points[j][1] - ay) - (ax - points[j][0]) * (avg_y - ay)
+            )
+            if area > best_area:
+                best_area = area
+                best_idx = j
+
+        sampled.append(points[best_idx])
+        a = best_idx
+
+    sampled.append(points[-1])
+    return sampled
+
+
 @dataclass
 class Trade:
     """Represents a completed trade"""
@@ -596,6 +640,51 @@ class PerformanceMetricsTracker:
         df = pd.DataFrame(self.equity_curve, columns=["timestamp", "balance"])
         return df
 
+    def get_equity_points(
+        self, since: Optional[datetime] = None, max_points: int = 500
+    ) -> List[Tuple[int, float]]:
+        """
+        Get the equity curve as chart-ready (epoch_seconds, balance) points.
+
+        Guarantees strictly increasing timestamps (charting libraries such
+        as Lightweight Charts reject duplicates/out-of-order data), windows
+        to ``since``, and LTTB-downsamples to at most ``max_points``.
+
+        Args:
+            since: Only include points at/after this time. The last point
+                before the window is kept as an anchor so the line spans
+                the full visible range.
+            max_points: Downsampling target; <3 disables downsampling.
+        """
+        raw: List[Tuple[float, float]] = []
+        anchor: Optional[Tuple[float, float]] = None
+        for ts, balance in self.equity_curve:
+            try:
+                aware = _as_aware_utc(ts)
+                point = (aware.timestamp(), float(balance))
+            except (TypeError, ValueError, AttributeError, OSError):
+                continue
+            if since is not None and aware < since:
+                if anchor is None or point[0] > anchor[0]:
+                    anchor = point
+                continue
+            raw.append(point)
+
+        if anchor is not None:
+            raw.append(anchor)
+        raw.sort(key=lambda p: p[0])
+
+        # Keep the last value per second so timestamps are strictly increasing
+        deduped: List[Tuple[int, float]] = []
+        for t, v in raw:
+            t = int(t)
+            if deduped and deduped[-1][0] == t:
+                deduped[-1] = (t, v)
+            else:
+                deduped.append((t, v))
+
+        return _lttb_downsample(deduped, max_points)
+
     def export_trades_to_dataframe(self) -> pd.DataFrame:
         """
         Export all trades to DataFrame for analysis
@@ -814,6 +903,10 @@ Generated: {metrics["calculated_at"]}
 
         # Sort curve by time
         self.equity_curve.sort(key=lambda x: x[0])
+        if self.equity_curve:
+            # Iteration above tracked the last-seen snapshot; the balance
+            # must reflect the chronologically last point instead.
+            self.current_balance = self.equity_curve[-1][1]
         self._metrics_cache = None
 
     def reset(self):

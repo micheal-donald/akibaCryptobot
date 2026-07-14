@@ -300,10 +300,30 @@ When `native_hot_path_ports` are enabled, `/api/status` and `/ws/status` may ret
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/metrics` | Comprehensive metrics: Sharpe, Sortino, profit factor, win rate, drawdown |
-| `GET` | `/api/equity-curve` | Time-series equity data for charting |
+| `GET` | `/api/equity-curve?range=7d` | Time-series equity data for charting (Lightweight Charts format) |
 | `GET` | `/api/trades/history?limit=20&offset=0` | Completed trade log, newest first, paginated |
 | `GET` | `/api/strategy/performance` | Per-strategy performance breakdown |
 | `GET` | `/api/performance/low-latency` | Low-latency replay/shadow performance summary with decision latency, submit latency, fill quality, and capture health |
+
+**Query parameters** (`GET /api/equity-curve`):
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `range` | string | `all` | Time window: `1d`, `7d`, `30d`, `90d`, or `all`. The last point before the window is included as an anchor so the line spans the full range. |
+
+Points are sorted, strictly increasing per second, and LTTB-downsampled to at most 500 points regardless of history length. `time` is epoch seconds (UTC) — the format TradingView Lightweight Charts consumes directly.
+
+**Example response** (`GET /api/equity-curve?range=7d`):
+```json
+{
+  "range": "7d",
+  "initial_balance": 10000.0,
+  "data": [
+    { "time": 1752192000, "value": 10000.0 },
+    { "time": 1752195600, "value": 10142.5 }
+  ]
+}
+```
 
 **Example response** (`GET /api/performance/low-latency`):
 ```json
