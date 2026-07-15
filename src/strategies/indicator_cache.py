@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from domain.models import Candle
+
+# Binance closes candles at open + interval - 1ms, so a perfectly
+# consecutive candle opens strictly *after* the previous close. Only a
+# separation wider than this tolerance is a real data gap.
+DEFAULT_GAP_TOLERANCE = timedelta(seconds=1)
 
 
 @dataclass(slots=True)
@@ -19,10 +24,16 @@ class _WindowState:
 class IndicatorWindowCache:
     """Store bounded per-symbol, per-timeframe candle windows."""
 
-    def __init__(self, *, max_window_size: int = 2048) -> None:
+    def __init__(
+        self,
+        *,
+        max_window_size: int = 2048,
+        gap_tolerance: timedelta = DEFAULT_GAP_TOLERANCE,
+    ) -> None:
         if max_window_size < 1:
             raise ValueError("max_window_size must be at least 1")
         self.max_window_size = max_window_size
+        self.gap_tolerance = gap_tolerance
         self._windows: dict[tuple[str, str], _WindowState] = {}
 
     def append_candle(self, symbol: str, timeframe: str, candle: Candle) -> str | None:
@@ -31,7 +42,7 @@ class IndicatorWindowCache:
         state = self._get_state(symbol, timeframe)
         invalidation_reason: str | None = None
         if state.last_close_time is not None:
-            if candle.open_time > state.last_close_time:
+            if candle.open_time > state.last_close_time + self.gap_tolerance:
                 self.invalidate(symbol, timeframe, reason="gap")
                 state = self._get_state(symbol, timeframe)
                 invalidation_reason = "gap"
@@ -44,6 +55,21 @@ class IndicatorWindowCache:
         state.last_close_time = candle.close_time
         state.invalidated_reason = None
         return invalidation_reason
+
+    def seed_window(
+        self, symbol: str, timeframe: str, candles: "list[Candle] | tuple[Candle, ...]"
+    ) -> None:
+        """Replace a window with bootstrap/backfill history.
+
+        Skips gap/stale checks: the caller vouches for the candles being
+        ordered history (e.g. REST bootstrap), so the window is usable
+        immediately instead of waiting a full lookback of live candles.
+        """
+        state = self._get_state(symbol, timeframe)
+        state.candles.clear()
+        state.candles.extend(candles)
+        state.last_close_time = state.candles[-1].close_time if state.candles else None
+        state.invalidated_reason = None
 
     def get_window(self, symbol: str, timeframe: str) -> tuple[Candle, ...]:
         """Return the current bounded candle window."""

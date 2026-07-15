@@ -89,6 +89,49 @@ def test_indicator_window_cache_returns_stale_invalidation_reason() -> None:
     assert [c.close for c in cache.get_window("ETH/USDT", "1m")] == [3200.0]
 
 
+def make_binance_candle(index: int, *, interval_minutes: int = 15) -> Candle:
+    """Candle following Binance's convention: close = open + interval - 1ms."""
+    base = datetime(2026, 7, 15, 0, 0, tzinfo=timezone.utc)
+    open_time = base + timedelta(minutes=index * interval_minutes)
+    close_time = open_time + timedelta(minutes=interval_minutes, milliseconds=-1)
+    price = 65000.0 + index
+    return Candle(
+        open_time=open_time,
+        close_time=close_time,
+        open=price - 10.0,
+        high=price + 10.0,
+        low=price - 15.0,
+        close=price,
+        volume=12.5,
+    )
+
+
+def test_consecutive_binance_candles_accumulate_without_gap() -> None:
+    """Binance closes at open + interval - 1ms; the next open is 1ms after
+    the previous close. That must not count as a gap (regression: every
+    candle used to invalidate the window, so strategies only ever saw 1 bar).
+    """
+    cache = IndicatorWindowCache(max_window_size=10)
+
+    reasons = [
+        cache.append_candle("BTC/USDT", "15m", make_binance_candle(i)) for i in range(5)
+    ]
+
+    assert reasons == [None, None, None, None, None]
+    assert len(cache.get_window("BTC/USDT", "15m")) == 5
+
+
+def test_missing_binance_candle_still_invalidates_as_gap() -> None:
+    cache = IndicatorWindowCache(max_window_size=10)
+
+    cache.append_candle("BTC/USDT", "15m", make_binance_candle(0))
+    cache.append_candle("BTC/USDT", "15m", make_binance_candle(1))
+    reason = cache.append_candle("BTC/USDT", "15m", make_binance_candle(3))
+
+    assert reason == "gap"
+    assert len(cache.get_window("BTC/USDT", "15m")) == 1
+
+
 def test_indicator_window_cache_explicit_gap_mark_clears_window() -> None:
     cache = IndicatorWindowCache(max_window_size=4)
 

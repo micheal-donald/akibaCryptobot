@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections import Counter, deque
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 from uuid import uuid4
 
@@ -177,6 +177,16 @@ class SignalService(BaseService):
                 )
                 return
 
+        if not self.indicator_cache.get_window(symbol, payload.interval):
+            seeded = self._seed_window_from_market_state(
+                symbol, payload.interval, before_open_time=payload.open_time
+            )
+            if seeded and self.telemetry_service is not None:
+                self.telemetry_service.record_metric("indicator_cache_seeded")
+                self.telemetry_service.record_metric(
+                    f"indicator_cache_seeded.{payload.interval}"
+                )
+
         candle = Candle(
             open_time=payload.open_time,
             close_time=payload.close_time,
@@ -279,6 +289,65 @@ class SignalService(BaseService):
             position=position,
             generated_at=generated_at,
         )
+
+    _INTERVAL_SUFFIX_SECONDS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
+
+    @classmethod
+    def _interval_to_timedelta(cls, interval: str) -> timedelta | None:
+        interval = interval.strip().lower()
+        if len(interval) < 2:
+            return None
+        multiplier = cls._INTERVAL_SUFFIX_SECONDS.get(interval[-1])
+        if multiplier is None:
+            return None
+        try:
+            value = float(interval[:-1])
+        except ValueError:
+            return None
+        return timedelta(seconds=value * multiplier)
+
+    def _seed_window_from_market_state(
+        self, symbol: str, timeframe: str, *, before_open_time: datetime
+    ) -> int:
+        """Backfill an empty indicator window from market-data candle buffers.
+
+        The market-data service bootstraps REST history and keeps buffers
+        updated from live klines, but that history never reached strategy
+        evaluation — after every restart the window rebuilt one live candle
+        at a time (a full lookback of dead air). Seeding closes that gap.
+
+        Returns the number of seeded candles (0 when nothing was seeded).
+        """
+        state = self._resolve_symbol_state(symbol)
+        buffers = getattr(state, "candle_buffers", None) or {}
+        buffer = buffers.get(timeframe)
+        if not buffer:
+            return 0
+        interval_delta = self._interval_to_timedelta(timeframe)
+        if interval_delta is None:
+            return 0
+
+        history: list[Candle] = []
+        for candle in buffer:
+            # Exclude the candle currently being processed (and anything
+            # newer) — its live version is appended right after seeding.
+            if _as_aware_utc(candle.open_time) >= _as_aware_utc(before_open_time):
+                continue
+            # Bootstrap candles carry close_time == open_time; synthesize
+            # the Binance convention so the live-append gap check holds.
+            if candle.close_time <= candle.open_time:
+                candle = replace(
+                    candle,
+                    close_time=candle.open_time
+                    + interval_delta
+                    - timedelta(milliseconds=1),
+                )
+            history.append(candle)
+
+        if not history:
+            return 0
+        self.indicator_cache.seed_window(symbol, timeframe, history)
+        return len(history)
 
     def _resolve_symbol_state(self, symbol: str) -> SymbolState | None:
         source = self.market_state_source

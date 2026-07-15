@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
+from collections import deque
+from datetime import datetime, timedelta, timezone
 
 from domain.events import EventMeta, KlinePayload, OrderIntentPayload, RuntimeEvent
 from domain.state import PositionState, PositionStatus
-from domain.models import SymbolState
+from domain.models import Candle, SymbolState
 from services.signal_service import SignalService, SignalSuppressedPayload
 from services.telemetry_service import TelemetryService
 
@@ -283,3 +284,95 @@ def test_signal_service_isolates_strategy_exceptions() -> None:
     assert event.payload.reason == "strategy_exception"
     assert service.get_exception_counts()["strategy_exception"] == 1
     assert service.get_suppression_counts()["strategy_exception"] == 1
+
+
+def make_bootstrap_candle(minute: int) -> Candle:
+    """Bootstrap-style candle: close_time == open_time (REST history)."""
+    open_time = datetime(2026, 3, 22, 8, 0, tzinfo=timezone.utc) + timedelta(
+        minutes=minute
+    )
+    return Candle(
+        open_time=open_time,
+        close_time=open_time,
+        open=64990.0 + minute,
+        high=65010.0 + minute,
+        low=64980.0 + minute,
+        close=65000.0 + minute,
+        volume=10.0,
+    )
+
+
+def make_seeded_market_state(minutes: range) -> FakeMarketStateSource:
+    state = SymbolState(symbol="BTC/USDT", last_price=65050.0)
+    state.candle_buffers["1m"] = deque(
+        make_bootstrap_candle(minute) for minute in minutes
+    )
+    return FakeMarketStateSource(state=state)
+
+
+def test_signal_service_seeds_window_from_market_state_buffers() -> None:
+    """A restart must not cost a full lookback of live candles: the first
+    closed candle seeds the window from the market-data bootstrap buffers."""
+    source: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    output: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    service = SignalService(
+        name="signal",
+        strategy=FakeRuntimeStrategy(),
+        event_bus=output,
+        event_source=source,
+        market_state_source=make_seeded_market_state(range(55, 60)),
+        supported_timeframes=("1m",),
+    )
+
+    async def run() -> None:
+        await _run_service_once(
+            service,
+            source,
+            make_kline_event(
+                open_time=datetime(2026, 3, 22, 9, 0, tzinfo=timezone.utc),
+                close_time=datetime(2026, 3, 22, 9, 1, tzinfo=timezone.utc),
+            ),
+        )
+
+    asyncio.run(run())
+
+    snapshot = service.strategy.snapshots[0]
+    # 5 seeded bootstrap candles + the live closed candle
+    assert len(snapshot.closed_candles) == 6
+    # Seeded candles got Binance-convention close times (no false gap)
+    seeded = snapshot.closed_candles[0]
+    assert seeded.close_time == seeded.open_time + timedelta(minutes=1, milliseconds=-1)
+    assert snapshot.closed_candles[-1].close == 65050.0
+
+
+def test_seeding_excludes_current_and_newer_buffer_candles() -> None:
+    """If the market-data service already buffered the closing candle, the
+    seed must not duplicate it — the live version is appended right after."""
+    source: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    output: asyncio.Queue[RuntimeEvent] = asyncio.Queue()
+    # Buffer holds 8:58, 8:59 and the 9:00 candle being processed
+    service = SignalService(
+        name="signal",
+        strategy=FakeRuntimeStrategy(),
+        event_bus=output,
+        event_source=source,
+        market_state_source=make_seeded_market_state(range(58, 61)),
+        supported_timeframes=("1m",),
+    )
+
+    async def run() -> None:
+        await _run_service_once(
+            service,
+            source,
+            make_kline_event(
+                open_time=datetime(2026, 3, 22, 9, 0, tzinfo=timezone.utc),
+                close_time=datetime(2026, 3, 22, 9, 1, tzinfo=timezone.utc),
+            ),
+        )
+
+    asyncio.run(run())
+
+    snapshot = service.strategy.snapshots[0]
+    assert len(snapshot.closed_candles) == 3  # 8:58, 8:59 seeded + 9:00 live
+    close_times = [c.close_time for c in snapshot.closed_candles]
+    assert len(close_times) == len(set(close_times))
