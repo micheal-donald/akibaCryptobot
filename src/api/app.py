@@ -7,16 +7,55 @@ The bot is started as a background task during the FastAPI lifespan.
 
 import asyncio
 import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 from api.dependencies import bot_state
-from api.routes import status, trading, account, performance, risk, strategy, model
+from api.routes import (
+    status,
+    trading,
+    account,
+    performance,
+    risk,
+    strategy,
+    model,
+    market,
+)
 from api.websockets import router as ws_router
 
 logger = logging.getLogger(__name__)
 BOT_SHUTDOWN_TIMEOUT_SECONDS = 90.0
+
+
+def _compute_asset_version(ui_dir: str) -> str:
+    """Version string stamped into asset URLs for cache busting.
+
+    Prefers the deployed git SHA (written by the deploy scripts); falls
+    back to the newest asset mtime so local dev edits also bust caches.
+    """
+    repo_root = os.path.dirname(os.path.dirname(ui_dir))
+    sha_file = os.path.join(repo_root, ".deploy", "current_sha")
+    try:
+        with open(sha_file, encoding="utf-8") as f:
+            sha = f.read().strip()
+        if sha:
+            return sha[:7]
+    except OSError:
+        pass
+
+    latest_mtime = 0
+    for root, _, files in os.walk(ui_dir):
+        for name in files:
+            try:
+                latest_mtime = max(
+                    latest_mtime, int(os.path.getmtime(os.path.join(root, name)))
+                )
+            except OSError:
+                continue
+    return str(latest_mtime)
 
 
 async def shutdown_trading_bot(
@@ -133,6 +172,7 @@ def create_app(
     app.include_router(risk.router, prefix="/api", tags=["Risk Management"])
     app.include_router(strategy.router, prefix="/api", tags=["Strategy"])
     app.include_router(model.router, prefix="/api", tags=["Model Health"])
+    app.include_router(market.router, prefix="/api", tags=["Market Data"])
     app.include_router(ws_router, tags=["WebSocket Streams"])
 
     # Mount the UI Static Files at the root
@@ -141,6 +181,18 @@ def create_app(
 
     ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ui")
     if os.path.exists(ui_dir):
+        asset_version = _compute_asset_version(ui_dir)
+        index_path = os.path.join(ui_dir, "index.html")
+
+        # Serve index.html ourselves: stamp asset URLs with the deploy
+        # version (cache busting) and forbid caching of the HTML shell so
+        # browsers always pick up new asset URLs after a deploy.
+        @app.get("/", include_in_schema=False)
+        async def serve_index():
+            with open(index_path, encoding="utf-8") as f:
+                html = f.read().replace("__ASSET_VERSION__", asset_version)
+            return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
+
         app.mount("/", StaticFiles(directory=ui_dir, html=True), name="ui")
     else:
         logger.warning(

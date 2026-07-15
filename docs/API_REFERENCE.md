@@ -377,6 +377,35 @@ When `bot.trade_store` is available the route paginates against the SQLite-backe
 
 ---
 
+## Market Data
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/ohlcv?symbol=BTC/USDT&timeframe=15m&limit=300` | Candlestick data for the dashboard price-action chart |
+
+**Query parameters** (`GET /api/ohlcv`):
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `symbol` | string | required | Must be one of the configured trading pairs (prevents open-proxy abuse) |
+| `timeframe` | string | `15m` | One of `1m`, `5m`, `15m`, `1h`, `4h`, `1d` |
+| `limit` | int | `300` | Number of candles, 10–1000 |
+
+`time` is epoch seconds (UTC), directly consumable by TradingView Lightweight Charts.
+
+**Example response**:
+```json
+{
+  "symbol": "BTC/USDT",
+  "timeframe": "15m",
+  "data": [
+    { "time": 1752570000, "open": 60000.0, "high": 60120.5, "low": 59950.0, "close": 60080.2, "volume": 12.4 }
+  ]
+}
+```
+
+---
+
 ## Risk Management
 
 | Method | Endpoint | Description |

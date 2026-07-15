@@ -8,6 +8,7 @@
  *   GET  /api/trades              -> active positions table + count card
  *   GET  /api/metrics             -> PnL, win rate, sharpe, drawdown cards
  *   GET  /api/equity-curve        -> Lightweight Charts baseline chart
+ *   GET  /api/ohlcv               -> candlestick chart with trade markers
  *   GET  /api/trades/history      -> recent activity feed
  *   GET  /api/strategy            -> strategy label + selector options
  *   GET  /api/config              -> config bar
@@ -61,6 +62,11 @@ const dom = {
     chartEmpty: document.getElementById('chart-empty'),
     strategyLabel: document.getElementById('strategy-label'),
 
+    // Candle Chart
+    candleChart: document.getElementById('candleChart'),
+    candleEmpty: document.getElementById('candle-empty'),
+    candlePairSelector: document.getElementById('candle-pair-selector'),
+
     // Activity Feed
     activityFeed: document.getElementById('activity-feed'),
     activityPagination: document.getElementById('activity-pagination'),
@@ -97,6 +103,12 @@ let equityChart = null;
 let equitySeries = null;
 let equityRange = '7d';
 let equityNeedsFit = true;
+let candleChart = null;
+let candleSeries = null;
+let candleMarkersPlugin = null;
+let candlePair = null;
+let candleTf = '15m';
+let candleNeedsFit = true;
 let latestPrices = {};
 let wsLastPing = Date.now();
 let latestStatusSnapshot = null;
@@ -111,6 +123,7 @@ async function init() {
     setupWebSockets();
     wireActivityPagination();
     wireChartRangeSelector();
+    wireCandleTfSelector();
 
     // Initial REST data fetch (parallel)
     await Promise.allSettled([
@@ -139,6 +152,7 @@ async function init() {
         if (activityState.offset === 0) fetchTradeHistory();
     }, 20000);
     setInterval(fetchEquityCurve, 60000);
+    setInterval(fetchCandles, 60000);
     setInterval(fetchStrategyPerformance, 30000);
     setInterval(fetchRisk, 30000);
     setInterval(fetchCorrelations, 60000);
@@ -495,6 +509,7 @@ async function fetchConfig() {
         if (data.pairs && data.pairs.length > 0) {
             const tags = data.pairs.map(p => `<span class="config-tag">${safeText(p, '')}</span>`).join('');
             items.push(`<span class="text-matrix-dim">Pairs:</span> ${tags}`);
+            buildCandlePairSelector(data.pairs);
         }
 
         if (data.stop_loss_percent != null) {
@@ -819,6 +834,181 @@ function renderEquityChart(points, initialBalance) {
         equityChart.timeScale().fitContent();
         equityNeedsFit = false;
     }
+}
+
+// ─── Candlestick Chart (per-pair price action + trade markers) ───
+
+const CANDLE_TF_SECONDS = { '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400 };
+
+function ensureCandleChart() {
+    if (candleChart) return;
+
+    candleChart = LightweightCharts.createChart(dom.candleChart, {
+        autoSize: true,
+        layout: {
+            background: { type: 'solid', color: 'transparent' },
+            textColor: '#008F11',
+            fontFamily: "'Space Grotesk', sans-serif",
+            attributionLogo: false,
+        },
+        grid: {
+            vertLines: { color: '#0A291A' },
+            horzLines: { color: '#0A291A' },
+        },
+        rightPriceScale: { borderColor: '#0A291A' },
+        timeScale: {
+            borderColor: '#0A291A',
+            timeVisible: true,
+            secondsVisible: false,
+        },
+        crosshair: {
+            vertLine: { color: '#008F11', labelBackgroundColor: '#06120E' },
+            horzLine: { color: '#008F11', labelBackgroundColor: '#06120E' },
+        },
+    });
+
+    candleSeries = candleChart.addSeries(LightweightCharts.CandlestickSeries, {
+        upColor: '#00FF41',
+        downColor: '#EF4444',
+        borderVisible: false,
+        wickUpColor: '#00FF41',
+        wickDownColor: '#EF4444',
+    });
+
+    candleMarkersPlugin = LightweightCharts.createSeriesMarkers(candleSeries, []);
+}
+
+function buildCandlePairSelector(pairs) {
+    if (!dom.candlePairSelector || dom.candlePairSelector.childElementCount > 0) return;
+
+    pairs.forEach(pair => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.pair = pair;
+        btn.textContent = pair.replace('/USDT', '');
+        btn.className = 'candle-pair-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors';
+        btn.addEventListener('click', () => {
+            if (candlePair === pair) return;
+            candlePair = pair;
+            candleNeedsFit = true;
+            updateCandleSelectors();
+            fetchCandles();
+        });
+        dom.candlePairSelector.appendChild(btn);
+    });
+
+    if (!candlePair && pairs.length > 0) {
+        candlePair = pairs[0];
+        updateCandleSelectors();
+        fetchCandles();
+    }
+}
+
+function wireCandleTfSelector() {
+    document.querySelectorAll('.candle-tf-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.tf === candleTf) return;
+            candleTf = btn.dataset.tf;
+            candleNeedsFit = true;
+            updateCandleSelectors();
+            fetchCandles();
+        });
+    });
+    updateCandleSelectors();
+}
+
+function updateCandleSelectors() {
+    document.querySelectorAll('.candle-pair-btn').forEach(btn => {
+        const active = btn.dataset.pair === candlePair;
+        btn.classList.toggle('bg-matrix-neon/10', active);
+        btn.classList.toggle('text-matrix-neon', active);
+        btn.classList.toggle('text-matrix-dim', !active);
+    });
+    document.querySelectorAll('.candle-tf-btn').forEach(btn => {
+        const active = btn.dataset.tf === candleTf;
+        btn.classList.toggle('bg-matrix-neon/10', active);
+        btn.classList.toggle('text-matrix-neon', active);
+        btn.classList.toggle('text-matrix-dim', !active);
+    });
+}
+
+async function fetchCandles() {
+    if (!candlePair) return;
+
+    try {
+        const [ohlcvRes, tradesRes] = await Promise.all([
+            fetch(`${API_BASE}/ohlcv?symbol=${encodeURIComponent(candlePair)}&timeframe=${candleTf}&limit=300`),
+            fetch(`${API_BASE}/trades/history?limit=100`),
+        ]);
+        const ohlcv = await ohlcvRes.json();
+        const bars = (ohlcv.data || []).filter(b => Number.isFinite(b.time));
+
+        if (bars.length === 0) {
+            dom.candleChart.classList.add('hidden');
+            dom.candleEmpty.classList.remove('hidden');
+            return;
+        }
+
+        dom.candleChart.classList.remove('hidden');
+        dom.candleEmpty.classList.add('hidden');
+
+        ensureCandleChart();
+        candleSeries.setData(bars);
+
+        let trades = [];
+        try {
+            trades = (await tradesRes.json()).trades || [];
+        } catch (e) { /* markers are optional */ }
+        candleMarkersPlugin.setMarkers(buildTradeMarkers(trades, bars[0].time));
+
+        if (candleNeedsFit) {
+            candleChart.timeScale().fitContent();
+            candleNeedsFit = false;
+        }
+    } catch (e) {
+        dom.candleChart.classList.add('hidden');
+        dom.candleEmpty.classList.remove('hidden');
+    }
+}
+
+function buildTradeMarkers(trades, firstBarTime) {
+    const tfSec = CANDLE_TF_SECONDS[candleTf] || 900;
+    // Snap trade timestamps onto candle buckets so markers attach to bars
+    const toBarTime = iso => Math.floor(Date.parse(iso) / 1000 / tfSec) * tfSec;
+    const markers = [];
+
+    trades
+        .filter(t => t.symbol === candlePair)
+        .forEach(t => {
+            if (t.entry_time) {
+                const time = toBarTime(t.entry_time);
+                if (time >= firstBarTime) {
+                    const isBuy = t.side === 'buy';
+                    markers.push({
+                        time,
+                        position: isBuy ? 'belowBar' : 'aboveBar',
+                        shape: isBuy ? 'arrowUp' : 'arrowDown',
+                        color: isBuy ? '#00FF41' : '#EF4444',
+                        text: `${isBuy ? 'B' : 'S'} ${Number(t.entry_price).toLocaleString()}`,
+                    });
+                }
+            }
+            if (t.exit_time) {
+                const time = toBarTime(t.exit_time);
+                if (time >= firstBarTime) {
+                    const won = (t.pnl ?? 0) >= 0;
+                    markers.push({
+                        time,
+                        position: 'aboveBar',
+                        shape: 'arrowDown',
+                        color: won ? '#00FF41' : '#EF4444',
+                        text: `X ${won ? '+' : ''}${Number(t.pnl ?? 0).toFixed(2)}`,
+                    });
+                }
+            }
+        });
+
+    return markers.sort((a, b) => a.time - b.time);
 }
 
 // ─── WebSockets ──────────────────────────────────────────────────

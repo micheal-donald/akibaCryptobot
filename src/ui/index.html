@@ -9,7 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=VT323&family=Space+Grotesk:wght@400;600;700&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@5/dist/lightweight-charts.standalone.production.js"></script>
-    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/style.css?v=__ASSET_VERSION__">
     <script>
         tailwind.config = {
             theme: {
@@ -224,6 +224,38 @@
             </div>
         </div>
 
+        <!-- ═══════ Section 3b: Price Action (candlesticks + trade markers) ═══════ -->
+        <div class="bg-matrix-surface border border-matrix-border rounded-lg p-5 flex flex-col" style="min-height: 420px;">
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                <h2 class="text-white font-semibold flex items-center">
+                    <svg class="w-4 h-4 mr-2 text-matrix-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 13v-1m4 1v-3m4 3V8M12 21l9-9-9-9-9 9 9 9z"></path>
+                    </svg>
+                    Price Action
+                    <span class="ml-3 text-[10px] font-mono text-matrix-dim font-normal">entries ▲ / exits ▼</span>
+                </h2>
+                <div class="flex items-center space-x-3 flex-wrap gap-y-2">
+                    <div id="candle-pair-selector" class="flex items-center rounded border border-matrix-border overflow-hidden font-mono text-[11px]">
+                        <!-- populated from /api/config pairs -->
+                    </div>
+                    <div id="candle-tf-selector" class="flex items-center rounded border border-matrix-border overflow-hidden font-mono text-[11px]">
+                        <button type="button" data-tf="15m" class="candle-tf-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">15M</button>
+                        <button type="button" data-tf="1h" class="candle-tf-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">1H</button>
+                        <button type="button" data-tf="4h" class="candle-tf-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">4H</button>
+                        <button type="button" data-tf="1d" class="candle-tf-btn px-2.5 py-1 text-matrix-dim hover:text-matrix-neon transition-colors">1D</button>
+                    </div>
+                </div>
+            </div>
+            <div class="relative flex-grow w-full min-h-[320px]">
+                <div id="candleChart" class="absolute inset-0"></div>
+            </div>
+            <div id="candle-empty"
+                class="hidden flex-grow flex items-center justify-center text-matrix-dim text-sm font-mono">
+                Awaiting candle data...
+            </div>
+        </div>
+
         <!-- ═══════ Section 4: Positions + Strategy Performance ═══════ -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <!-- Positions Table (expanded) -->
@@ -359,8 +391,8 @@
             iconClose.classList.toggle('hidden');
         }
     </script>
-    <script src="/js/matrix.js"></script>
-    <script src="/js/app.js"></script>
+    <script src="/js/matrix.js?v=__ASSET_VERSION__"></script>
+    <script src="/js/app.js?v=__ASSET_VERSION__"></script>
 </body>
 
 </html>
