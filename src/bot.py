@@ -49,7 +49,12 @@ class AkibaCryptoBot:
     CLEANUP_STEP_TIMEOUT_SECONDS = 15
     CLEANUP_NETWORK_TIMEOUT_SECONDS = 5
 
-    def __init__(self, config_path: str = "config/config.json"):
+    def __init__(
+        self,
+        config_path: str = "config/config.json",
+        *,
+        register_signal_handlers: bool = True,
+    ):
         self.config = self.load_config(config_path)
         self.logger = setup_logging(self.config.get("logging", {}))
 
@@ -135,8 +140,9 @@ class AkibaCryptoBot:
         self._cleanup_future: asyncio.Future[None] | None = None
 
         # Setup signal handlers for graceful shutdown
-        signal.signal(signal.SIGINT, self.signal_handler)
-        signal.signal(signal.SIGTERM, self.signal_handler)
+        if register_signal_handlers:
+            signal.signal(signal.SIGINT, self.signal_handler)
+            signal.signal(signal.SIGTERM, self.signal_handler)
 
     @staticmethod
     def load_config(config_path: str) -> Dict:
@@ -276,16 +282,36 @@ class AkibaCryptoBot:
         )
 
     def _resolve_runtime_entry_quantity(self, snapshot, signal) -> float:
-        del signal
+        # Legacy exit signals use BUY/SELL as well as CLOSE_*; always close the
+        # carried quantity rather than sizing an exit from the free cash balance.
+        if snapshot.position is not None and snapshot.position.open_qty > 0:
+            return snapshot.position.open_qty
+        min_strength = self.config.get("strategy_config", {}).get(
+            "min_signal_strength", 0.45
+        )
+        if signal.strength < min_strength:
+            return 0.0
         stake_amount = float(self.config.get("trading", {}).get("stake_amount", 0.0))
-        if stake_amount <= 0:
+        if not 0 < stake_amount <= 1:
             return 0.0
         current_price = snapshot.last_price
         if current_price is None and snapshot.closed_candles:
             current_price = snapshot.closed_candles[-1].close
         if current_price is None or current_price <= 0:
             return 0.0
-        return stake_amount / current_price
+        stake_currency = self.config.get("trading", {}).get("stake_currency", "USDT")
+        free_balance = float(
+            (self._cached_balance or {}).get(stake_currency, {}).get("free", 0.0)
+        )
+        if free_balance <= 0:
+            self.logger.warning(
+                "Runtime entry skipped: no free %s balance", stake_currency
+            )
+            return 0.0
+        risk_quantity = self.risk_manager.calculate_position_size_with_signal(
+            free_balance, signal.strength, current_price, signal.stop_loss
+        )
+        return min(risk_quantity, free_balance * stake_amount / current_price)
 
     async def _start_runtime_if_enabled(self) -> None:
         if not self.runtime_enabled or self.runtime_handle is not None:
@@ -525,6 +551,7 @@ class AkibaCryptoBot:
 
             # Initialize exchange connection
             balance = await self.exchange.get_balance()
+            self._cached_balance = balance
             self.logger.info("Successfully connected to exchange")
 
             # Create performance tracker with real wallet balance
@@ -1320,9 +1347,7 @@ class AkibaCryptoBot:
                     mtime = os.path.getmtime(os.path.join(models_dir, newest))
                     trained_at = datetime.fromtimestamp(mtime, tz=timezone.utc)
                     model_info["last_trained"] = trained_at.isoformat()
-                    age_hours = (
-                        datetime.now(timezone.utc).timestamp() - mtime
-                    ) / 3600
+                    age_hours = (datetime.now(timezone.utc).timestamp() - mtime) / 3600
                     model_info["age_hours"] = round(age_hours, 1)
                     model_info["stale"] = age_hours > 48
 

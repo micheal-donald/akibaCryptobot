@@ -31,12 +31,17 @@ htmlcov/
 # Local config (sensitive)
 .env
 .env.local
+.env.*
 *.pem
 *.key
 
 # Logs and data (mounted as volumes)
 logs/
 data/
+models/
+models_staging/
+ta-lib/
+.deploy/
 *.log
 
 # Documentation

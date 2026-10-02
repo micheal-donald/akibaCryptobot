@@ -338,6 +338,17 @@ class MLFreqAIStrategy(BaseFreqAIStrategy):
             return True
         return self.ml_model is not None and self.model_trained
 
+    def is_available_for_symbol(self, symbol: str) -> bool:
+        """Whether this component can vote using a usable model for the pair."""
+        model, feature_columns, is_expired = self._resolve_model(symbol)
+        return bool(
+            self.freqai_enabled
+            and self._has_model_for(symbol)
+            and model is not None
+            and feature_columns
+            and not is_expired
+        )
+
     def _resolve_model(self, symbol: str) -> Tuple[Any, List[str], bool]:
         """Select ``(model, feature_cols, is_expired)`` for ``symbol``.
 

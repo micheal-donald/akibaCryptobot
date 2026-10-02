@@ -12,6 +12,10 @@ on:
         required: false
         default: '1000'
 
+concurrency:
+  group: production-bot
+  cancel-in-progress: false
+
 jobs:
   train:
     runs-on: ubuntu-latest
@@ -49,6 +53,13 @@ jobs:
       - name: List trained models
         run: ls -lh models/
 
+      - name: Upload models as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: freqai-models-${{ github.run_id }}
+          path: models/*.joblib
+          retention-days: 7
+
       - name: Deploy models to Vultr
         uses: easingthemes/ssh-deploy@main
         with:
@@ -68,30 +79,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: AKIBA_PORT
           script: |
-            systemctl restart akibabot.service
-            deadline=$((SECONDS + 180))
-            until systemctl is-active --quiet akibabot.service; do
-              if [ "$SECONDS" -ge "$deadline" ]; then
-                systemctl status akibabot.service --no-pager || true
-                journalctl -u akibabot.service -n 50 --no-pager || true
-                exit 1
-              fi
-              sleep 2
-            done
-
-            deadline=$((SECONDS + 180))
-            until curl -fsS "http://127.0.0.1:${AKIBA_PORT}/api/health" >/dev/null; do
-              if [ "$SECONDS" -ge "$deadline" ]; then
-                systemctl status akibabot.service --no-pager || true
-                journalctl -u akibabot.service -n 50 --no-pager || true
-                exit 1
-              fi
-              sleep 2
-            done
-
-            curl -fsS "http://127.0.0.1:${AKIBA_PORT}/api/health"
-            echo
-            systemctl status akibabot.service --no-pager
+            python3 /opt/akibabot/scripts/dokploy_deploy.py --restart
 
       - name: Notify via Telegram
         if: always()

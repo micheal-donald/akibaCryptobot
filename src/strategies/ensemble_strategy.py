@@ -196,8 +196,27 @@ class EnsembleStrategy(BaseStrategy):
             buy_count = 0
             sell_count = 0
 
+            # Unavailable ML is different from a healthy component voting HOLD.
+            # Redistribute its weight so the documented momentum fallback can
+            # meet consensus and downstream signal-strength thresholds.
+            available_strategies = [
+                (strategy, weight, name)
+                for strategy, weight, name in self.strategies
+                if weight > 0
+                and (
+                    not hasattr(strategy, "is_available_for_symbol")
+                    or strategy.is_available_for_symbol(symbol)
+                )
+            ]
+            available_weight = sum(w for _, w, _ in available_strategies)
+            if available_weight <= 0:
+                return None
+            total_weight = sum(w for _, w, _ in self.strategies)
+            weight_scale = total_weight / available_weight
+
             # Collect signals from all strategies
-            for strategy, weight, name in self.strategies:
+            for strategy, weight, name in available_strategies:
+                weight *= weight_scale
                 try:
                     signal = await strategy.generate_signal(
                         symbol, ohlcv_data, current_price
@@ -293,6 +312,7 @@ class EnsembleStrategy(BaseStrategy):
                     "sell_weight": sell_weight,
                     "net_signal": net_signal,
                     "agreeing_strategies": [n for n, _ in agreeing_signals],
+                    "available_strategies": [n for _, _, n in available_strategies],
                 },
             )
 

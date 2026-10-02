@@ -78,6 +78,13 @@ Server-side FreqAI training is guarded separately from deployment profiles:
 | `stake_amount` | float | `0.05` | Fraction of balance per trade |
 | `stake_currency` | string | `"USDT"` | Quote currency for sizing |
 
+Runtime entries interpret `stake_amount` as a fraction of the cached **free**
+`stake_currency` balance: `0.05` with 1,000 USDT available budgets at most
+50 USDT, before exchange precision and minimum-order checks. The risk
+manager's signal-adjusted position size can lower that budget further.
+Entries require the configured minimum signal strength and an available
+balance. Exits use the open position quantity.
+
 ### `runtime`
 
 The `runtime` section controls the rollout contract for the event-driven runtime.

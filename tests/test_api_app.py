@@ -2,9 +2,43 @@ import asyncio
 from datetime import datetime, timezone
 
 import pytest
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+from fastapi import FastAPI, HTTPException, Request
 
-from api.app import shutdown_trading_bot
-from api.routes.status import get_status
+from api.app import shutdown_trading_bot, supervise_trading_task
+from api.routes.status import get_status, health_check
+
+
+def test_trading_loop_exit_requests_process_recovery():
+    app = FastAPI()
+    app.state.request_shutdown = MagicMock()
+    supervise_trading_task(app, MagicMock())
+    app.state.request_shutdown.assert_called_once_with()
+
+
+def test_normal_shutdown_does_not_request_recovery():
+    app = FastAPI()
+    app.state.request_shutdown = MagicMock()
+    app.state.shutting_down = True
+    supervise_trading_task(app, MagicMock())
+    app.state.request_shutdown.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("task_done", [False, True])
+async def test_health_reports_trading_loop_failure(task_done):
+    app = FastAPI()
+    app.state.trading_task = SimpleNamespace(done=lambda: task_done)
+    request = Request({"type": "http", "app": app})
+    if task_done:
+        with pytest.raises(HTTPException) as error:
+            await health_check(request)
+        assert error.value.status_code == 503
+    else:
+        assert (await health_check(request))["status"] == "ok"
+
+
 from api.routes.trading import get_active_trades
 from operations.live_rollout_approval import (
     LiveRolloutApprovalRecord,

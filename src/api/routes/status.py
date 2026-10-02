@@ -4,7 +4,7 @@ Status & Health endpoints
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.dependencies import get_bot
 from runtime.native_bridge import build_native_shadow_report
@@ -16,7 +16,10 @@ router = APIRouter()
 
 def _build_native_shadow_canary_report(bot):
     runtime_app = getattr(bot, "runtime_app", None)
-    if runtime_app is None or getattr(runtime_app, "native_hot_path_ports", None) is None:
+    if (
+        runtime_app is None
+        or getattr(runtime_app, "native_hot_path_ports", None) is None
+    ):
         return None
 
     projection_getter = getattr(bot, "get_runtime_projection", None)
@@ -122,8 +125,11 @@ def _inject_operational_alert_state(status_info, bot):
 
 
 @router.get("/health")
-async def health_check():
-    """Liveness probe ? always returns OK if the server is up."""
+async def health_check(request: Request):
+    """Report a stopped trading task as unhealthy instead of masking failure."""
+    trading_task = getattr(request.app.state, "trading_task", None)
+    if trading_task is not None and trading_task.done():
+        raise HTTPException(status_code=503, detail="Trading loop is not running")
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 

@@ -4,6 +4,68 @@ This guide covers local development, Docker deployment, and CI/CD pipeline confi
 
 ---
 
+## Production: Dokploy and GHCR
+
+Production uses Dokploy v0.30.8 on the existing Vultr server. DNS is configured
+separately after deployment. The administrator panel binds only to localhost:
+
+```bash
+ssh -i ~/.ssh/akibabot_vultr -L 3000:127.0.0.1:3000 root@66.42.32.233
+# Open http://localhost:3000
+```
+
+The administrator email is `michaelmonyenye@gmail.com`. Initial credentials are
+stored in `/etc/akibabot/dokploy-admin.json` on the server, readable only by root.
+The deployment API key and application IDs live in `/etc/akibabot/dokploy.json`;
+keep both files out of Git and logs.
+
+On a push to master, CI runs tests and the app smoke check, builds the Docker
+image, verifies imports inside that image, and publishes
+`ghcr.io/micheal-donald/akibacryptobot:sha-<commit>`. Its `container-image`
+artifact records the immutable digest. Deploy downloads that artifact, verifies
+its commit, and uses the local Dokploy API over SSH to deploy the digest.
+
+Required Actions secrets: `SERVER_IP`, `SSH_PRIVATE_KEY`, and
+`GHCR_PULL_TOKEN` (classic GitHub PAT with `read:packages`). The CI publisher
+uses its built-in `GITHUB_TOKEN` with `packages:write`. The pull credential is
+passed over SSH on stdin and saved through Docker login in Dokploy's persistent
+Docker configuration volume. Renew that token before expiry.
+
+The raw Compose specification is `deploy/dokploy/compose.yml`. It runs one
+paper/testnet bot with a 1 GiB memory limit and mounts the existing
+`/opt/akibabot/{data,logs,models,models_staging}` directories. Server `.env`
+settings are copied into Dokploy's generated environment file. Runtime data and
+models are excluded from images. The dashboard remains on port 8000 until DNS
+and HTTPS are configured.
+
+The first deployment pulls the image before stopping systemd, disables
+`akibabot.service`, backs up root's crontab, and removes its old bot watchdog
+and model-training jobs. Bind directories become writable by container UID
+1000. API health and the running image must match before deployment succeeds.
+A failed first migration stops the container before restoring systemd and cron;
+a failed subsequent deployment restores the previous image. Keep the old
+systemd checkout available until the migration has been verified.
+
+Daily model training remains in GitHub Actions. It uploads models to the shared
+host directory and restarts the existing container through
+`scripts/dokploy_deploy.py --restart`. Training and deployment share a workflow
+concurrency group and a server lock. They cannot revive the old systemd bot.
+
+```bash
+docker logs --tail 100 akiba-cryptobot
+docker inspect -f '{{.Config.Image}} {{.State.Health.Status}}' akiba-cryptobot
+curl -f http://127.0.0.1:8000/api/health
+```
+
+Docker restarts the process if it exits. A health check alone does not restart
+an unhealthy container; inspect health failures in Dokploy. The application
+exits when its trading task fails so normal restart supervision can recover it.
+
+The bare-metal instructions below remain available for development and manual
+rollback, and are no longer the normal production CI deployment path.
+
+---
+
 ## Prerequisites
 
 - Python 3.10+
@@ -625,6 +687,17 @@ tail -f /opt/akibabot/logs/akiba_crypto_bot.log
 ```bash
 ssh root@<SERVER_IP> "systemctl restart akibabot"
 ```
+
+The standard API entry point shuts down the server if the background trading
+loop exits unexpectedly, allowing systemd's `Restart=always` (or Docker's
+restart policy) to recover it. `/api/health` returns HTTP 503 for an exited
+trading task; Docker probes this endpoint instead of reporting unconditional
+success. This is a liveness check, not proof of fresh feeds or generated trades.
+
+If testnet startup fails with DNS errors, compare the server's resolver with
+`dig @1.1.1.1 testnet.binance.vision` and `dig @8.8.8.8 testnet.binance.vision`.
+Repair the server's persistent DNS configuration if its resolver fails while
+those succeed. Keep exchange endpoints and sandbox mode unchanged.
 
 ---
 

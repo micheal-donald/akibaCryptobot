@@ -194,12 +194,16 @@ def main():
         logger.info(f"API docs available at: http://{args.host}:{args.port}/docs")
         logger.info("Starting trading bot + API server...")
 
-        uvicorn.run(
-            app,
-            host=args.host,
-            port=args.port,
-            log_level="info" if not args.debug else "debug",
+        server = uvicorn.Server(
+            uvicorn.Config(
+                app,
+                host=args.host,
+                port=args.port,
+                log_level="info" if not args.debug else "debug",
+            )
         )
+        app.state.request_shutdown = lambda: setattr(server, "should_exit", True)
+        server.run()
 
 
 if __name__ == "__main__":

@@ -8,113 +8,53 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: deploy-${{ github.event.workflow_run.head_branch }}
-  cancel-in-progress: true
+  group: production-bot
+  cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy to Vultr (bare-metal)
+    name: Deploy GHCR image with Dokploy
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    if: >-
-      ${{
-        github.event.workflow_run.conclusion == 'success' &&
-        github.event.workflow_run.event == 'push'
-      }}
-
+    timeout-minutes: 20
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-
-      - name: Set deploy metadata
-        id: meta
-        run: |
-          target_sha="${{ github.event.workflow_run.head_sha }}"
-          echo "sha=${target_sha}" >> "$GITHUB_OUTPUT"
-          echo "short=${target_sha::7}" >> "$GITHUB_OUTPUT"
-
-      - name: Setup SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
-
-      - name: Ensure remote app directory exists
-        run: |
-          ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no \
-            root@${{ secrets.SERVER_IP }} "mkdir -p /opt/akibabot"
-
-      - name: Sync Files to Server via Rsync
-        run: |
-          rsync -az \
-            --exclude='.git' \
-            --exclude='.venv' \
-            --exclude='venv' \
-            --exclude='__pycache__' \
-            --exclude='.pytest_cache' \
-            --exclude='logs/' \
-            --exclude='models/' \
-            --exclude='.env' \
-            --exclude='plan.md' \
-            -e "ssh -i ~/.ssh/id_ed25519 -o StrictHostKeyChecking=no" \
-            ./ root@${{ secrets.SERVER_IP }}:/opt/akibabot/
-
-      - name: Deploy and Verify Service
-        uses: appleboy/ssh-action@v1.0.0
+      - uses: actions/download-artifact@v4
+        with:
+          name: container-image
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ github.event.workflow_run.id }}
+      - name: Verify image provenance
+        id: image
         env:
-          DEPLOY_SHA: ${{ steps.meta.outputs.sha }}
-          TRADING_MODE: ${{ vars.TRADING_MODE != '' && vars.TRADING_MODE || 'paper' }}
-          LOG_LEVEL: ${{ vars.LOG_LEVEL != '' && vars.LOG_LEVEL || 'INFO' }}
-          AKIBA_STRATEGY: ${{ vars.AKIBA_STRATEGY != '' && vars.AKIBA_STRATEGY || 'ensemble' }}
-          AKIBA_HOST: 0.0.0.0
-          AKIBA_PORT: 8000
-          AKIBA_CONFIG: config/config.json
-          AKIBA_NO_API: 'false'
-          AKIBA_DRY_RUN: 'false'
-          BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
-          BINANCE_SECRET_KEY: ${{ secrets.BINANCE_SECRET_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: root
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script_stop: true
-          envs: DEPLOY_SHA,TRADING_MODE,LOG_LEVEL,AKIBA_STRATEGY,AKIBA_HOST,AKIBA_PORT,AKIBA_CONFIG,AKIBA_NO_API,AKIBA_DRY_RUN,BINANCE_API_KEY,BINANCE_SECRET_KEY,TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID
-          script: |
-            cd /opt/akibabot
-            bash ./scripts/deploy_remote.sh
-
-      - name: Notify Telegram (Deployment Success)
-        if: success()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            🚀 *AkibaCryptoBot Deployment*
-
-            Status: ✅ Success (Bare-Metal)
-            Commit: `${{ steps.meta.outputs.short }}`
-            Branch: `master`
-            Host: `${{ secrets.SERVER_IP }}`
-
-            Deployment verified via systemd and `/api/health`.
-
-      - name: Notify Telegram (Deployment Failed)
-        if: failure()
-        uses: appleboy/telegram-action@master
-        with:
-          to: ${{ secrets.TELEGRAM_CHAT_ID }}
-          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          message: |
-            🚨 *AkibaCryptoBot CI/CD Failed*
-
-            Status: ❌ Failed to deploy to `${{ secrets.SERVER_IP }}`
-            Commit: `${{ steps.meta.outputs.short }}`
-
-            Check the GitHub Actions log for details.
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python - <<'PY'
+          import json, os, re
+          metadata = json.load(open('image-metadata.json'))
+          assert metadata['sha'] == os.environ['EXPECTED_SHA']
+          assert re.fullmatch(r'ghcr.io/micheal-donald/akibacryptobot@sha256:[a-f0-9]{64}', metadata['image'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('image=' + metadata['image'] + '\n')
+          PY
+      - name: Deploy through the local Dokploy API
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          test -n "$GHCR_PULL_TOKEN"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
+          ssh root@"$SERVER_IP" 'mkdir -p /opt/akibabot/deploy/dokploy /opt/akibabot/scripts'
+          scp deploy/dokploy/compose.yml root@"$SERVER_IP":/opt/akibabot/deploy/dokploy/compose.yml
+          scp scripts/dokploy_deploy.py root@"$SERVER_IP":/opt/akibabot/scripts/dokploy_deploy.py
+          printf '%s' "$GHCR_PULL_TOKEN" | ssh root@"$SERVER_IP" "python3 /opt/akibabot/scripts/dokploy_deploy.py '$IMAGE'"

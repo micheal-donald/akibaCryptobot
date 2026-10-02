@@ -30,6 +30,18 @@ logger = logging.getLogger(__name__)
 BOT_SHUTDOWN_TIMEOUT_SECONDS = 90.0
 
 
+def supervise_trading_task(app: FastAPI, task: asyncio.Task) -> None:
+    """Stop the API process when its trading loop unexpectedly exits."""
+    if getattr(app.state, "shutting_down", False):
+        return
+    logger.error(
+        "Trading loop exited; requesting server shutdown for supervisor recovery"
+    )
+    shutdown_callback = getattr(app.state, "request_shutdown", None)
+    if callable(shutdown_callback):
+        shutdown_callback()
+
+
 def _compute_asset_version(ui_dir: str) -> str:
     """Version string stamped into asset URLs for cache busting.
 
@@ -103,7 +115,9 @@ async def lifespan(app: FastAPI):
     testnet = getattr(app.state, "testnet", False)
 
     # Initialize the bot
-    bot = AkibaCryptoBot(config_path=config_path)
+    # Uvicorn owns process signals in API mode; do not replace its graceful
+    # shutdown handlers with handlers that only stop the trading loop.
+    bot = AkibaCryptoBot(config_path=config_path, register_signal_handlers=False)
 
     if testnet:
         bot.config["exchange"]["sandbox"] = True
@@ -126,13 +140,17 @@ async def lifespan(app: FastAPI):
 
     # Launch the trading loop as a background task
     trading_task = asyncio.create_task(bot.start())
+    app.state.trading_task = trading_task
+    app.state.shutting_down = False
+    trading_task.add_done_callback(lambda task: supervise_trading_task(app, task))
     logger.info("Trading bot started as background task")
 
-    yield  # Server is running, bot is trading
-
-    # Shutdown
-    await shutdown_trading_bot(bot, trading_task)
-    bot_state["bot"] = None
+    try:
+        yield  # Server is running, bot is trading
+    finally:
+        app.state.shutting_down = True
+        await shutdown_trading_bot(bot, trading_task)
+        bot_state["bot"] = None
 
 
 def create_app(

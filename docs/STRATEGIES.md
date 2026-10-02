@@ -208,6 +208,13 @@ Combines Momentum and FreqAI ML signals using weighted voting.
 3. Net score > agreement threshold → BUY; net score < −threshold → SELL
 4. Final strength = weighted average of contributing signals
 
+If FreqAI is disabled or its model for a pair is missing or expired, its
+weight is redistributed to the available components. With the default
+one-component agreement requirement, momentum-only fallback keeps the
+momentum signal's strength instead of reducing it to 40%. A usable ML
+component returning HOLD still retains its weight; this does not relax
+consensus for ordinary HOLD votes or an explicit two-component requirement.
+
 **Exit logic:** Exit if a majority of sub-strategies agree on exiting.
 
 **Minimum agreement threshold:** 0.3 (configurable)
@@ -233,7 +240,7 @@ A LightGBM-based classifier that predicts future price direction.
 
 **Training:** `train_model()` trains on historical data with 80/20 train/test split. Model is saved to `models/<SYMBOL>_freqai.joblib` with a timestamp for expiry tracking.
 
-**Model expiry:** Models older than `model_expiry_hours` (default 48) are flagged; the strategy falls back to a weak signal.
+**Model expiry:** Models older than `model_expiry_hours` (default 48) are flagged and skipped. The ensemble uses its remaining available components.
 
 ---
 
