@@ -105,7 +105,7 @@ def main():
         backup.write_text(cron)
         backup.chmod(0o600)
         filtered = "".join(
-            line + "\n" for line in cron.splitlines() if "/opt/akibabot/" not in line
+            line + "\n" for line in cron.splitlines() if "/opt/akibabot" not in line
         )
         command("crontab", "-", input=filtered)
         command("systemctl", "disable", "--now", "akibabot.service")
