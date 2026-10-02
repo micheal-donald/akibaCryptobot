@@ -68,7 +68,14 @@ def main():
         raise ValueError("GHCR pull credential is required on stdin")
     dokploy = (
         subprocess.check_output(
-            ["docker", "ps", "--filter", "name=dokploy.", "--format", "{{.ID}}"],
+            [
+                "docker",
+                "ps",
+                "--filter",
+                "label=com.docker.swarm.service.name=dokploy",
+                "--format",
+                "{{.ID}}",
+            ],
             text=True,
         )
         .strip()
