@@ -200,6 +200,7 @@ def main():
                 host=args.host,
                 port=args.port,
                 log_level="info" if not args.debug else "debug",
+                timeout_graceful_shutdown=15,
             )
         )
         app.state.request_shutdown = lambda: setattr(server, "should_exit", True)

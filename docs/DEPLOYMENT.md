@@ -57,6 +57,10 @@ docker inspect -f '{{.Config.Image}} {{.State.Health.Status}}' akiba-cryptobot
 curl -f http://127.0.0.1:8000/api/health
 ```
 
+Uvicorn allows existing API connections 15 seconds to drain before cancelling
+them, so persistent dashboard streams cannot indefinitely block bot shutdown.
+The container allows 120 seconds for connection drain and bot cleanup.
+
 Docker restarts the process if it exits. A health check alone does not restart
 an unhealthy container; inspect health failures in Dokploy. The application
 exits when its trading task fails so normal restart supervision can recover it.
