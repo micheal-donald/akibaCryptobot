@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
 from api.dependencies import bot_state
+from api.public_access import PublicReadOnlyMiddleware
 from api.routes import (
     status,
     trading,
@@ -161,11 +162,15 @@ def create_app(
     """
     Create and configure the FastAPI application.
     """
+    public_read_only = os.getenv("AKIBA_PUBLIC_READ_ONLY", "false").lower() == "true"
     app = FastAPI(
         title="AkibaCryptoBot API",
         description="REST & WebSocket API for the AkibaCryptoBot HFT trading engine",
         version="1.0.0",
         lifespan=lifespan,
+        docs_url=None if public_read_only else "/docs",
+        redoc_url=None if public_read_only else "/redoc",
+        openapi_url=None if public_read_only else "/openapi.json",
     )
 
     # Store startup config on the app for the lifespan to read
@@ -181,6 +186,8 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    if public_read_only:
+        app.add_middleware(PublicReadOnlyMiddleware)
 
     # Register route modules
     app.include_router(status.router, prefix="/api", tags=["Status"])
@@ -194,7 +201,6 @@ def create_app(
     app.include_router(ws_router, tags=["WebSocket Streams"])
 
     # Mount the UI Static Files at the root
-    import os
     from fastapi.staticfiles import StaticFiles
 
     ui_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ui")
@@ -209,6 +215,16 @@ def create_app(
         async def serve_index():
             with open(index_path, encoding="utf-8") as f:
                 html = f.read().replace("__ASSET_VERSION__", asset_version)
+            if public_read_only:
+                html = html.replace(
+                    "</head>",
+                    "<style>#pause-btn {display:none!important}</style>"
+                    "<script>window.AKIBA_PUBLIC_READ_ONLY=true;</script></head>",
+                ).replace(
+                    '<select id="strategy-select"',
+                    '<span class="text-matrix-dim text-xs">PUBLIC · READ ONLY</span>'
+                    '<select disabled id="strategy-select"',
+                )
             return HTMLResponse(html, headers={"Cache-Control": "no-cache"})
 
         app.mount("/", StaticFiles(directory=ui_dir, html=True), name="ui")

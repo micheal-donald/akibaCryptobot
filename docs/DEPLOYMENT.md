@@ -6,11 +6,16 @@ This guide covers local development, Docker deployment, and CI/CD pipeline confi
 
 ## Production: Dokploy and GHCR
 
-Production uses Dokploy v0.30.8 on the existing Vultr server. DNS is configured
-separately after deployment. The administrator panel binds only to localhost:
+Production uses Dokploy v0.30.8 on the existing Vultr server. The dashboard
+is configured for `https://cryptobot.akibasoftware.com`. Cloudflare holds a DNS-only
+A record pointing to `66.42.32.233`; Dokploy routes this hostname to Compose
+service `bot`, container port 8000, using Let's Encrypt. Public HTTPS is pending
+Vultr firewall access: HTTP/HTTPS currently time out externally and certificate
+issuance cannot complete. The server UFW rules allow TCP 80 and 443. The
+administrator panel binds only to localhost:
 
 ```bash
-ssh -i ~/.ssh/akibabot_vultr -L 3000:127.0.0.1:3000 root@66.42.32.233
+ssh -N -i ~/.ssh/akibabot_vultr -L 3000:127.0.0.1:3000 root@66.42.32.233
 # Open http://localhost:3000
 ```
 
@@ -35,8 +40,14 @@ The raw Compose specification is `deploy/dokploy/compose.yml`. It runs one
 paper/testnet bot with a 1 GiB memory limit and mounts the existing
 `/opt/akibabot/{data,logs,models,models_staging}` directories. Server `.env`
 settings are copied into Dokploy's generated environment file. Runtime data and
-models are excluded from images. The dashboard remains on port 8000 until DNS
-and HTTPS are configured.
+models are excluded from images. Once the cloud firewall permits TCP 80 and
+443, the dashboard will be available through HTTPS on its domain. The Compose environment sets `AKIBA_PUBLIC_READ_ONLY=true`: public visitors
+can inspect paper performance but cannot pause, resume, switch strategies, train
+models, approve live trading, or trigger reconciliation. The restriction applies
+to direct port 8000 access as well as the domain; operator tokens cannot bypass it.
+Dokploy stays on localhost, accessed over SSH. Telegram remains available for
+operator actions. Direct port 8000 access remains available for migration diagnostics. Domain settings are stored
+in Dokploy and applied to every Compose deployment.
 
 The first deployment pulls the image before stopping systemd, disables
 `akibabot.service`, backs up root's crontab, and removes its old bot watchdog

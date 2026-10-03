@@ -1401,6 +1401,7 @@ function getCorrClass(val) {
 // ─── Strategy Selector ──────────────────────────────────────────
 
 function setupStrategySelector() {
+    if (window.AKIBA_PUBLIC_READ_ONLY) return;
     dom.strategySelect.addEventListener('change', async () => {
         const name = dom.strategySelect.value;
         if (!name) return;
@@ -1437,6 +1438,7 @@ function setupStrategySelector() {
 // ─── Pause / Resume Button ──────────────────────────────────────
 
 function setupPauseButton() {
+    if (window.AKIBA_PUBLIC_READ_ONLY) return;
     dom.pauseBtn.addEventListener('click', async () => {
         const endpoint = isTradingPaused ? '/trading/resume' : '/trading/pause';
         try {

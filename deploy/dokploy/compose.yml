@@ -8,6 +8,7 @@ services:
       - .env
     environment:
       PYTHONPATH: /app/src
+      AKIBA_PUBLIC_READ_ONLY: "true"
       OMP_NUM_THREADS: "1"
       OPENBLAS_NUM_THREADS: "1"
     command: ["python", "start_bot.py", "--config", "/app/config/config.json", "--testnet", "--host", "0.0.0.0", "--port", "8000"]

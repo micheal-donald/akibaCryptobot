@@ -20,6 +20,7 @@ AkibaCryptoBot is configured via two JSON files and environment variables.
 | `AKIBA_CONFIG` | Config path for service mode | `config/config.json` |
 | `AKIBA_NO_API` | Disable API in service mode | `false` |
 | `AKIBA_DRY_RUN` | Run service in dry-run mode | `false` |
+| `AKIBA_PUBLIC_READ_ONLY` | Set `true` to reject HTTP writes and non-approved API reads, including reconciliation; disable API docs and dashboard controls. Trading and Telegram continue normally | `false` |
 | `AKIBA_OPERATOR_TOKEN` | Shared secret required by mutating operator endpoints such as `POST /api/model/train` | — |
 | `MAX_POSITION_SIZE` | Max portfolio fraction per trade | `0.05` |
 | `MAX_DAILY_LOSS` | Max daily loss fraction | `0.02` |

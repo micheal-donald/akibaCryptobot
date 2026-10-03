@@ -773,8 +773,17 @@ When a reviewed live profile is active, the same surfaces expose:
 
 ## Authentication
 
-> [!WARNING]
-> The API currently has **no authentication**. CORS is configured to allow all origins (`*`). This is suitable for local/dev usage only. For production, add API key middleware or restrict origins.
+Production's portfolio dashboard sets `AKIBA_PUBLIC_READ_ONLY=true`. An application
+boundary rejects every HTTP write and any API path outside the explicit read
+allowlist with HTTP 403 (`public_dashboard_read_only`), even with a valid operator
+token. `/api/reconcile` is blocked because it triggers work. Only the outgoing
+`/ws/prices` and `/ws/status` streams are permitted. API documentation is disabled;
+strategy selection is disabled and pause controls are hidden in the dashboard.
+The bot continues autonomous paper trading; Telegram remains the operator channel.
+
+The default development mode retains control endpoints; some require
+`X-Operator-Token`, while pause/resume and strategy switching do not. Keep that
+mode private. CORS does not provide authentication.
 
 ---
 
