@@ -238,6 +238,7 @@ def test_position_service_closes_from_reduce_only_fill() -> None:
     assert state.open_qty == 0.0
     assert state.avg_exit_price == 65100.0
     assert state.closed_at is not None
+    assert state.side == "buy"
     assert event_bus.qsize() == 2
     assert [event_bus.get_nowait().meta.event_type for _ in range(2)] == [
         "position.opened",

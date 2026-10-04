@@ -31,15 +31,25 @@ if TYPE_CHECKING:
 
 GENERIC_RUNTIME_EVENT_TYPES: frozenset[str] = frozenset(
     {
+        "runtime.shutdown",
+    }
+)
+
+EPHEMERAL_RUNTIME_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "market.tick",
+        "market.kline",
+        "market.spread",
+        "execution.balance_update",
+        "market.kline_closed",
+        "microstructure.decision",
         "signal.suppressed",
         "timer.housekeeping",
-        "runtime.shutdown",
     }
 )
 
 MATERIALIZED_RUNTIME_EVENT_TYPES: frozenset[str] = frozenset(
     {
-        "market.kline_closed",
         "signal.order_intent",
         "risk.blocked",
         "execution.order_submitted",
@@ -313,13 +323,11 @@ class SQLiteRuntimeStore(RuntimeStore):
         if now_text is None:
             now_text = ""
 
-        if event_type == "market.kline_closed":
-            await self._record_kline_closed_event(
-                db,
-                event=event,
-                persisted_at=now_text,
-            )
-        elif event_type == "signal.order_intent":
+        if event_type in EPHEMERAL_RUNTIME_EVENT_TYPES:
+            await self._commit_if_autocommit(db)
+            return
+
+        if event_type == "signal.order_intent":
             await self._record_order_intent_event(
                 db,
                 event=event,

@@ -89,6 +89,8 @@ class BinanceExecutionGateway(ExecutionGateway):
         symbol = self._normalize_symbol(intent.symbol)
         side = self._normalize_side(intent.side)
         raw_order = await self._submit_order(symbol, side, intent)
+        if isinstance(raw_order, dict) and raw_order.get("status") == "rejected":
+            raise ValueError(raw_order.get("reason") or "local_order_validation_failed")
         return self._normalize_submitted_order(symbol, side, intent, raw_order)
 
     async def cancel_order(
@@ -163,12 +165,18 @@ class BinanceExecutionGateway(ExecutionGateway):
     async def _submit_order(
         self, symbol: str, side: str, intent: OrderIntentPayload
     ) -> Any:
+        kwargs = (
+            {"client_order_id": intent.intent_id}
+            if isinstance(self.client, BinanceClient)
+            else {}
+        )
         if intent.order_type == "market":
             return await self.client.place_market_order(
                 symbol,
                 side,
                 intent.quantity,
                 price=intent.limit_price,
+                **kwargs,
             )
         if intent.order_type == "limit":
             if intent.limit_price is None:
@@ -178,6 +186,7 @@ class BinanceExecutionGateway(ExecutionGateway):
                 side,
                 intent.quantity,
                 intent.limit_price,
+                **kwargs,
             )
         raise ValueError(f"unsupported order type: {intent.order_type}")
 
@@ -256,6 +265,10 @@ class BinanceExecutionGateway(ExecutionGateway):
             reduce_only=bool(
                 self._extract_value(raw_order, "reduceOnly", default=intent.reduce_only)
             ),
+            filled_qty=self._extract_float(raw_order, "filled", default=0.0),
+            avg_fill_price=self._extract_optional_float(raw_order, "average"),
+            fee_cost=self._extract_fee(raw_order)[0],
+            fee_currency=self._extract_fee(raw_order)[1],
         )
 
     def _normalize_order_update(
@@ -314,6 +327,18 @@ class BinanceExecutionGateway(ExecutionGateway):
     def _opposite_side(side: str) -> str:
         normalized = BinanceExecutionGateway._normalize_side(side)
         return "sell" if normalized == "buy" else "buy"
+
+    @staticmethod
+    def _extract_fee(raw_order: Any) -> tuple[float | None, str | None]:
+        if not isinstance(raw_order, dict):
+            return None, None
+        fees = raw_order.get("fees") or []
+        if not fees and raw_order.get("fee"):
+            fees = [raw_order["fee"]]
+        currencies = {f.get("currency") for f in fees}
+        if len(currencies) != 1:
+            return None, None
+        return sum(float(f.get("cost") or 0) for f in fees), currencies.pop()
 
     @staticmethod
     def _extract_order_id(raw_order: Any) -> str | None:

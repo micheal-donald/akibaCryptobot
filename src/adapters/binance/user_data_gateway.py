@@ -81,6 +81,12 @@ class BinanceUserDataGateway(UserStreamGateway):
         self._ensure_bridges()
         await self._manager.subscribe_user_data()
 
+    def get_status(self) -> dict[str, Any]:
+        stream = getattr(self._manager, "spot_user_stream", None)
+        if stream is None:
+            return {"connected": None, "transport": "unknown"}
+        return stream.get_status()
+
     def register_order_update_handler(self, handler: UserStreamEventHandler) -> None:
         self._callbacks["execution.order_update"].append(handler)
 

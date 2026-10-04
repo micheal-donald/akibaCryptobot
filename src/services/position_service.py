@@ -84,6 +84,13 @@ class PositionService(BaseService):
         state.requested_qty = requested_qty
         state.open_qty = open_qty if open_qty is not None else requested_qty
         state.avg_entry_price = self._optional_float(trade.get("entry_price"))
+        state.fees_paid = float(trade.get("fees") or 0.0)
+        timestamp = trade.get("timestamp")
+        if timestamp is not None:
+            try:
+                state.opened_at = datetime.fromisoformat(str(timestamp))
+            except ValueError:
+                state.opened_at = datetime.fromtimestamp(float(timestamp), timezone.utc)
         state.stop_loss = self._optional_float(trade.get("stop_loss"))
         state.take_profit = self._optional_float(trade.get("take_profit"))
         state.trailing_stop = self._optional_float(trade.get("trailing_stop_price"))
@@ -108,13 +115,10 @@ class PositionService(BaseService):
             self._exchange_order_to_position_ids[state.entry_order_ids[0]] = (
                 recovered_position_id
             )
-        if (
-            recovered_position_id not in self._client_order_to_position_ids
-            and trade.get("order_id")
-        ):
-            self._client_order_to_position_ids[str(trade["order_id"])] = (
-                recovered_position_id
-            )
+        if trade.get("client_order_id") or trade.get("order_id"):
+            self._client_order_to_position_ids[
+                str(trade.get("client_order_id") or trade["order_id"])
+            ] = recovered_position_id
         return state
 
     async def handle_order_update_event(self, event: RuntimeEvent) -> None:
@@ -159,7 +163,8 @@ class PositionService(BaseService):
         payload = cast(FillPayload, event.payload)
         state = self._resolve_position_state(payload.symbol, payload.client_order_id)
         state.symbol = payload.symbol
-        state.side = payload.side
+        if not payload.reduce_only:
+            state.side = payload.side
         if payload.client_order_id is not None:
             self._client_order_to_position_ids[payload.client_order_id] = (
                 state.position_id
@@ -340,6 +345,7 @@ class PositionService(BaseService):
         previous_open_qty: float,
         source_event: RuntimeEvent,
     ) -> None:
+        state.fees_paid += float(payload.fee_cost or 0.0)
         if (
             payload.exchange_order_id
             and payload.exchange_order_id not in state.entry_order_ids

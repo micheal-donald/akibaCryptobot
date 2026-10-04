@@ -53,6 +53,18 @@ flowchart TB
 
 ## Position Sizing
 
+### Exchange User-Stream Guard
+
+Runtime-owned entries require the authenticated Binance user-data stream. If
+the stream is explicitly disconnected, new entries are blocked and runtime
+health is degraded until the stream reconnects. This protects fill and order
+state tracking; inspect `runtime_telemetry.user_stream` and reconnect counters
+in `/api/status` when investigating blocked entries.
+
+Spot trading is long-only. A sell signal with no runtime-owned open position is
+ignored, and exit orders retain their local reduce-only intent through fill
+processing even when the exchange's spot order payload has no reduce-only flag.
+
 Three methods are available, from simplest to most sophisticated:
 
 ### 1. Percentage of Balance (default)

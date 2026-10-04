@@ -42,10 +42,9 @@ def make_event(
 ) -> RuntimeEvent:
     """Build a representative runtime event.
 
-    Defaults to ``market.kline_closed`` because the router skips ephemeral
-    types (``market.tick`` / streaming ``market.kline``) for warm-path
-    persistence — using a persistable event type by default keeps the
-    persistence-related assertions in these tests meaningful.
+    Defaults to ``market.kline_closed`` because closed candles are used to
+    evaluate strategies, even though the router keeps them out of durable
+    trading history.
     """
 
     ts_exchange = datetime(2026, 4, 5, 10, 0, tzinfo=timezone.utc)
@@ -179,7 +178,7 @@ async def test_runtime_event_router_records_queue_lag_and_persistence_depth() ->
         persistence_service=persistence,
         telemetry_service=telemetry,
     )
-    event = make_event(event_id="evt-2")
+    event = make_event(event_id="evt-2", event_type="runtime.shutdown")
 
     await router.start()
     await event_bus.put(event)
@@ -218,7 +217,7 @@ async def test_router_still_persists_when_queue_lag_metric_raises() -> None:
         persistence_service=persistence,
         telemetry_service=telemetry,
     )
-    event = make_event(event_id="evt-isolated")
+    event = make_event(event_id="evt-isolated", event_type="runtime.shutdown")
 
     await router.start()
     await event_bus.put(event)
@@ -264,8 +263,8 @@ async def test_router_skips_persistence_for_ephemeral_event_types() -> None:
     await asyncio.wait_for(event_bus.join(), timeout=1.0)
     await router.stop()
 
-    # Only the closed kline reached persistence.
-    assert persistence.enqueued == 1
+    # Market-data and display events stay out of the durable trade database.
+    assert persistence.enqueued == 0
 
     snapshot = telemetry.get_snapshot()
     # Telemetry still saw all five — operators keep visibility on capture-only

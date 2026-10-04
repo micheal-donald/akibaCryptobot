@@ -69,7 +69,8 @@ def build_runtime_projection(
         runtime_mode=mode.value,
         runtime_enabled=runtime_enabled,
         runtime_is_running=runtime_is_running,
-        runtime_is_healthy=(not runtime_enabled) or runtime_is_running,
+        runtime_is_healthy=(not runtime_enabled)
+        or (runtime_is_running and _user_stream_healthy(execution_source)),
         runtime_start_status=start_status,
         runtime_start_pending=start_pending,
         runtime_owns_entries=mode.owns_entries,
@@ -94,6 +95,12 @@ def build_runtime_projection(
         positions=positions,
         orders=orders,
     )
+
+
+def _user_stream_healthy(execution_source) -> bool:
+    gateway = getattr(execution_source, "user_stream_gateway", None)
+    getter = getattr(gateway, "get_status", None)
+    return not callable(getter) or getter().get("connected") is not False
 
 
 def _projection_source(mode: RuntimeMode) -> ProjectionSource:

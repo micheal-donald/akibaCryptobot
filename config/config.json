@@ -30,7 +30,7 @@
     "max_batch_size": 64,
     "flush_interval_seconds": 0.1,
     "microstructure": {
-      "enabled": true,
+      "enabled": false,
       "depth_levels": 10,
       "trade_window": 30,
       "decision_log_size": 256,

@@ -379,12 +379,6 @@ class SignalService(BaseService):
         snapshot: StrategySnapshot,
         evaluated_at: datetime,
     ) -> None:
-        if self.risk_service is not None and hasattr(
-            self.risk_service, "submit_order_intent"
-        ):
-            await self.risk_service.submit_order_intent(intent)
-            return
-
         await self.event_bus.put(
             RuntimeEvent(
                 meta=EventMeta(
@@ -398,6 +392,10 @@ class SignalService(BaseService):
                 payload=intent,
             )
         )
+        if self.risk_service is not None and hasattr(
+            self.risk_service, "submit_order_intent"
+        ):
+            await self.risk_service.submit_order_intent(intent)
 
     async def _emit_suppressed_event(
         self,

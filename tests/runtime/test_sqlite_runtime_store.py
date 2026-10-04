@@ -270,8 +270,7 @@ def test_sqlite_runtime_store_materializes_runtime_events(tmp_path) -> None:
 
         assert len(generic_rows) == 1
         assert generic_rows[0]["event_type"] == "runtime.shutdown"
-        assert len(candles) == 1
-        assert candles[0]["interval"] == "1m"
+        assert candles == []
         assert len(intents) == 1
         assert intents[0]["intent_id"] == "intent-1"
         assert len(risk_blocks) == 1

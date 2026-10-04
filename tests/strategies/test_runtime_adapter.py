@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 import pandas as pd
+import pytest
 
 from domain.models import Candle
 from domain.state import PositionState, PositionStatus
@@ -94,9 +95,10 @@ def test_runtime_adapter_maps_entry_signal_to_market_intent() -> None:
     assert intent.strategy == "fake_legacy"
 
 
-def test_runtime_adapter_maps_exit_signal_to_reduce_only_intent() -> None:
+@pytest.mark.parametrize("signal_type", [SignalType.CLOSE_LONG, SignalType.SELL])
+def test_runtime_adapter_maps_exit_signal_to_reduce_only_intent(signal_type) -> None:
     exit_signal = TradingSignal(
-        signal_type=SignalType.CLOSE_LONG,
+        signal_type=signal_type,
         strength=1.0,
         price=65050.0,
         timestamp=datetime(2026, 3, 24, 10, 1, tzinfo=timezone.utc),

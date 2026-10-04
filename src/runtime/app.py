@@ -48,16 +48,25 @@ from .service_registry import AsyncService, ServiceRegistry
 CAPTURE_ONLY_EVENT_TYPES: frozenset[str] = frozenset(
     {"market.tick", "market.kline", "market.spread", "execution.balance_update"}
 )
+EPHEMERAL_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "market.tick",
+        "market.kline",
+        "market.spread",
+        "execution.balance_update",
+        "market.kline_closed",
+        "microstructure.decision",
+        "signal.suppressed",
+        "timer.housekeeping",
+    }
+)
 
 # Event types with durable value that should be enqueued for warm-path
 # persistence. Materialized events are written into typed tables by the
 # runtime store; generic control/debug events stay in the fallback log table.
 PERSISTED_EVENT_TYPES: frozenset[str] = frozenset(
     {
-        "market.kline_closed",
-        "microstructure.decision",
         "signal.order_intent",
-        "signal.suppressed",
         "execution.order_submitted",
         "execution.order_update",
         "execution.fill",
@@ -66,7 +75,6 @@ PERSISTED_EVENT_TYPES: frozenset[str] = frozenset(
         "position.protective_submitted",
         "position.closed",
         "risk.blocked",
-        "timer.housekeeping",
         "runtime.shutdown",
     }
 )
@@ -159,6 +167,11 @@ class RuntimeEventRouter:
             # but warm-path persistence intentionally skips them.
             return
 
+        if event_type in EPHEMERAL_EVENT_TYPES:
+            # Reconstructable market data and display/health diagnostics remain
+            # in bounded memory telemetry/capture, not the durable trade DB.
+            return
+
         if event_type not in PERSISTED_EVENT_TYPES:
             # Unknown event types are non-fatal and non-persisted by default.
             return
@@ -186,9 +199,6 @@ class RuntimeEventRouter:
         payload = event.payload
         if not isinstance(payload, ProtectionSubmittedPayload):
             return
-        if payload.status != "native_submitted":
-            return
-
         self.position_service.mark_protective_orders(
             payload.client_order_id,
             payload.submitted_order_ids,
@@ -296,6 +306,27 @@ class RuntimeApp:
                 "last_failure_reason": last_failure_reason,
             }
         snapshot["event_bus_depth"] = self.event_bus.qsize()
+        gateway = getattr(self.execution_service, "user_stream_gateway", None)
+        get_status = getattr(gateway, "get_status", None)
+        if callable(get_status):
+            snapshot["user_stream"] = get_status()
+        if self.signal_service is not None:
+            signal = self.signal_service
+            snapshot["signals"] = {
+                "evaluations": signal.get_evaluation_counts(),
+                "suppressions": signal.get_suppression_counts(),
+                "exceptions": signal.get_exception_counts(),
+                "recent_decisions": [
+                    {
+                        "symbol": d.symbol,
+                        "timeframe": d.timeframe,
+                        "outcome": d.outcome,
+                        "reason": d.reason,
+                        "evaluated_at": d.evaluated_at.isoformat(),
+                    }
+                    for d in signal.get_recent_decisions()[-16:]
+                ],
+            }
         if self.microstructure_service is not None:
             snapshot["microstructure"] = self.microstructure_service.get_status()
         snapshot["captured_at"] = datetime.now(timezone.utc).isoformat()
@@ -493,6 +524,7 @@ class RuntimeApp:
                 execution_gateway=execution_gateway,
                 execution_service=app.execution_service,
                 position_service=app.position_service,
+                runtime_store=runtime_store,
                 reapply_native_protection=config.runtime_mode.owns_exits,
             )
             app.register_service("recovery", app.recovery_service)

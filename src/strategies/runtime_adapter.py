@@ -46,6 +46,18 @@ class LegacyStrategyRuntimeAdapter:
                 current_price,
                 ohlcv_data,
             )
+            if exit_signal is not None:
+                exit_signal = TradingSignal(
+                    signal_type=(
+                        SignalType.CLOSE_LONG
+                        if snapshot.position.side == "buy"
+                        else SignalType.CLOSE_SHORT
+                    ),
+                    strength=exit_signal.strength,
+                    price=exit_signal.price,
+                    timestamp=exit_signal.timestamp,
+                    metadata=exit_signal.metadata,
+                )
             return self._signal_to_intent(snapshot, exit_signal)
 
         signal = await self.strategy.generate_signal(
@@ -85,6 +97,9 @@ class LegacyStrategyRuntimeAdapter:
             side=side,
             order_type=self.order_type,  # type: ignore[arg-type]
             quantity=quantity,
+            # A market order's price hint enables local minimum-notional checks;
+            # it is not sent as a limit price to Binance.
+            limit_price=self._resolve_current_price(snapshot),
             stop_loss=signal.stop_loss,
             take_profit=signal.take_profit,
             reduce_only=reduce_only,

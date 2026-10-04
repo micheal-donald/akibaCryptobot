@@ -9,10 +9,10 @@ This guide covers local development, Docker deployment, and CI/CD pipeline confi
 Production uses Dokploy v0.30.8 on the existing Vultr server. The dashboard
 is configured for `https://cryptobot.akibasoftware.com`. Cloudflare holds a DNS-only
 A record pointing to `66.42.32.233`; Dokploy routes this hostname to Compose
-service `bot`, container port 8000, using Let's Encrypt. Public HTTPS is pending
-Vultr firewall access: HTTP/HTTPS currently time out externally and certificate
-issuance cannot complete. The server UFW rules allow TCP 80 and 443. The
-administrator panel binds only to localhost:
+service `bot`, container port 8000, using Let's Encrypt. Public HTTPS was verified
+on 2026-10-03 with a trusted certificate and HTTP 200 from `/api/health`. Both
+Vultr and server UFW permit TCP 80 and 443. The administrator panel binds only
+to localhost:
 
 ```bash
 ssh -N -i ~/.ssh/akibabot_vultr -L 3000:127.0.0.1:3000 root@66.42.32.233
@@ -40,8 +40,8 @@ The raw Compose specification is `deploy/dokploy/compose.yml`. It runs one
 paper/testnet bot with a 1 GiB memory limit and mounts the existing
 `/opt/akibabot/{data,logs,models,models_staging}` directories. Server `.env`
 settings are copied into Dokploy's generated environment file. Runtime data and
-models are excluded from images. Once the cloud firewall permits TCP 80 and
-443, the dashboard will be available through HTTPS on its domain. The Compose environment sets `AKIBA_PUBLIC_READ_ONLY=true`: public visitors
+models are excluded from images. The dashboard is available through HTTPS on
+its domain. The Compose environment sets `AKIBA_PUBLIC_READ_ONLY=true`: public visitors
 can inspect paper performance but cannot pause, resume, switch strategies, train
 models, approve live trading, or trigger reconciliation. The restriction applies
 to direct port 8000 access as well as the domain; operator tokens cannot bypass it.
@@ -78,6 +78,22 @@ exits when its trading task fails so normal restart supervision can recover it.
 
 The bare-metal instructions below remain available for development and manual
 rollback, and are no longer the normal production CI deployment path.
+
+### Runtime Database Maintenance
+
+The runtime SQLite database stores typed orders, fills, positions, risk blocks,
+and candles alongside a small generic control log. Candle data is refetched
+from Binance; research decisions, signal suppressions, and housekeeping ticks
+stay in bounded memory telemetry and are not persisted. If older telemetry has already made
+`runtime.db` large, stop the container and acquire the deployment lock before
+running `scripts/compact_runtime_store.py <runtime.db> --apply`. The compactor
+copies every typed table, drops reconstructable candles and ephemeral research/
+diagnostic events from the generic log, checks SQLite integrity, and swaps the compact file
+into place. It removes the old database only after the verified replacement is
+active. Preserve `trades.db`; it contains the legacy closed-trade history and is
+not part of runtime telemetry cleanup. Restart the container and verify
+`/api/health`, `/api/status`, and `runtime_telemetry.user_stream.connected`
+before considering the service recovered.
 
 ---
 
@@ -461,20 +477,12 @@ Practical operator expectations:
 
 Do not read these budgets as a claim that the current production deployment already satisfies HFT SLOs. They are the bar the platform should move toward as the native path becomes real.
 
-#### Phase 21 Microstructure Telemetry in Deployment
+#### Optional Microstructure Research
 
-When you promote a profile with `runtime.microstructure.enabled=true`, monitor these surfaces during the soak window:
-
-- **Health**: Check that `microstructure.evaluations` is non-zero and growing (depth updates are flowing) and `subscribe_failures` is empty (all streams subscribed).
-- **Latency**: Expect `microstructure.decision_latency.avg_ms` around 0.5–1.0 ms (Python in-process). `pipeline_latency.avg_ms` around 1–2 ms (websocket receive to decision). If either doubles, investigate network jitter or CPU load.
-- **Signal output**: `microstructure.decision_counts` shows the raw decision distribution (buy/sell ratio). This is **not** trade volume — it's paper decisions only. Use it to tune the strategy thresholds (`min_abs_imbalance`, `min_confidence`) based on a day of live data: if 99% are buys, your thresholds are too loose.
-- **Last decision**: The most recent `last_decision` shows symbol, confidence, execution style (passive/aggressive), decision price, and reason (e.g., `bullish_imbalance`). Use it to validate that the strategy is reacting to the market you expect.
-
-Microstructure telemetry failure modes:
-- No evaluations after 60s startup: Websocket not connected or gateway not running; check logs for depth/trade subscription errors.
-- Decision latency > 5 ms consistently: CPU contention or Python GC pause; watch `event_age_ms` to separate in-process cost from network lag.
-- `subscribe_failures` for one symbol: Non-fatal; the stream may retry later or you can redeploy.
-- Decision counts all one action (99% buy/sell): Thresholds too loose; revisit `runtime.microstructure.strategy` config after 24 hours of data.
+`runtime.microstructure.enabled` is false in the paper deployment. Keep it off
+for routine trading: it adds websocket subscriptions and CPU work but does not
+submit orders. For a planned research run, enable it only for that bounded
+window; its telemetry is ephemeral and is not part of the durable trade DB.
 
 ---
 

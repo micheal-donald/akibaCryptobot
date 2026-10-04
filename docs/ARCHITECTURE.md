@@ -163,12 +163,23 @@ Interpretation is intentionally conservative:
 
 Runtime event capture uses `src/runtime/event_capture.py` to write a bounded JSONL record of hot-path events for offline debugging. Replay support is for test and investigation flows, not for live hot-path execution.
 
-Runtime persistence now follows three lanes:
+Runtime persistence separates bounded in-memory observability from durable trade state:
 
 - capture-only events (`market.tick`, streaming `market.kline`, `market.spread`, `execution.balance_update`) stay out of warm-path SQLite writes and remain visible through telemetry plus capture/replay buffers
-- materialized events (`market.kline_closed`, signal/risk/execution/position lifecycle events) are written into typed runtime tables in `runtime.db`
-- low-volume control/debug events (`signal.suppressed`, `timer.housekeeping`, `runtime.shutdown`) stay in the generic `runtime_events` log
+- materialized trading events (order intents, risk blocks, orders, fills, and position lifecycle) are written into typed runtime tables in `runtime.db`
+- only low-volume process control such as `runtime.shutdown` stays in the generic `runtime_events` log
+- closed candles, microstructure decisions, suppressed-signal details, and housekeeping ticks remain in bounded memory telemetry/capture; they are reconstructable or summarized elsewhere and are not durable trading records
 - warm-path persistence drains in small transactional batches (size/time bounded) to avoid one-commit-per-event write amplification
+
+Offline database compaction removes ephemeral research and diagnostic rows while
+copying all typed tables and durable generic events. See the database maintenance
+procedure in [Deployment](DEPLOYMENT.md#runtime-database-maintenance).
+
+Runtime restart recovery hydrates positions and orders from the runtime SQLite
+store, then reconciles exchange order state before reusing persisted protective
+order IDs. The legacy trade store remains a separate history source and is not
+the authority for runtime-owned positions. A disconnected authenticated user
+stream marks runtime health degraded and blocks new entries until it reconnects.
 
 ### HFT Replay Boundary
 

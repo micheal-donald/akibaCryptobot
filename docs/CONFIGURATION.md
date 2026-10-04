@@ -113,12 +113,10 @@ It is additive: if the section is omitted, the bot stays on the legacy loop.
 
 #### `runtime.microstructure`
 
-Enables the live paper-shadow microstructure service. The service never places
-orders: it subscribes to websocket depth and trade streams, maintains local
-order books, evaluates the microstructure strategy on every depth update, and
-persists `microstructure.decision` events with decision and pipeline latency
-for offline analysis. Stream subscription failures degrade this surface but do
-not abort runtime startup.
+Enables the optional microstructure research service. It never places orders.
+When enabled, it subscribes to depth and trade streams, evaluates the research
+strategy in memory, and exposes bounded telemetry. Decisions are not written to
+SQLite. Keep it disabled unless running a specific, time-bounded research task.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -127,6 +125,12 @@ not abort runtime startup.
 | `trade_window` | int | `30` | Number of recent trades used for trade-pressure features |
 | `decision_log_size` | int | `256` | Bounded in-memory decision log exposed through runtime telemetry |
 | `strategy` | object | `{}` | Overrides for `PaperShadowMicrostructureStrategy` fields: `min_abs_imbalance`, `max_spread_bps`, `min_trade_pressure`, `min_confidence`, `latency_budget_ms`, `prefer_passive_execution`. Unknown keys are ignored with a warning |
+
+The production paper config leaves this service disabled. Durable SQLite data
+is reserved for order intents, risk decisions, exchange order updates, fills,
+and position lifecycle needed for audit and restart recovery. Candle data is
+refetched from Binance after a restart; health and suppressed-signal counters
+are kept in memory rather than logged as a growing event history.
 
 Rollout guidance:
 

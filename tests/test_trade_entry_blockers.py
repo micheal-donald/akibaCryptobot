@@ -93,7 +93,20 @@ def runtime_bot():
 
 
 def snapshot(price=50000, position=None):
-    return SimpleNamespace(last_price=price, closed_candles=(), position=position)
+    return SimpleNamespace(
+        symbol="BTC/USDT", last_price=price, closed_candles=(), position=position
+    )
+
+
+def test_runtime_rejects_below_exchange_minimum_without_raising_risk(runtime_bot):
+    runtime_bot._cached_balance = {"USDT": {"free": 84}}
+    runtime_bot.exchange = SimpleNamespace(
+        validate_and_adjust_order=lambda symbol, amount, price: (
+            amount * price >= 5,
+            amount,
+        )
+    )
+    assert runtime_bot._resolve_runtime_entry_quantity(snapshot(), buy_signal()) == 0
 
 
 def test_runtime_stake_is_fraction_of_free_balance(runtime_bot):

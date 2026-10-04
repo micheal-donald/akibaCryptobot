@@ -250,7 +250,7 @@ def test_phase6_runtime_exit_flow_generates_reduce_only_intent() -> None:
     assert submitted.reduce_only is True
     assert submitted.reason == "runtime_exit"
     assert [event.meta.event_type for event in store.events] == [
-        "market.kline_closed",
+        "signal.order_intent",
         "execution.order_submitted",
     ]
 
@@ -285,12 +285,8 @@ def test_phase6_runtime_exit_flow_suppresses_duplicate_exit_intent() -> None:
     submitted = execution_gateway.submissions[0]
     assert submitted.reduce_only is True
     event_types = [event.meta.event_type for event in store.events]
-    assert event_types.count("market.kline_closed") == 2
     assert event_types.count("execution.order_submitted") == 1
-    assert event_types.count("signal.suppressed") == 1
-    suppressed_payload = next(
-        event.payload
-        for event in store.events
-        if event.meta.event_type == "signal.suppressed"
+    assert "signal.suppressed" not in event_types
+    assert (
+        app.signal_service.get_suppression_counts().get("duplicate_candle_close") == 1
     )
-    assert suppressed_payload.reason == "duplicate_candle_close"

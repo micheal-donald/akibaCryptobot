@@ -123,6 +123,19 @@ class RiskService(BaseService):
             return "kill_switch_enabled"
         if self.entries_paused and not intent.reduce_only:
             return "entries_paused"
+        if not intent.reduce_only and any(
+            getattr(state, "status", None) == PositionStatus.RECONCILE_ERROR
+            for state in positions
+        ):
+            return "reconciliation_required"
+        gateway = getattr(self.execution_service, "user_stream_gateway", None)
+        get_status = getattr(gateway, "get_status", None)
+        if (
+            not intent.reduce_only
+            and callable(get_status)
+            and get_status().get("connected") is False
+        ):
+            return "user_stream_disconnected"
 
         current_position = self._find_position_for_symbol(intent.symbol, positions)
         if current_position is not None and current_position.open_qty > 0:

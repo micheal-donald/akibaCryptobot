@@ -232,7 +232,7 @@ def test_phase5_runtime_shell_routes_signal_to_execution() -> None:
     assert len(strategy.snapshots) == 1
     assert execution_gateway.submissions[0].quantity == 0.25
     assert [event.meta.event_type for event in store.events] == [
-        "market.kline_closed",
+        "signal.order_intent",
         "execution.order_submitted",
     ]
 
@@ -262,7 +262,7 @@ def test_phase5_runtime_shell_routes_blocked_signal_to_risk_without_execution() 
 
     assert execution_gateway.submissions == []
     assert [event.meta.event_type for event in store.events] == [
-        "market.kline_closed",
+        "signal.order_intent",
         "risk.blocked",
     ]
 
@@ -286,7 +286,7 @@ def test_phase5_skips_microstructure_when_gateway_lacks_depth_streams() -> None:
     assert "microstructure-shadow" not in app.services.names()
 
 
-def test_phase5_wires_microstructure_shadow_and_persists_decisions() -> None:
+def test_phase5_wires_microstructure_shadow_with_ephemeral_diagnostics() -> None:
     from domain.events import DepthSnapshotPayload, TradePayload
 
     market_data_gateway = FakeDepthMarketDataGateway()
@@ -339,6 +339,8 @@ def test_phase5_wires_microstructure_shadow_and_persists_decisions() -> None:
             payload=TradePayload(price=100.0, quantity=1.0, side="buy"),
         )
 
+    observed_status = {}
+
     async def run() -> None:
         await app.start()
         assert ("depth", "BTCUSDT", 10) in market_data_gateway.calls
@@ -347,21 +349,15 @@ def test_phase5_wires_microstructure_shadow_and_persists_decisions() -> None:
             await market_data_gateway.emit("market.trade", trade_event(index))
         await market_data_gateway.emit("market.depth", depth_event(7))
         await wait_for(
-            lambda: any(
-                event.meta.event_type == "microstructure.decision"
-                for event in store.events
-            )
+            lambda: app.microstructure_service.get_status()["evaluations"] > 0
         )
+        observed_status.update(app.microstructure_service.get_status())
         await app.stop()
 
     asyncio.run(run())
 
-    status = app.microstructure_service.get_status()
-    assert status["decision_counts"].get("buy", 0) >= 1
-    decision_events = [
-        event
-        for event in store.events
-        if event.meta.event_type == "microstructure.decision"
-    ]
-    assert decision_events
-    assert decision_events[0].meta.symbol == "BTC/USDT"
+    status = observed_status
+    assert status["evaluations"] >= 1
+    assert not any(
+        event.meta.event_type == "microstructure.decision" for event in store.events
+    )

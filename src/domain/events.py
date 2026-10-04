@@ -147,6 +147,10 @@ class OrderSubmittedPayload:
     requested_qty: float
     requested_price: float | None = None
     reduce_only: bool = False
+    filled_qty: float = 0.0
+    avg_fill_price: float | None = None
+    fee_cost: float | None = None
+    fee_currency: str | None = None
 
 
 @dataclass(slots=True, frozen=True)

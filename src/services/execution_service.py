@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any, cast
 from enum import Enum
@@ -72,6 +72,9 @@ class ExecutionService(BaseService):
         default_factory=dict, init=False, repr=False
     )
     _callbacks_registered: bool = field(default=False, init=False, repr=False)
+    _processed_fill_quantities: dict[str, float] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     async def on_start(self) -> None:
         self._register_user_stream_callbacks()
@@ -127,6 +130,9 @@ class ExecutionService(BaseService):
             )
             raise
 
+        submitted = replace(
+            submitted, reduce_only=intent.reduce_only or submitted.reduce_only
+        )
         state.order_id = submitted.exchange_order_id
         state.symbol = submitted.symbol
         state.side = submitted.side
@@ -157,7 +163,54 @@ class ExecutionService(BaseService):
                 payload=submitted,
             )
         )
+        # Immediate market fills in REST acknowledgements remain authoritative
+        # even if the websocket delivery is delayed. Cumulative deduplication
+        # below prevents counting the later websocket copy twice.
+        if submitted.filled_qty > 0 and submitted.avg_fill_price is not None:
+            await self._handle_fill_event(
+                RuntimeEvent(
+                    meta=EventMeta(
+                        event_id=uuid4().hex,
+                        event_type="execution.fill",
+                        source="binance.rest.order_ack",
+                        symbol=submitted.symbol,
+                        ts_exchange=None,
+                        ts_received=self._now(),
+                    ),
+                    payload=FillPayload(
+                        client_order_id=intent.intent_id,
+                        exchange_order_id=submitted.exchange_order_id,
+                        symbol=submitted.symbol,
+                        side=submitted.side,
+                        fill_qty=submitted.filled_qty,
+                        fill_price=submitted.avg_fill_price,
+                        cumulative_qty=submitted.filled_qty,
+                        cumulative_quote_qty=(
+                            submitted.filled_qty * submitted.avg_fill_price
+                        ),
+                        reduce_only=intent.reduce_only,
+                        fee_cost=submitted.fee_cost,
+                        fee_currency=submitted.fee_currency,
+                    ),
+                )
+            )
         return submitted
+
+    def restore_protective_order(self, position_id, snapshot, *, side, quantity):
+        client_id = snapshot.client_order_id or snapshot.exchange_order_id
+        self._order_states[client_id] = OrderState(
+            client_order_id=client_id,
+            order_id=snapshot.exchange_order_id,
+            symbol=snapshot.symbol,
+            side=side,
+            order_type="limit",
+            requested_qty=quantity,
+            reduce_only=True,
+            parent_position_id=position_id,
+            status=self._coerce_status(snapshot.status, default=OrderStatus.ACCEPTED),
+        )
+        if snapshot.exchange_order_id is not None:
+            self._exchange_to_client_order_ids[snapshot.exchange_order_id] = client_id
 
     def restore_order_from_trade(
         self,
@@ -167,7 +220,9 @@ class ExecutionService(BaseService):
     ) -> OrderState:
         """Rehydrate a persisted open trade into execution state."""
 
-        client_order_id = str(trade.get("order_id") or trade.get("symbol"))
+        client_order_id = str(
+            trade.get("client_order_id") or trade.get("order_id") or trade.get("symbol")
+        )
         if not client_order_id:
             raise ValueError("trade must provide symbol or order_id")
 
@@ -260,6 +315,10 @@ class ExecutionService(BaseService):
     async def _handle_order_update_event(self, event: RuntimeEvent) -> None:
         payload = cast(OrderUpdatePayload, event.payload)
         state = self._resolve_order_state(payload)
+        # Spot execution reports do not carry reduceOnly. Preserve the local
+        # intent so closing a position cannot be mistaken for a fresh entry.
+        payload = replace(payload, reduce_only=state.reduce_only or payload.reduce_only)
+        event = replace(event, payload=payload)
         state.order_id = payload.exchange_order_id or state.order_id
         if payload.client_order_id is not None:
             self._submitted_orders.setdefault(
@@ -293,6 +352,17 @@ class ExecutionService(BaseService):
     async def _handle_fill_event(self, event: RuntimeEvent) -> None:
         payload = cast(FillPayload, event.payload)
         state = self._resolve_order_state(payload)
+        key = f"{payload.symbol}:{payload.exchange_order_id or state.client_order_id}"
+        previous_processed = self._processed_fill_quantities.get(key, 0.0)
+        if payload.cumulative_qty <= previous_processed:
+            return
+        self._processed_fill_quantities[key] = payload.cumulative_qty
+        payload = replace(
+            payload,
+            fill_qty=payload.cumulative_qty - previous_processed,
+        )
+        payload = replace(payload, reduce_only=state.reduce_only or payload.reduce_only)
+        event = replace(event, payload=payload)
         state.order_id = payload.exchange_order_id or state.order_id
         state.symbol = payload.symbol
         state.side = payload.side
@@ -415,6 +485,26 @@ class ExecutionService(BaseService):
             for order in submitted_orders
             if order.exchange_order_id is not None
         )
+        for order in submitted_orders:
+            protective_id = order.client_order_id or order.exchange_order_id
+            if protective_id is None:
+                continue
+            self._order_states.setdefault(
+                protective_id,
+                OrderState(
+                    client_order_id=protective_id,
+                    order_id=order.exchange_order_id,
+                    symbol=order.symbol,
+                    side=order.side,
+                    order_type=order.order_type,
+                    requested_qty=order.requested_qty,
+                    reduce_only=True,
+                ),
+            )
+            if order.exchange_order_id is not None:
+                self._exchange_to_client_order_ids[order.exchange_order_id] = (
+                    protective_id
+                )
         requested_count = self._requested_protection_count(protection)
         if len(protection_state.submitted_order_ids) >= requested_count:
             protection_state.status = ProtectionStatus.NATIVE_SUBMITTED

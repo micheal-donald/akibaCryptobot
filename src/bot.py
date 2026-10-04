@@ -20,7 +20,7 @@ from operations.live_rollout_approval import (
     LiveRolloutApprovalSnapshot,
 )
 from strategies.momentum_strategy import MomentumStrategy
-from strategies.base_strategy import StrategyManager
+from strategies.base_strategy import StrategyManager, SignalType
 from persistence.trade_store import TradeStore
 from performance.metrics_tracker import PerformanceMetricsTracker
 from monitoring.reconciliation import ReconciliationManager
@@ -286,6 +286,12 @@ class AkibaCryptoBot:
         # carried quantity rather than sizing an exit from the free cash balance.
         if snapshot.position is not None and snapshot.position.open_qty > 0:
             return snapshot.position.open_qty
+        if (
+            signal.signal_type is SignalType.SELL
+            and getattr(getattr(self, "exchange", None), "market_type", None) == "spot"
+        ):
+            # Seeded testnet coins are not strategy-owned short inventory.
+            return 0.0
         min_strength = self.config.get("strategy_config", {}).get(
             "min_signal_strength", 0.45
         )
@@ -311,7 +317,23 @@ class AkibaCryptoBot:
         risk_quantity = self.risk_manager.calculate_position_size_with_signal(
             free_balance, signal.strength, current_price, signal.stop_loss
         )
-        return min(risk_quantity, free_balance * stake_amount / current_price)
+        quantity = min(risk_quantity, free_balance * stake_amount / current_price)
+        validator = getattr(
+            getattr(self, "exchange", None), "validate_and_adjust_order", None
+        )
+        if callable(validator):
+            valid, quantity = validator(snapshot.symbol, quantity, current_price)
+            if not valid:
+                self.logger.warning(
+                    "Runtime entry skipped for %s: allocation %.2f %s fails "
+                    "exchange minimum amount/notional; replenish testing capital "
+                    "rather than increasing the configured risk allocation",
+                    snapshot.symbol,
+                    quantity * current_price,
+                    stake_currency,
+                )
+                return 0.0
+        return quantity
 
     async def _start_runtime_if_enabled(self) -> None:
         if not self.runtime_enabled or self.runtime_handle is not None:

@@ -323,81 +323,30 @@ class WebSocketManager:
         self.tasks[stream_name] = task
 
     async def subscribe_user_data(self):
-        """Subscribe to user data stream (orders, balances)"""
-        stream_name = "user_data"
+        """Authenticate the Spot WS API before allowing runtime startup."""
+        from exchange.spot_user_stream import SpotUserStream
 
-        if stream_name in self.sockets:
+        previous = self.tasks.get("user_data")
+        if previous is not None and not previous.done():
             return
 
-        async def handle_socket():
-            socket = self.bm.user_socket()
-            async with socket as stream:
-                self.sockets[stream_name] = socket
-                logger.info("Subscribed to user data stream")
+        async def on_event(event):
+            await self._dispatch_event("user", event)
 
-                while True:
-                    try:
-                        msg = await stream.recv()
-
-                        event_type = msg.get("e")
-
-                        if event_type == "outboundAccountPosition":
-                            # Balance update
-                            parsed_data = {
-                                "type": "balance_update",
-                                "balances": {
-                                    b["a"]: {
-                                        "free": float(b["f"]),
-                                        "locked": float(b["l"]),
-                                    }
-                                    for b in msg.get("B", [])
-                                },
-                                "timestamp": msg.get("E"),
-                                "event_time": msg.get("E"),
-                                "update_time": msg.get("u"),
-                            }
-                        elif event_type == "executionReport":
-                            # Order update
-                            parsed_data = {
-                                "type": "order_update",
-                                "symbol": msg.get("s"),
-                                "client_order_id": msg.get("c"),
-                                "order_id": msg.get("i"),
-                                "side": msg.get("S"),
-                                "order_type": msg.get("o"),
-                                "status": msg.get("X"),
-                                "price": float(msg.get("p", 0)),
-                                "quantity": float(msg.get("q", 0)),
-                                "filled_quantity": float(msg.get("z", 0)),
-                                "last_fill_qty": float(msg.get("l", 0)),
-                                "last_filled_quantity": float(msg.get("l", 0)),
-                                "fill_price": float(msg.get("L", 0)),
-                                "last_fill_price": float(msg.get("L", 0)),
-                                "execution_type": msg.get("x"),
-                                "cumulative_quote_qty": float(msg.get("Z", 0)),
-                                "cumulative_quote_quantity": float(msg.get("Z", 0)),
-                                "fee_cost": float(msg.get("n", 0)),
-                                "fee_currency": msg.get("N"),
-                                "is_maker": msg.get("m", False),
-                                "reduce_only": msg.get("R", False),
-                                "raw_status": msg.get("X"),
-                                "event_time": msg.get("E"),
-                                "trade_time": msg.get("T"),
-                                "timestamp": msg.get("T") or msg.get("E"),
-                            }
-                        else:
-                            parsed_data = msg
-
-                        await self._dispatch_event("user", parsed_data)
-
-                    except asyncio.CancelledError:
-                        break
-                    except Exception as e:
-                        logger.error(f"Error in user data stream: {e}")
-                        await asyncio.sleep(1)
-
-        task = asyncio.create_task(handle_socket())
-        self.tasks[stream_name] = task
+        self.spot_user_stream = SpotUserStream(
+            self.api_key, self.api_secret, self.testnet, on_event
+        )
+        task = asyncio.create_task(self.spot_user_stream.run())
+        self.tasks["user_data"] = task
+        try:
+            await asyncio.wait_for(self.spot_user_stream.ready.wait(), timeout=45)
+        except BaseException:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            raise
 
     async def subscribe_futures_kline(self, symbol: str, interval: str = "1m"):
         """Subscribe to futures kline stream"""

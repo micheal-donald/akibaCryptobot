@@ -559,6 +559,12 @@ When `bot.trade_store` is available the route paginates against the SQLite-backe
 | `queue_depths` | Current queue depth by queue name |
 | `last_seen_at` | Timestamp of the most recently observed runtime event |
 | `latency` | Nested latency summaries for event age, exchange age, and queue lag |
+| `signals` | Recent strategy decisions and counts, including suppressed or non-actionable signals |
+| `user_stream` | Authenticated Binance user stream connectivity and reconnect/event counters |
+
+When `user_stream.connected` is explicitly false, the runtime reports unhealthy
+and blocks new entries. This prevents trading without timely order and fill
+updates; the stream reconnects automatically.
 
 ### Latency Metrics
 

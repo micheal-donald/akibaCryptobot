@@ -135,7 +135,13 @@ class BinanceClient:
         return True, amount
 
     async def place_market_order(
-        self, symbol: str, side: str, amount: float, price: float = None
+        self,
+        symbol: str,
+        side: str,
+        amount: float,
+        price: float = None,
+        *,
+        client_order_id: str = None,
     ) -> Dict:
         try:
             await self.ensure_markets_loaded()
@@ -149,7 +155,12 @@ class BinanceClient:
                         "reason": "Fails min notional or amount limit",
                     }
 
-            order = await self.exchange.create_market_order(symbol, side, amount)
+            if client_order_id:
+                order = await self.exchange.create_market_order(
+                    symbol, side, amount, params={"newClientOrderId": client_order_id}
+                )
+            else:
+                order = await self.exchange.create_market_order(symbol, side, amount)
             logger.info(f"Market order placed: {side} {amount} {symbol}")
             return order
         except Exception as e:
@@ -157,7 +168,13 @@ class BinanceClient:
             raise
 
     async def place_limit_order(
-        self, symbol: str, side: str, amount: float, price: float
+        self,
+        symbol: str,
+        side: str,
+        amount: float,
+        price: float,
+        *,
+        client_order_id: str = None,
     ) -> Dict:
         try:
             await self.ensure_markets_loaded()
@@ -169,7 +186,18 @@ class BinanceClient:
                     "reason": "Fails min notional or amount limit",
                 }
 
-            order = await self.exchange.create_limit_order(symbol, side, amount, price)
+            if client_order_id:
+                order = await self.exchange.create_limit_order(
+                    symbol,
+                    side,
+                    amount,
+                    price,
+                    params={"newClientOrderId": client_order_id},
+                )
+            else:
+                order = await self.exchange.create_limit_order(
+                    symbol, side, amount, price
+                )
             logger.info(f"Limit order placed: {side} {amount} {symbol} at {price}")
             return order
         except Exception as e:

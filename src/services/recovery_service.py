@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 from ports.exchange import ExecutionGateway
@@ -57,6 +58,7 @@ class RestartRecoveryService(BaseService):
     execution_gateway: ExecutionGateway
     execution_service: ExecutionService
     position_service: PositionService
+    runtime_store: object | None = None
     max_recovery_items: int = 100
     fetch_timeout_seconds: float = 5.0
     reapply_native_protection: bool = False
@@ -72,6 +74,32 @@ class RestartRecoveryService(BaseService):
         """Rehydrate open positions and reconcile them against the exchange."""
 
         open_trades = await self.trade_store.load_open_trades()
+        # Runtime fills are materialized in runtime.db, not the legacy trades
+        # table. Recover those positions first so a restart cannot forget them.
+        fetch_positions = getattr(self.runtime_store, "fetch_runtime_positions", None)
+        if callable(fetch_positions):
+            open_trades = dict(open_trades)
+            for row in await fetch_positions():
+                if float(row.get("open_qty") or 0) <= 0:
+                    continue
+                entry_ids = json.loads(row.get("entry_order_ids_json") or "[]")
+                open_trades[row["symbol"]] = {
+                    "symbol": row["symbol"],
+                    "side": row["side"],
+                    "amount": row["open_qty"],
+                    "entry_price": row["avg_entry_price"],
+                    "stop_loss": row["stop_loss"],
+                    "take_profit": row["take_profit"],
+                    "trailing_stop_price": row["trailing_stop"],
+                    "order_id": entry_ids[-1] if entry_ids else None,
+                    "client_order_id": row["position_id"],
+                    "position_id": row["position_id"],
+                    "timestamp": row["opened_at"],
+                    "fees": row.get("fee_cost") or 0.0,
+                    "protective_order_ids": json.loads(
+                        row.get("protective_order_ids_json") or "[]"
+                    ),
+                }
         restored_symbols: list[str] = []
         protected_symbols: list[str] = []
         orphaned_symbols: list[str] = []
@@ -92,7 +120,9 @@ class RestartRecoveryService(BaseService):
                 )
                 continue
 
-            position_key = str(trade.get("order_id") or symbol)
+            position_key = str(
+                trade.get("position_id") or trade.get("order_id") or symbol
+            )
             self.execution_service.restore_order_from_trade(trade)
             position_state = self.position_service.restore_position_from_trade(
                 trade,
@@ -129,6 +159,47 @@ class RestartRecoveryService(BaseService):
                     trade,
                     order_snapshot=order_snapshot,
                 )
+
+            protective_ids = tuple(trade.get("protective_order_ids") or ())
+            if protective_ids:
+                verified = []
+                for order_id in protective_ids:
+                    snapshot = await self._fetch_order_snapshot(
+                        {**trade, "order_id": order_id}
+                    )
+                    if (
+                        snapshot is None
+                        or str(snapshot.status).lower()
+                        not in {"open", "new", "accepted", "partially_filled"}
+                        or snapshot.filled_qty > 0
+                    ):
+                        self.position_service.mark_reconcile_error(position_key)
+                        reconcile_error_symbols.append(symbol)
+                        issues.append(
+                            RecoveryIssue(
+                                symbol=symbol,
+                                kind="reconcile_error",
+                                reason="persisted protective order needs reconciliation",
+                            )
+                        )
+                        break
+                    self.execution_service.restore_protective_order(
+                        position_key,
+                        snapshot,
+                        side="sell" if position_state.side == "buy" else "buy",
+                        quantity=position_state.open_qty,
+                    )
+                    verified.append(order_id)
+                else:
+                    self.position_service.mark_protective_orders(
+                        position_key,
+                        tuple(verified),
+                        stop_loss=position_state.stop_loss,
+                        take_profit=position_state.take_profit,
+                        trailing_stop=position_state.trailing_stop,
+                    )
+                    protected_symbols.append(symbol)
+                continue
 
             if self._should_attempt_protection_reapply(position_state):
                 if self.reapply_native_protection:

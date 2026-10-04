@@ -231,7 +231,7 @@ def test_phase5_integration_runtime_entry_flow_uses_legacy_adapter() -> None:
     assert execution_gateway.submissions[0].take_profit == 67000.0
     assert execution_gateway.submissions[0].strategy == "legacy_test"
     assert [event.meta.event_type for event in store.events] == [
-        "market.kline_closed",
+        "signal.order_intent",
         "execution.order_submitted",
     ]
 
@@ -271,15 +271,11 @@ def test_phase5_integration_duplicate_event_is_suppressed_once() -> None:
 
     assert len(execution_gateway.submissions) == 1
     event_types = [event.meta.event_type for event in store.events]
-    assert event_types.count("market.kline_closed") == 2
     assert event_types.count("execution.order_submitted") == 1
-    assert event_types.count("signal.suppressed") == 1
-    suppressed_payload = next(
-        event.payload
-        for event in store.events
-        if event.meta.event_type == "signal.suppressed"
+    assert "signal.suppressed" not in event_types
+    assert (
+        app.signal_service.get_suppression_counts().get("duplicate_candle_close") == 1
     )
-    assert suppressed_payload.reason == "duplicate_candle_close"
 
 
 def test_phase5_integration_strategy_exception_is_isolated() -> None:
@@ -304,7 +300,4 @@ def test_phase5_integration_strategy_exception_is_isolated() -> None:
     asyncio.run(run())
 
     assert execution_gateway.submissions == []
-    assert [event.meta.event_type for event in store.events] == [
-        "market.kline_closed",
-        "signal.suppressed",
-    ]
+    assert [event.meta.event_type for event in store.events] == []
