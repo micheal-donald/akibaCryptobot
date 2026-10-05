@@ -62,6 +62,13 @@ MATERIALIZED_RUNTIME_EVENT_TYPES: frozenset[str] = frozenset(
     }
 )
 
+# Bound diagnostics and historical inputs while keeping enough candle history
+# to warm the runtime's default indicator window after a restart.
+MAX_PERSISTED_CANDLES_PER_SERIES = 2048
+MAX_REJECTED_ORDERS = 2000
+MAX_RISK_BLOCKS = 2000
+MAX_RECOVERY_REPORTS = 100
+
 
 CREATE_RUNTIME_EVENTS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS runtime_events (
@@ -274,6 +281,7 @@ class SQLiteRuntimeStore(RuntimeStore):
             "CREATE INDEX IF NOT EXISTS idx_runtime_recovery_reports_persisted "
             "ON runtime_recovery_reports(persisted_at)"
         )
+        await self._prune_bounded_history(self._db)
         await self._db.commit()
 
     async def close(self) -> None:
@@ -351,6 +359,7 @@ class SQLiteRuntimeStore(RuntimeStore):
                 event=event,
                 persisted_at=now_text,
             )
+            await self._prune_rejected_orders(db)
         elif event_type == "execution.fill":
             await self._record_fill_event(
                 db,
@@ -414,7 +423,65 @@ class SQLiteRuntimeStore(RuntimeStore):
                 self._serialize_datetime(self._now()),
             ),
         )
+        await db.execute(
+            """DELETE FROM runtime_recovery_reports
+               WHERE id NOT IN (
+                   SELECT id FROM runtime_recovery_reports
+                   ORDER BY persisted_at DESC, id DESC LIMIT ?
+               )""",
+            (MAX_RECOVERY_REPORTS,),
+        )
         await self._commit_if_autocommit(db)
+
+    async def _prune_bounded_history(self, db: aiosqlite.Connection) -> None:
+        """Apply retention at startup, including rows written by older versions."""
+
+        await db.execute(
+            """DELETE FROM runtime_candles
+               WHERE event_id NOT IN (
+                   SELECT event_id FROM runtime_candles AS recent
+                   WHERE recent.symbol = runtime_candles.symbol
+                     AND recent.interval = runtime_candles.interval
+                   ORDER BY recent.close_time DESC LIMIT ?
+               )""",
+            (MAX_PERSISTED_CANDLES_PER_SERIES,),
+        )
+        await self._prune_rejected_orders(db)
+        await self._prune_risk_blocks(db)
+        await db.execute(
+            """DELETE FROM runtime_recovery_reports
+               WHERE id NOT IN (
+                   SELECT id FROM runtime_recovery_reports
+                   ORDER BY persisted_at DESC, id DESC LIMIT ?
+               )""",
+            (MAX_RECOVERY_REPORTS,),
+        )
+
+    async def _prune_rejected_orders(self, db: aiosqlite.Connection) -> None:
+        """Keep a bounded sample of failed attempts; preserve all trade lifecycle rows."""
+
+        await db.execute(
+            """DELETE FROM runtime_orders
+               WHERE status = 'rejected' AND filled_qty = 0
+                 AND client_order_id NOT IN (
+                   SELECT client_order_id FROM runtime_orders
+                   WHERE status = 'rejected' AND filled_qty = 0
+                   ORDER BY updated_at DESC LIMIT ?
+                 )""",
+            (MAX_REJECTED_ORDERS,),
+        )
+
+    async def _prune_risk_blocks(self, db: aiosqlite.Connection) -> None:
+        """Retain recent risk decisions for diagnosis without unbounded growth."""
+
+        await db.execute(
+            """DELETE FROM runtime_risk_blocks
+               WHERE event_id NOT IN (
+                   SELECT event_id FROM runtime_risk_blocks
+                   ORDER BY ts_received DESC, event_id DESC LIMIT ?
+               )""",
+            (MAX_RISK_BLOCKS,),
+        )
 
     async def fetch_runtime_events(self) -> list[dict[str, Any]]:
         """Return generic stored runtime events for tests and diagnostics."""
@@ -664,6 +731,7 @@ class SQLiteRuntimeStore(RuntimeStore):
                 persisted_at,
             ),
         )
+        await self._prune_risk_blocks(db)
 
     async def _record_order_state_event(
         self,

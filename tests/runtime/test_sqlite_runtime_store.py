@@ -4,6 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
+import adapters.sqlite.runtime_store as runtime_store_module
 from adapters.sqlite.runtime_store import SQLiteRuntimeStore
 from domain.events import (
     EventMeta,
@@ -337,3 +338,65 @@ def test_sqlite_runtime_store_requires_initialization(tmp_path) -> None:
         assert "has not been initialized" in str(exc)
     else:
         raise AssertionError("store should require initialization")
+
+
+def test_sqlite_runtime_store_bounds_historical_candles_and_rejections(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(runtime_store_module, "MAX_PERSISTED_CANDLES_PER_SERIES", 2)
+    monkeypatch.setattr(runtime_store_module, "MAX_REJECTED_ORDERS", 2)
+    store = SQLiteRuntimeStore(db_path=str(tmp_path / "runtime.db"))
+
+    async def run() -> None:
+        await store.initialize()
+        db = store._require_db()
+        for symbol in ("BTC/USDT", "ETH/USDT"):
+            for index in range(3):
+                await db.execute(
+                    """INSERT INTO runtime_candles (
+                           event_id, symbol, interval, open_time, close_time,
+                           open, high, low, close, volume, source, ts_received,
+                           persisted_at
+                       ) VALUES (?, ?, '1m', ?, ?, 1, 1, 1, 1, 1, 'test', ?, ?)""",
+                    (
+                        f"{symbol}-{index}",
+                        symbol,
+                        f"2026-01-01T00:0{index}:00+00:00",
+                        f"2026-01-01T00:0{index}:59+00:00",
+                        f"2026-01-01T00:0{index}:59+00:00",
+                        f"2026-01-01T00:0{index}:59+00:00",
+                    ),
+                )
+        for index in range(3):
+            await db.execute(
+                """INSERT INTO runtime_orders (
+                       client_order_id, symbol, status, filled_qty, last_event_id,
+                       updated_at, persisted_at
+                   ) VALUES (?, 'BTC/USDT', 'rejected', 0, ?, ?, ?)""",
+                (f"reject-{index}", f"event-{index}", f"2026-01-0{index+1}", "now"),
+            )
+        await db.execute(
+            """INSERT INTO runtime_orders (
+                   client_order_id, symbol, status, filled_qty, last_event_id,
+                   updated_at, persisted_at
+               ) VALUES ('filled-1', 'BTC/USDT', 'filled', 1, 'fill-event', 'old', 'old')"""
+        )
+        await store._prune_bounded_history(db)
+        candles = await store.fetch_runtime_candles()
+        orders = await store.fetch_runtime_orders()
+        await store.close()
+        assert len(candles) == 4
+        assert {
+            symbol: sum(row["symbol"] == symbol for row in candles)
+            for symbol in ("BTC/USDT", "ETH/USDT")
+        } == {
+            "BTC/USDT": 2,
+            "ETH/USDT": 2,
+        }
+        assert {row["client_order_id"] for row in orders} == {
+            "reject-1",
+            "reject-2",
+            "filled-1",
+        }
+
+    asyncio.run(run())

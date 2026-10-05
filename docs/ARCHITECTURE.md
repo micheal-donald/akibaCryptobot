@@ -169,6 +169,7 @@ Runtime persistence separates bounded in-memory observability from durable trade
 - materialized trading events (order intents, risk blocks, orders, fills, and position lifecycle) are written into typed runtime tables in `runtime.db`
 - only low-volume process control such as `runtime.shutdown` stays in the generic `runtime_events` log
 - closed candles, microstructure decisions, suppressed-signal details, and housekeeping ticks remain in bounded memory telemetry/capture; they are reconstructable or summarized elsewhere and are not durable trading records
+- legacy durable candle rows are capped at the newest 2,048 per symbol/timeframe on startup; rejected zero-fill orders and risk blocks retain only the newest 2,000 each, and recovery reports retain the newest 100. Fills, order lifecycle rows that are not rejected, and position state are preserved for audit and restart recovery
 - warm-path persistence drains in small transactional batches (size/time bounded) to avoid one-commit-per-event write amplification
 
 Offline database compaction removes ephemeral research and diagnostic rows while

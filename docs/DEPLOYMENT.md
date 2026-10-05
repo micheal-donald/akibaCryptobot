@@ -81,17 +81,20 @@ rollback, and are no longer the normal production CI deployment path.
 
 ### Runtime Database Maintenance
 
-The runtime SQLite database stores typed orders, fills, positions, risk blocks,
-and candles alongside a small generic control log. Candle data is refetched
-from Binance; research decisions, signal suppressions, and housekeeping ticks
-stay in bounded memory telemetry and are not persisted. If older telemetry has already made
-`runtime.db` large, stop the container and acquire the deployment lock before
-running `scripts/compact_runtime_store.py <runtime.db> --apply`. The compactor
-copies every typed table, drops reconstructable candles and ephemeral research/
-diagnostic events from the generic log, checks SQLite integrity, and swaps the compact file
-into place. It removes the old database only after the verified replacement is
-active. Preserve `trades.db`; it contains the legacy closed-trade history and is
-not part of runtime telemetry cleanup. Restart the container and verify
+The runtime SQLite database stores order intents, recent risk blocks and
+rejections, fills, and position state alongside a small generic control log.
+Market candles, research decisions, signal suppressions, and housekeeping ticks
+are not persisted. Startup bounds retained legacy candles to the newest 2,048
+per symbol/timeframe, rejected zero-fill orders and risk blocks to the newest
+2,000 each, and recovery reports to the newest 100. Fill and position history
+is retained for audit and restart recovery. If old ephemeral telemetry has
+already made `runtime.db` large, stop the container and acquire the deployment
+lock before running `scripts/compact_runtime_store.py <runtime.db> --apply`. The
+compactor copies the durable typed state, drops reconstructable and ephemeral
+rows, checks SQLite integrity, and swaps the compact file into place. It removes
+the old database only after the verified replacement is active. Preserve
+`trades.db`; it contains the legacy closed-trade history and is not part of
+runtime telemetry cleanup. Restart the container and verify
 `/api/health`, `/api/status`, and `runtime_telemetry.user_stream.connected`
 before considering the service recovered.
 
