@@ -10,6 +10,45 @@ from ports.exchange import ProtectionIntent
 class FakeExchange:
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str, float, float | None, dict | None]] = []
+        self.requests: list[tuple[str, str, str, dict | None]] = []
+
+    def market(self, symbol: str) -> dict[str, str]:
+        return {"id": symbol.replace("/", "")}
+
+    def amount_to_precision(self, _symbol: str, amount: float) -> str:
+        return str(amount)
+
+    def price_to_precision(self, _symbol: str, price: float) -> str:
+        return str(price)
+
+    async def request(
+        self, path: str, api: str, method: str, params: dict | None = None
+    ) -> dict[str, object]:
+        self.requests.append((path, api, method, params))
+        return {
+            "orderReports": [
+                {
+                    "orderId": 71,
+                    "clientOrderId": "tp-71",
+                    "symbol": "BTCUSDT",
+                    "type": "TAKE_PROFIT",
+                    "side": "SELL",
+                    "origQty": "0.25",
+                    "price": "0.00",
+                    "status": "NEW",
+                },
+                {
+                    "orderId": 72,
+                    "clientOrderId": "sl-72",
+                    "symbol": "BTCUSDT",
+                    "type": "STOP_LOSS",
+                    "side": "SELL",
+                    "origQty": "0.25",
+                    "price": "0.00",
+                    "status": "NEW",
+                },
+            ]
+        }
 
     async def create_order(
         self,
@@ -173,13 +212,12 @@ def test_execution_gateway_submits_limit_orders_and_normalizes_updates() -> None
     assert fetched.avg_fill_price == 201.5
 
 
-def test_execution_gateway_best_effort_protection_uses_native_orders() -> None:
+def test_execution_gateway_spot_protection_uses_native_oco() -> None:
     client = FakeExecutionClient()
     gateway = BinanceExecutionGateway(client=client)
     protection = ProtectionIntent(
         stop_loss_price=99.0,
         take_profit_price=110.0,
-        trailing_stop_price=95.0,
     )
 
     async def run():
@@ -187,50 +225,48 @@ def test_execution_gateway_best_effort_protection_uses_native_orders() -> None:
 
     submitted = asyncio.run(run())
 
-    assert len(submitted) == 3
-    assert [order.order_type for order in submitted] == [
-        "stop_loss_limit",
-        "take_profit_limit",
-        "trailing_stop_market",
+    assert len(submitted) == 2
+    assert [order.exchange_order_id for order in submitted] == ["71", "72"]
+    assert [order.order_type for order in submitted] == ["take_profit", "stop_loss"]
+    assert client.exchange.requests == [
+        (
+            "orderList/oco",
+            "private",
+            "POST",
+            {
+                "symbol": "BTCUSDT",
+                "side": "SELL",
+                "quantity": "0.25",
+                "aboveType": "TAKE_PROFIT",
+                "aboveStopPrice": "110.0",
+                "belowType": "STOP_LOSS",
+                "belowStopPrice": "99.0",
+                "newOrderRespType": "RESULT",
+            },
+        )
     ]
-    assert client.exchange.calls == [
-        (
+    assert client.exchange.calls == []
+
+
+def test_execution_gateway_rejects_unsupported_spot_trailing_protection() -> None:
+    gateway = BinanceExecutionGateway(client=FakeExecutionClient())
+
+    async def run():
+        return await gateway.submit_protection(
             "BTC/USDT",
-            "stop_loss_limit",
-            "sell",
+            "buy",
             0.25,
-            99.0,
-            {
-                "stopPrice": 99.0,
-                "activationPrice": 99.0,
-                "reduceOnly": True,
-            },
-        ),
-        (
-            "BTC/USDT",
-            "take_profit_limit",
-            "sell",
-            0.25,
-            110.0,
-            {
-                "stopPrice": 110.0,
-                "activationPrice": 110.0,
-                "reduceOnly": True,
-            },
-        ),
-        (
-            "BTC/USDT",
-            "trailing_stop_market",
-            "sell",
-            0.25,
-            None,
-            {
-                "stopPrice": 95.0,
-                "activationPrice": 95.0,
-                "reduceOnly": True,
-            },
-        ),
-    ]
+            ProtectionIntent(
+                stop_loss_price=99.0, take_profit_price=110.0, trailing_stop_price=95.0
+            ),
+        )
+
+    try:
+        asyncio.run(run())
+    except ValueError as exc:
+        assert "trailing stops are unsupported" in str(exc)
+    else:
+        raise AssertionError("unsupported Spot trailing protection must fail closed")
 
 
 def test_execution_gateway_can_close_when_requested() -> None:

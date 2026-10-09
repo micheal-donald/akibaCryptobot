@@ -124,6 +124,13 @@ When advanced risk is enabled, the position sizing pipeline is:
 | Stop Loss | 2% below entry | `risk_management.stop_loss_percent` |
 | Take Profit | 4% above entry | `risk_management.take_profit_percent` |
 
+For Binance Spot runtime positions, the native stop loss and take profit are
+paired in a single OCO order list. The OCO legs share the position quantity, so
+filling one exit cancels the other. Binance Spot does not accept the futures
+`reduceOnly` flag or futures stop-order types. Native trailing-stop placement is
+not implemented for Spot; if requested, protection is reported as degraded and
+new entries remain blocked rather than claiming the position is protected.
+
 ### Dynamic Levels (ATR-based)
 
 The `MomentumStrategy` calculates dynamic levels using ATR:

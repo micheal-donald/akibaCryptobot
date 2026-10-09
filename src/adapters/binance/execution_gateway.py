@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol, runtime_checkable
 
 from adapters.binance.symbol_mapper import BinanceSymbolMapper
@@ -25,6 +25,16 @@ class _BinanceExchangeLike(Protocol):
         amount: float,
         price: float | None = None,
         params: dict[str, Any] | None = None,
+    ) -> Any: ...
+
+    async def request(
+        self,
+        path: str,
+        api: str = "public",
+        method: str = "GET",
+        params: dict[str, Any] | None = None,
+        headers: dict[str, Any] | None = None,
+        body: Any = None,
     ) -> Any: ...
 
 
@@ -77,6 +87,7 @@ class BinanceExecutionGateway(ExecutionGateway):
             )
         self.client = client
         self.close_on_disconnect = close_on_disconnect
+        self.market_type = market_type
 
     async def connect(self) -> None:
         await self.client.ensure_markets_loaded()
@@ -122,6 +133,10 @@ class BinanceExecutionGateway(ExecutionGateway):
     ) -> tuple[OrderSubmittedPayload, ...]:
         normalized_symbol = self._normalize_symbol(symbol)
         exit_side = self._opposite_side(side)
+        if self.market_type == "spot":
+            return await self._submit_spot_protection(
+                normalized_symbol, exit_side, quantity, protection
+            )
         submitted_orders: list[OrderSubmittedPayload] = []
 
         if protection.stop_loss_price is not None:
@@ -161,6 +176,73 @@ class BinanceExecutionGateway(ExecutionGateway):
             )
 
         return tuple(submitted_orders)
+
+    async def _submit_spot_protection(
+        self,
+        symbol: str,
+        side: str,
+        quantity: float,
+        protection: ProtectionIntent,
+    ) -> tuple[OrderSubmittedPayload, ...]:
+        if protection.trailing_stop_price is not None:
+            raise ValueError("Binance Spot native trailing stops are unsupported")
+        if protection.stop_loss_price is None or protection.take_profit_price is None:
+            raise ValueError(
+                "Binance Spot protection requires a stop-loss/take-profit OCO pair"
+            )
+        exchange = self.client.exchange
+        market = getattr(exchange, "market", lambda _symbol: {})(symbol) or {}
+        market_id = market.get("id", symbol.replace("/", ""))
+        amount = exchange.amount_to_precision(symbol, quantity)
+        stop_price = exchange.price_to_precision(symbol, protection.stop_loss_price)
+        take_profit = exchange.price_to_precision(symbol, protection.take_profit_price)
+        response = await exchange.request(
+            "orderList/oco",
+            "private",
+            "POST",
+            {
+                "symbol": market_id,
+                "side": side.upper(),
+                "quantity": amount,
+                "aboveType": "TAKE_PROFIT",
+                "aboveStopPrice": take_profit,
+                "belowType": "STOP_LOSS",
+                "belowStopPrice": stop_price,
+                "newOrderRespType": "RESULT",
+            },
+        )
+        reports = response.get("orderReports", []) if isinstance(response, dict) else []
+        if len(reports) != 2:
+            raise ValueError(
+                "Binance Spot OCO response did not contain two order reports"
+            )
+        normalized = []
+        for report in reports:
+            report_type = str(report.get("type", "OCO")).lower()
+            intent = OrderIntentPayload(
+                intent_id=f"protect-{symbol}-{report.get('orderId', report_type)}",
+                symbol=symbol,
+                side=side,  # type: ignore[arg-type]
+                order_type="limit",
+                quantity=float(report.get("origQty", quantity)),
+                limit_price=(
+                    float(report["price"])
+                    if report.get("price") not in (None, "0", 0)
+                    else None
+                ),
+                reduce_only=True,
+            )
+            payload = self._normalize_submitted_order(
+                symbol, side, intent, report, order_type=report_type
+            )
+            if payload.exchange_order_id is not None:
+                payload = replace(
+                    payload, exchange_order_id=str(payload.exchange_order_id)
+                )
+            normalized.append(payload)
+        if any(order.exchange_order_id is None for order in normalized):
+            raise ValueError("Binance Spot OCO response omitted an order ID")
+        return tuple(normalized)
 
     async def _submit_order(
         self, symbol: str, side: str, intent: OrderIntentPayload

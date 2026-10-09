@@ -182,6 +182,13 @@ order IDs. The legacy trade store remains a separate history source and is not
 the authority for runtime-owned positions. A disconnected authenticated user
 stream marks runtime health degraded and blocks new entries until it reconnects.
 
+For Binance Spot, a long position's stop loss and take profit are submitted as
+one native OCO order list. This avoids unsupported futures-only order types and
+prevents both exits from independently selling the same spot quantity. Spot
+native trailing stops are not supported by this adapter; a configured trailing
+stop leaves protection degraded and entries blocked until an explicit supported
+exit plan is available.
+
 ### HFT Replay Boundary
 
 The capture/replay path from Phases 12 and 13 is a research aid, not a venue-faithful HFT simulator.
