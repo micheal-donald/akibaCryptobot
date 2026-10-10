@@ -1,6 +1,6 @@
 # Deployment Guide
 
-> Production is moving to [Freqtrade paper trading](FREQTRADE.md). That guide
+> Production uses [Freqtrade paper trading](FREQTRADE.md). That guide
 > defines the replacement engine, configuration, API, risk rules and deployment.
 > The custom-engine reference below is retained for historical development.
 

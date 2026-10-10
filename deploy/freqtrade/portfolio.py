@@ -105,7 +105,7 @@ def snapshot():
                 upstream("/health"),
                 upstream("/profit"),
                 upstream("/status"),
-                upstream("/trades?limit=20&order_by_id=true"),
+                upstream("/trades?limit=20"),
                 upstream("/whitelist"),
                 upstream("/locks"),
                 time.time(),

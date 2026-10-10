@@ -172,3 +172,21 @@ docker run --rm --entrypoint freqtrade \
 # Lookahead: --strategy-path /app/deploy/freqtrade/strategies \
 #   --timerange 20260701-20261010 --minimum-trade-amount 10 --targeted-trade-amount 30
 ```
+
+## Production cutover verification
+
+Migration commit `8b8dd10` passed CI and Dokploy deployment on 10 October 2026.
+The public domain returned a healthy Freqtrade 2026.9 dry-run with the configured
+three pairs and $1,000 virtual wallet. FreqUI returned HTTP 200 over localhost;
+unauthenticated private API requests returned 401. Public POST requests returned
+403 and private API paths on the public host returned 404. The old bot container
+was retired. Initial combined engine/portfolio memory was approximately 474 MiB,
+and the new persistent data directory was 208 KiB. These are observations at
+cutover, not fixed resource guarantees. The old database archive was 46 MiB.
+The new run had no positions or completed trades at verification; an actual
+forward entry/exit lifecycle still needs to occur naturally.
+
+Native recursive analysis sampled SOL/USDT: at 200 warmup bars, PLUS_DI differed
+by 0.040% and MINUS_DI by −0.013% from the longer-history reference at the examined
+endpoint. This small residual can affect signals near a threshold; it is not
+zero recursive sensitivity. No settings were changed to optimize that result.

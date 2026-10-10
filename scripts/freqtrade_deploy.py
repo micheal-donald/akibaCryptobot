@@ -213,6 +213,9 @@ def main():
     state["previous_image"] = state.get("image")
     state["image"] = image
     state["engine"] = "freqtrade"
+    state.setdefault(
+        "legacy_migration_backup", state.get("migration_backup", str(backup))
+    )
     state["migration_backup"] = str(backup)
     secure_write(STATE, json.dumps(state))
     print("Freqtrade deployment complete; rollback archive: " + str(backup), flush=True)
