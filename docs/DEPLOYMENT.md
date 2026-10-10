@@ -1,5 +1,9 @@
 # Deployment Guide
 
+> Production is moving to [Freqtrade paper trading](FREQTRADE.md). That guide
+> defines the replacement engine, configuration, API, risk rules and deployment.
+> The custom-engine reference below is retained for historical development.
+
 This guide covers local development, Docker deployment, and CI/CD pipeline configuration.
 
 ---

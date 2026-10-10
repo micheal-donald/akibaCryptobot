@@ -1,5 +1,9 @@
 # AkibaCryptoBot - System Architecture
 
+> Production is moving to [Freqtrade paper trading](FREQTRADE.md). That guide
+> defines the replacement engine, configuration, API, risk rules and deployment.
+> The custom-engine reference below is retained for historical development.
+
 AkibaCryptoBot is an automated, **fully asynchronous** cryptocurrency trading engine built in Python using `asyncio`. It connects to Binance (spot and futures) via CCXT's async support, analyses the market with pluggable strategies (technical-analysis **and** machine-learning), enforces multi-layer risk controls, maintains database-exchange consistency via a dedicated reconciliation layer, and exposes a FastAPI REST/WebSocket API plus a Telegram bot for monitoring and control.
 
 ---

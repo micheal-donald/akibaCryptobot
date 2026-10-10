@@ -65,3 +65,5 @@ setup.cfg
 
 # Artifacts
 .gemini/
+
+results/

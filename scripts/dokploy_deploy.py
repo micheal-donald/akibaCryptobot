@@ -51,6 +51,8 @@ def healthy(image=None):
 
 def main():
     state = json.loads(STATE.read_text())
+    if state.get("engine") == "freqtrade":
+        raise RuntimeError("Legacy deployment is retired; use freqtrade_deploy.py")
     lock = open("/run/akiba-deploy.lock", "w")
     fcntl.flock(lock, fcntl.LOCK_EX)
     if sys.argv[1] == "--restart":

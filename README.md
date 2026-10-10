@@ -1,3 +1,6 @@
+> **Deployment migration:** See [Freqtrade paper deployment](docs/FREQTRADE.md).
+> The new runtime uses native Freqtrade; the custom-engine material below is historical.
+
 # 🤖 AkibaCryptoBot HFT
 
 [![CI](https://github.com/micheal-donald/akibaCryptobot/actions/workflows/ci.yml/badge.svg)](https://github.com/micheal-donald/akibaCryptobot/actions/workflows/ci.yml)

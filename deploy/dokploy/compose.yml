@@ -1,27 +1,43 @@
 services:
-  bot:
+  engine:
     image: ${AKIBA_IMAGE:?Set the CI-published image digest}
-    container_name: akiba-cryptobot
+    container_name: akiba-freqtrade
     restart: unless-stopped
     init: true
-    env_file:
-      - .env
-    environment:
-      PYTHONPATH: /app/src
-      AKIBA_PUBLIC_READ_ONLY: "true"
-      OMP_NUM_THREADS: "1"
-      OPENBLAS_NUM_THREADS: "1"
-    command: ["python", "start_bot.py", "--config", "/app/config/config.json", "--testnet", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8080:8080"
     volumes:
-      - /opt/akibabot/data:/app/data
-      - /opt/akibabot/logs:/app/logs
-      - /opt/akibabot/models:/app/models
-      - /opt/akibabot/models_staging:/app/models_staging
-    mem_limit: 1g
+      - /opt/akibabot/freqtrade/user_data:/freqtrade/user_data
+      - /etc/akibabot/freqtrade-api.json:/run/secrets/freqtrade-api.json:ro
+    mem_limit: 768m
     cpus: 1.0
-    stop_grace_period: 120s
+    stop_grace_period: 90s
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/api/v1/ping', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 180s
+      retries: 3
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+    networks: [trading]
+  bot:
+    image: ${AKIBA_IMAGE:?Set the CI-published image digest}
+    container_name: akiba-portfolio
+    restart: unless-stopped
+    init: true
+    entrypoint: ["python", "-m", "uvicorn", "deploy.freqtrade.portfolio:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    environment:
+      FT_API_URL: http://engine:8080/api/v1
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - /etc/akibabot/freqtrade-api.json:/run/secrets/freqtrade-api.json:ro
+    depends_on:
+      engine: {condition: service_healthy}
+    mem_limit: 192m
+    cpus: 0.5
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
       interval: 30s
@@ -30,11 +46,9 @@ services:
       retries: 3
     logging:
       driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    networks:
-      - dokploy-network
+      options: {max-size: "5m", max-file: "2"}
+    networks: [trading, dokploy-network]
 networks:
+  trading:
   dokploy-network:
     external: true

@@ -1,0 +1,40 @@
+{
+  "purpose": "Exploratory migration verification; not profitability validation",
+  "version": "2026.9",
+  "strategy": "AkibaADXPaper paper-1",
+  "backtests": [
+    {
+      "total_trades": 122,
+      "profit_total_abs": -2.799355569999999,
+      "profit_total": -0.002799355569999999,
+      "profit_factor": 0.9407095022359027,
+      "max_drawdown_account": 0.01391915622449225,
+      "backtest_start": "2026-07-01 00:00:00",
+      "backtest_end": "2026-10-10 00:00:00",
+      "fee": 0.001,
+      "wins": 89,
+      "losses": 33
+    },
+    {
+      "total_trades": 104,
+      "profit_total_abs": -26.82514698,
+      "profit_total": -0.02682514698,
+      "profit_factor": 0.555320870106818,
+      "max_drawdown_account": 0.03166841125992303,
+      "backtest_start": "2026-07-01 00:00:00",
+      "backtest_end": "2026-10-10 00:00:00",
+      "fee": 0.003,
+      "wins": 67,
+      "losses": 37
+    }
+  ],
+  "candle_sha256": {
+    "ETH_USDT-1h.feather": "3536df6b3e01a8f613d7c78401dae3f2a684f080144e912b93a902997b1d5e66",
+    "BTC_USDT-1h.feather": "778751928cda5a0260adf7442afcba93ebbae4d4370e2d1ac444645761930f6e",
+    "SOL_USDT-1h.feather": "020169141399b8e29559f5c17bd05eb91f72a0eeb79793d741c5f4834d794b89"
+  },
+  "lookahead": {
+    "signals_checked": 30,
+    "bias_detected": false
+  }
+}

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Akiba Cryptobot · Paper portfolio</title>
+  <link rel="stylesheet" href="/portfolio.css"><script defer src="/portfolio.js"></script>
+</head>
+<body>
+<header><a href="/">akiba<span>Cryptobot</span></a><span class="badge">PUBLIC · READ ONLY</span></header>
+<main>
+  <p class="eyebrow">FREQTRADE / FORWARD TEST</p>
+  <h1>A trading experiment,<br>with results in the open.</h1>
+  <p class="intro">A $1,000 virtual portfolio using real Binance market data. All orders and profits shown here are simulated. No real funds are traded.</p>
+  <p id="status" role="status">Connecting to the trading engine…</p>
+  <section class="metrics" aria-label="Portfolio summary">
+    <div><span>Virtual equity, net of estimated fees</span><strong id="equity">—</strong></div>
+    <div><span>Realized profit / loss</span><strong id="realized">—</strong></div>
+    <div><span>Open profit / loss</span><strong id="unrealized">—</strong></div>
+    <div><span>Completed trades</span><strong id="completed">—</strong></div>
+  </section>
+  <p id="rules">Loading experiment settings…</p>
+  <p id="locks"></p>
+  <section><h2>Open positions</h2><div class="scroll"><table><thead><tr><th>Pair</th><th>Stake</th><th>Entry</th><th>Current</th><th>P&amp;L</th></tr></thead><tbody id="positions"></tbody></table></div><p id="empty-positions">Waiting for engine data.</p></section>
+  <section><h2>Recent completed trades</h2><div class="scroll"><table><thead><tr><th>Closed (UTC)</th><th>Pair</th><th>Exit reason</th><th>Net P&amp;L</th></tr></thead><tbody id="history"></tbody></table></div><p id="empty-history">Waiting for engine data.</p></section>
+  <footer>AkibaADXPaper · Experimental hourly momentum strategy. Results exclude hosting and taxes. Dry-run fills are estimates, not evidence of live execution quality. Historical Akiba testnet results are archived separately.</footer>
+</main>
+</body></html>

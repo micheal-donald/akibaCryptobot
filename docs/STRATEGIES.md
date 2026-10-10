@@ -1,5 +1,9 @@
 # Trading Strategies
 
+> Production is moving to [Freqtrade paper trading](FREQTRADE.md). That guide
+> defines the replacement engine, configuration, API, risk rules and deployment.
+> The custom-engine reference below is retained for historical development.
+
 AkibaCryptoBot uses a pluggable strategy system. Every strategy inherits from `BaseStrategy`, and the `StrategyManager` handles registration, selection, and signal dispatch.
 
 ## Operating Modes

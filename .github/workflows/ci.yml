@@ -11,71 +11,26 @@ permissions:
 
 jobs:
   test:
-    name: Run Tests
+    name: Validate Freqtrade paper deployment
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-
-      - name: Install dependencies
+      - name: Build pinned Freqtrade image
+        run: docker build -f deploy/freqtrade/Dockerfile -t akiba-test .
+      - name: Test strategy and read-only boundary in the deployment runtime
         run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov pytest-asyncio
-
-      - name: Run tests
-        env:
-          PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/src
+          docker run --rm --entrypoint python -w /app \
+            -v "$PWD/tests/test_freqtrade_migration.py:/tmp/test_migration.py:ro" \
+            akiba-test /tmp/test_migration.py -v
+      - name: Validate deployment configuration
         run: |
-          pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing \
-            --ignore=tests/test_portfolio_manager.py \
-            --ignore=tests/test_config.py \
-            --ignore=tests/test_akiba_crypto_bot.py
-
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage.xml
-          fail_ci_if_error: false
-
-  smoke:
-    name: Smoke Test
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Verify app starts without errors
-        env:
-          PYTHONPATH: ${{ github.workspace }}/src
-        run: |
-          python -c "
-          from api.app import create_app
-          app = create_app()
-          routes = [r.path for r in app.routes]
-          print('Registered routes:', routes)
-          assert any('/api' in r for r in routes), 'No /api routes found'
-          print('Smoke test passed')
-          "
+          AKIBA_IMAGE=akiba-test docker compose -f deploy/dokploy/compose.yml config --quiet
+          docker run --rm --entrypoint python -w /app akiba-test -c \
+            'from pathlib import Path; from freqtrade.configuration import Configuration; from freqtrade.resolvers import StrategyResolver; from freqtrade.configuration.config_validation import validate_config_consistency; Path("/tmp/user_data").mkdir(); c=Configuration({"config":["/app/deploy/freqtrade/config.json"], "user_data_dir":"/tmp/user_data"}).get_config(); c["strategy_path"]="/app/deploy/freqtrade/strategies"; s=StrategyResolver.load_strategy(c); validate_config_consistency(c); assert s.stoploss == -0.03 and s.timeframe == "1h"'
 
   image:
     name: Build and publish GHCR image
-    needs: [test, smoke]
+    needs: [test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
@@ -98,6 +53,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: deploy/freqtrade/Dockerfile
           load: true
           tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
           cache-from: type=gha
@@ -110,12 +66,13 @@ jobs:
           IMAGE: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
         run: |
           docker run --rm --entrypoint python "$IMAGE" -c \
-            'from api.app import create_app; from strategies.ensemble_strategy import EnsembleStrategy; assert any(r.path == "/api/health" for r in create_app().routes)'
+            'from deploy.freqtrade.portfolio import app; assert any(r.path == "/api/health" for r in app.routes)'
       - name: Publish validated image
         id: publish
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: deploy/freqtrade/Dockerfile
           push: true
           tags: ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
           cache-from: type=gha

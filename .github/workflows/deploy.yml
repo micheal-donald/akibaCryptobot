@@ -56,5 +56,5 @@ jobs:
           ssh-keyscan -H "$SERVER_IP" >> ~/.ssh/known_hosts
           ssh root@"$SERVER_IP" 'mkdir -p /opt/akibabot/deploy/dokploy /opt/akibabot/scripts'
           scp deploy/dokploy/compose.yml root@"$SERVER_IP":/opt/akibabot/deploy/dokploy/compose.yml
-          scp scripts/dokploy_deploy.py root@"$SERVER_IP":/opt/akibabot/scripts/dokploy_deploy.py
-          printf '%s' "$GHCR_PULL_TOKEN" | ssh root@"$SERVER_IP" "python3 /opt/akibabot/scripts/dokploy_deploy.py '$IMAGE'"
+          scp scripts/dokploy_deploy.py scripts/freqtrade_deploy.py root@"$SERVER_IP":/opt/akibabot/scripts/
+          printf '%s' "$GHCR_PULL_TOKEN" | ssh root@"$SERVER_IP" "python3 /opt/akibabot/scripts/freqtrade_deploy.py '$IMAGE'"

@@ -1,5 +1,9 @@
 # REST & WebSocket API Reference
 
+> Production is moving to [Freqtrade paper trading](FREQTRADE.md). That guide
+> defines the replacement engine, configuration, API, risk rules and deployment.
+> The custom-engine reference below is retained for historical development.
+
 AkibaCryptoBot exposes a FastAPI server alongside the trading engine. All REST endpoints are prefixed with `/api`. Interactive docs are available at `/docs` (Swagger UI) when the server is running.
 
 **Base URL:** `http://<host>:<port>` (default `http://0.0.0.0:8000`)

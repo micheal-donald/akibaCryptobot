@@ -1,5 +1,9 @@
 # Risk Management
 
+> Production is moving to [Freqtrade paper trading](FREQTRADE.md). That guide
+> defines the replacement engine, configuration, API, risk rules and deployment.
+> The custom-engine reference below is retained for historical development.
+
 AkibaCryptoBot employs a multi-layer risk management system that controls position sizing, enforces exit rules, monitors portfolio-level risk, and halts trading during extreme market conditions.
 
 ---

@@ -1,101 +1,13 @@
-name: Train FreqAI Models
+name: Legacy FreqAI Training (retired)
 
 on:
-  # Run daily at 2 AM UTC
-  schedule:
-    - cron: '0 2 * * *'
-  # Allow manual trigger from GitHub UI
   workflow_dispatch:
-    inputs:
-      candles:
-        description: 'Number of candles to train on'
-        required: false
-        default: '1000'
 
-concurrency:
-  group: production-bot
-  cancel-in-progress: false
+permissions:
+  contents: read
 
 jobs:
-  train:
+  retired:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Create .env for training
-        run: |
-          echo "BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}" >> .env
-          echo "BINANCE_SECRET_KEY=${{ secrets.BINANCE_SECRET_KEY }}" >> .env
-
-      - name: Train models
-        run: |
-          mkdir -p models
-          python scripts/train_models.py \
-            --candles ${{ github.event.inputs.candles || '1000' }} \
-            --timeframe 1h \
-            --output-dir models \
-            --binance-us
-
-      - name: List trained models
-        run: ls -lh models/
-
-      - name: Upload models as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: freqai-models-${{ github.run_id }}
-          path: models/*.joblib
-          retention-days: 7
-
-      - name: Deploy models to Vultr
-        uses: easingthemes/ssh-deploy@main
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.SERVER_IP }}
-          REMOTE_USER: root
-          SOURCE: "models/"
-          TARGET: "/opt/akibabot/models/"
-
-      - name: Restart bot to load new models
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          AKIBA_PORT: 8000
-        with:
-          host: ${{ secrets.SERVER_IP }}
-          username: root
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: AKIBA_PORT
-          script: |
-            python3 /opt/akibabot/scripts/dokploy_deploy.py --restart
-
-      - name: Notify via Telegram
-        if: always()
-        run: |
-          STATUS="${{ job.status }}"
-          if [ "$STATUS" = "success" ]; then
-            ICON="✅"
-            MSG="FreqAI models trained and deployed successfully."
-          else
-            ICON="❌"
-            MSG="FreqAI model training failed. Check GitHub Actions logs."
-          fi
-
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d parse_mode="Markdown" \
-            -d text="${ICON} *AkibaCryptoBot Model Training*
-          ${MSG}
-          Run: [GitHub Actions](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" || true
+      - run: echo "Legacy training is retired. Freqtrade AkibaADXPaper does not use ML models."

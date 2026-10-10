@@ -4,6 +4,12 @@ Welcome to the AkibaCryptoBot documentation. Use the guides below to understand,
 
 ---
 
+## Current deployment
+
+See [Freqtrade paper deployment](FREQTRADE.md) for the replacement runtime,
+private FreqUI access, public portfolio, storage and rollback procedure.
+The legacy custom engine is retained for reference.
+
 ## Guides
 
 | Document | Description |

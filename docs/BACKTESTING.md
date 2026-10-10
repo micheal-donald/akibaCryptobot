@@ -1,5 +1,9 @@
 # Backtesting & Walk-Forward Analysis
 
+> Production is moving to [Freqtrade paper trading](FREQTRADE.md). That guide
+> defines the replacement engine, configuration, API, risk rules and deployment.
+> The custom-engine reference below is retained for historical development.
+
 AkibaCryptoBot includes a full backtesting framework for evaluating strategies against historical data before deploying them live.
 
 ---
